@@ -1,0 +1,46 @@
+name: Commit hygiene
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  check:
+    name: Authorship and attribution
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the pull request history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # Check out the real head, not the default merge ref. On a
+          # pull_request event the default is refs/pull/N/merge, an ephemeral
+          # commit GitHub synthesises and authors with the account's display
+          # name -- not a commit in the pull request, and it would fail the
+          # author check on every run.
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Run the checker's own tests
+        run: python3 scripts/test_check_commit_hygiene.py
+
+      - name: Write the pull request title and body to files
+        env:
+          # Untrusted input reaches the script only through the environment and
+          # a Python write; nothing here is interpolated into a shell command.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          pathlib.Path("pr-body.txt").write_text(os.environ.get("PR_BODY") or "", encoding="utf-8")
+          pathlib.Path("pr-title.txt").write_text(os.environ.get("PR_TITLE") or "", encoding="utf-8")
+          PY
+
+      - name: Check commits, title and body
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          python3 scripts/check-commit-hygiene.py \
+            --range "origin/${BASE_REF}..HEAD" \
+            --pr-title pr-title.txt \
+            --pr-body pr-body.txt
