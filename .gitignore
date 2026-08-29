@@ -2,6 +2,10 @@
 # The spec-kit skills in .claude/skills/ ARE meant to be committed.
 .claude/settings.local.json
 
+# Python bytecode cache, generated when the hygiene checker is imported
+__pycache__/
+*.py[cod]
+
 # OS cruft
 .DS_Store
 Thumbs.db

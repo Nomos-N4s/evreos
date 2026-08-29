@@ -1,0 +1,10 @@
+#!/bin/sh
+# Advisory local check, run before the commit is created. The CI job is the
+# enforcement; this only gives faster feedback. Enable once per clone with:
+#     git config core.hooksPath .githooks
+if ! command -v python3 >/dev/null 2>&1; then
+    echo "commit-msg hook: python3 not found; skipping local check." >&2
+    echo "CI will still enforce the rules." >&2
+    exit 0
+fi
+exec python3 "$(git rev-parse --show-toplevel)/scripts/check-commit-hygiene.py" --commit-msg "$1"

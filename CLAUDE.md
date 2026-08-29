@@ -2,7 +2,10 @@
 
 ## Authorship
 
-- Every commit MUST be authored and committed solely as `xcoder-es <capintobe@gmail.com>`.
+- Every commit MUST be authored by `xcoder-es <capintobe@gmail.com>` and MUST be signed.
+  Merge commits created by the forge record the forge as committer; that is
+  infrastructure, not a third party, and is the only permitted committer besides
+  the founder.
 - NO `Co-Authored-By` trailers of any kind. No generator, tool, session, or
   AI attribution anywhere: not in commit messages, PR titles or bodies, issues,
   comments, code comments, or generated files. No exceptions, ever.
@@ -24,6 +27,7 @@
 - Commit messages follow conventional commits: `type(scope): lowercase
   imperative subject` (e.g. `chore(speckit): set up Spec Kit`), matching the
   style used across this account's other repositories (see Nomos-N4s/nomos).
+  Every commit message references the issue it serves (`Closes #N` or `Refs #N`).
 - Commits are atomic: exactly one logical change per commit. Never bundle
   unrelated changes; split mechanical moves and refactors from behavior
   changes so each commit stands, builds, and reverts on its own.
