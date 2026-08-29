@@ -34,6 +34,25 @@ Optional quality gates:
 specs/                Created per-feature by /speckit-specify (one dir per feature)
 ```
 
+## Contributing checks
+
+Every commit must be authored by `xcoder-es <capintobe@gmail.com>`, and nothing in the
+repository may attribute authorship or assistance to an AI or generator tool. A GitHub
+Actions job (`.github/workflows/commit-hygiene.yml`) enforces both on every pull request,
+checking each commit and the pull request body.
+
+For the same feedback before you push, enable the local hook once per clone:
+
+```sh
+git config core.hooksPath .githooks
+```
+
+Run the check by hand against a branch with:
+
+```sh
+python3 scripts/check-commit-hygiene.py --range main..HEAD
+```
+
 ## Getting started
 
 1. Open this repository in [Claude Code](https://claude.ai/code).

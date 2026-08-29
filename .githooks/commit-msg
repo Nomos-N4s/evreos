@@ -1,0 +1,5 @@
+#!/bin/sh
+# Advisory local check. The CI job is the enforcement; this only gives faster
+# feedback. Enable it once per clone with:
+#     git config core.hooksPath .githooks
+python3 "$(git rev-parse --show-toplevel)/scripts/check-commit-hygiene.py" --pr-body "$1"
