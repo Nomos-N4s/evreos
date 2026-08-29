@@ -15,11 +15,12 @@ Templates requiring updates:
   - .specify/templates/checklist-template.md ✅ no change needed
 Follow-up TODOs:
   - The commit-msg hook and server-side commit-hygiene CI job required by Principle I
-    are not yet present in this repository; they are tracked as separate work.
+    are tracked as separate work and land in their own change.
   - The budget file and CI gates required by Principle II are not yet present; they are
     ratified here as a requirement and land with milestone M0.
-  - No CI workflows exist in this repository yet, so every CI gate named above is a
-    ratified requirement rather than a description of current state.
+  - The CI gates named above are ratified requirements, not descriptions of current
+    state. Authorship and attribution enforcement lands separately; the budget gates land
+    with milestone M0.
   - ADR-0001 (the engine decision) is not yet written; the Development Workflow section
     requires it rather than asserting it exists.
 -->
