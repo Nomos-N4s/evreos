@@ -184,6 +184,7 @@ of them requires a MAJOR amendment to this constitution:
   request's full current diff MUST run: independent reviewers instructed to refute the
   changes, with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
+  The outcome of each round is recorded on the pull request or to the founder.
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
