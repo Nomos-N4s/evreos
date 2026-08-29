@@ -24,6 +24,15 @@
 - Commit messages follow conventional commits: `type(scope): lowercase
   imperative subject` (e.g. `chore(speckit): set up Spec Kit`), matching the
   style used across this account's other repositories (see Nomos-N4s/nomos).
+- Commits are atomic: exactly one logical change per commit. Never bundle
+  unrelated changes; split mechanical moves and refactors from behavior
+  changes so each commit stands, builds, and reverts on its own.
+- After EVERY push of commits to an open pull request, run an adversarial
+  review of the PR's full current diff: independent reviewers instructed to
+  refute the changes (correctness, security, consistency, rules compliance),
+  with findings verified before they count. Confirmed findings are fixed and
+  pushed — which triggers a new review round — before the PR is ready to
+  merge. Record the outcome of each round on the PR or to the founder.
 
 ## Spec-driven development
 
