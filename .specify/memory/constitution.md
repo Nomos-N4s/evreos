@@ -125,8 +125,7 @@ separate parameters everywhere they appear, including in requests to Apivo surfa
 
 **Rationale**: Fusing the two produces a combinatorial explosion of near-duplicate
 catalogues and makes a combination such as "German language, Greek place"
-unrepresentable. This is the same principle the Apivo constitution carries, for the same
-reason.
+unrepresentable. The Apivo constitution carries the same principle.
 
 ### VIII. Rebrandable Shell
 
