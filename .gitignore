@@ -1,0 +1,7 @@
+# Claude Code local state — machine-specific, may contain private settings.
+# The spec-kit skills in .claude/skills/ ARE meant to be committed.
+.claude/settings.local.json
+
+# OS cruft
+.DS_Store
+Thumbs.db
