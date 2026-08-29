@@ -41,9 +41,16 @@ repository may attribute authorship or assistance to an AI or generator tool. Na
 the project integrates with is description, not attribution, and is allowed.
 
 A GitHub Actions job (`.github/workflows/commit-hygiene.yml`) is the enforcement. It checks
-every commit in a pull request — author, committer, attribution trailers, attribution
-phrasing, Conventional Commits subject, and an issue reference — plus the pull request's own
+every commit in a pull request — author, committer, AI attribution trailers, generator
+footers, Conventional Commits subject, and an issue reference — plus the pull request's own
 title and body, which is where generator footers land and where no git hook can reach.
+
+The automated check covers what is mechanical and unambiguous: fixed footers and git
+trailers that tooling appends. It deliberately does **not** try to detect attribution
+written as free English. That was attempted and removed: in a browser project `cursor` and
+`AI panel` are everyday words, so the patterns rejected legitimate commits more often than
+they caught anything. Prose attribution stays forbidden by the rules above and is caught in
+review, not by this script.
 
 The local hook checks a commit message only: attribution, subject format and issue
 reference. It cannot check the pull request title or body, so it is faster feedback rather
