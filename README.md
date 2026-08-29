@@ -37,20 +37,27 @@ specs/                Created per-feature by /speckit-specify (one dir per featu
 ## Contributing checks
 
 Every commit must be authored by `xcoder-es <capintobe@gmail.com>`, and nothing in the
-repository may attribute authorship or assistance to an AI or generator tool. A GitHub
-Actions job (`.github/workflows/commit-hygiene.yml`) enforces both on every pull request,
-checking each commit and the pull request body.
+repository may attribute authorship or assistance to an AI or generator tool. Naming a tool
+the project integrates with is description, not attribution, and is allowed.
 
-For the same feedback before you push, enable the local hook once per clone:
+A GitHub Actions job (`.github/workflows/commit-hygiene.yml`) is the enforcement. It checks
+every commit in a pull request — author, committer, attribution trailers, attribution
+phrasing, Conventional Commits subject, and an issue reference — plus the pull request's own
+title and body, which is where generator footers land and where no git hook can reach.
+
+The local hook checks a commit message only: attribution, subject format and issue
+reference. It cannot check the pull request title or body, so it is faster feedback rather
+than the same coverage. Enable it once per clone:
 
 ```sh
 git config core.hooksPath .githooks
 ```
 
-Run the check by hand against a branch with:
+Run the check by hand against a branch, and run the checker's own tests, with:
 
 ```sh
 python3 scripts/check-commit-hygiene.py --range main..HEAD
+python3 scripts/test_check_commit_hygiene.py
 ```
 
 ## Getting started

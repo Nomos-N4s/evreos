@@ -14,15 +14,27 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Write the pull request body to a file
-        env:
-          # Passed through the environment, never interpolated into a shell
-          # command, so a crafted body cannot inject script.
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: python3 -c 'import os,pathlib; pathlib.Path("pr-body.txt").write_text(os.environ.get("PR_BODY") or "", encoding="utf-8")'
+      - name: Run the checker's own tests
+        run: python3 scripts/test_check_commit_hygiene.py
 
-      - name: Check commits and pull request body
+      - name: Write the pull request title and body to files
+        env:
+          # Untrusted input reaches the script only through the environment and
+          # a Python write; nothing here is interpolated into a shell command.
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib
+          pathlib.Path("pr-body.txt").write_text(os.environ.get("PR_BODY") or "", encoding="utf-8")
+          pathlib.Path("pr-title.txt").write_text(os.environ.get("PR_TITLE") or "", encoding="utf-8")
+          PY
+
+      - name: Check commits, title and body
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
           python3 scripts/check-commit-hygiene.py \
-            --range "origin/${{ github.base_ref }}..HEAD" \
+            --range "origin/${BASE_REF}..HEAD" \
+            --pr-title pr-title.txt \
             --pr-body pr-body.txt
