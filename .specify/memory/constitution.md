@@ -22,9 +22,6 @@ Follow-up TODOs:
     ratified requirement rather than a description of current state.
   - ADR-0001 (the engine decision) is not yet written; the Development Workflow section
     requires it rather than asserting it exists.
-  - Commit signing is recommended by Principle I but not yet operational: no usable signing
-    key is configured, so commits to date are unsigned. Signing key setup is tracked as
-    follow-up work; authorship and AI-attribution checks do not depend on it.
 -->
 
 # Evreos Constitution
@@ -38,10 +35,10 @@ intent.
 
 ## Core Principles
 
-### I. Sole Authorship (NON-NEGOTIABLE)
+### I. Sole Authorship and Signed Commits (NON-NEGOTIABLE)
 
 Every commit MUST be authored by the founder, `xcoder-es <capintobe@gmail.com>`, and
-SHOULD be signed. Nothing anywhere in this repository may attribute authorship or
+MUST be signed. Nothing anywhere in this repository may attribute authorship or
 assistance to an AI or generator tool: no attribution trailers, and no such attribution in
 commit messages, pull request titles or bodies, issues, comments, code comments,
 documentation, or generated files. Naming a tool the project integrates with, or recording
