@@ -45,8 +45,8 @@ documentation, or generated files. Naming a tool the project integrates with, or
 that a review ran, is description rather than attribution and is permitted. Commit messages
 MUST follow Conventional Commits and reference the issue they serve. One pull request per
 issue; nothing lands directly on `main`. Authorship and the absence of AI attribution MUST
-be enforced mechanically by a commit-msg hook and a server-side commit-hygiene CI job, on
-the model the Apivo repository uses.
+be enforced mechanically by the same commit-msg hook and server-side commit-hygiene CI
+job the Apivo repository uses.
 
 **Rationale**: Authorship is a legal and reputational fact about the product, not a
 formatting preference. A rule enforced only by discipline is a rule that fails silently
