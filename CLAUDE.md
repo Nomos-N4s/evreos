@@ -27,6 +27,7 @@
 - Commit messages follow conventional commits: `type(scope): lowercase
   imperative subject` (e.g. `chore(speckit): set up Spec Kit`), matching the
   style used across this account's other repositories (see Nomos-N4s/nomos).
+  Every commit message references the issue it serves (`Closes #N` or `Refs #N`).
 - Commits are atomic: exactly one logical change per commit. Never bundle
   unrelated changes; split mechanical moves and refactors from behavior
   changes so each commit stands, builds, and reverts on its own.
