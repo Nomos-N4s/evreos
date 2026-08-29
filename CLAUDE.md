@@ -2,7 +2,10 @@
 
 ## Authorship
 
-- Every commit MUST be authored and committed solely as `xcoder-es <capintobe@gmail.com>`.
+- Every commit MUST be authored by `xcoder-es <capintobe@gmail.com>` and MUST be signed.
+  Merge commits created by the forge record the forge as committer; that is
+  infrastructure, not a third party, and is the only permitted committer besides
+  the founder.
 - NO `Co-Authored-By` trailers of any kind. No generator, tool, session, or
   AI attribution anywhere: not in commit messages, PR titles or bodies, issues,
   comments, code comments, or generated files. No exceptions, ever.
