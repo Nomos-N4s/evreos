@@ -40,3 +40,7 @@
   `.claude/skills/`: constitution → specify → plan → tasks → implement
   (with clarify/checklist/analyze as optional quality gates).
 - Feature specs live under `specs/`, one directory per feature.
+- Spec Kit resolves a feature by directory, never by git branch: keep the
+  `NNN-slug` directory name its scripts generate (e.g. `001-evreos-v1`), which
+  `.specify/feature.json` records. Branch names are unconstrained by Spec Kit
+  and follow the prefix rule above.
