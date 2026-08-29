@@ -41,6 +41,19 @@ CONVENTIONAL = re.compile(
 
 ISSUE_REF = re.compile(r"#\d+")
 
+# Markdown code fences and inline code spans. Text quoted as code is being
+# discussed, not asserted, so it is stripped before the attribution checks run.
+# This is what lets the rule be documented without the documentation tripping it.
+# It is not a loophole worth worrying about: the footers this guards against are
+# rendered prose, and prose wrapped in backticks stops reading as attribution.
+CODE_BLOCK = re.compile(r"```.*?```", re.DOTALL)
+CODE_SPAN = re.compile(r"`[^`\n]*`")
+
+
+def strip_code(text):
+    """Remove fenced blocks and inline code spans."""
+    return CODE_SPAN.sub(" ", CODE_BLOCK.sub(" ", text))
+
 
 def run(*args):
     return subprocess.run(
@@ -61,9 +74,10 @@ def check_commit(sha, problems):
 
     if author != REQUIRED_AUTHOR:
         problems.append(f"{where}: author is {author!r}, must be {REQUIRED_AUTHOR!r}")
-    if TRAILER.search(message):
+    prose = strip_code(message)
+    if TRAILER.search(prose):
         problems.append(f"{where}: carries an attribution trailer")
-    if ATTRIBUTION.search(message):
+    if ATTRIBUTION.search(prose):
         problems.append(f"{where}: message attributes the work to an AI or generator tool")
     if not CONVENTIONAL.match(subject):
         problems.append(
@@ -92,6 +106,7 @@ def main():
     if args.pr_body:
         with open(args.pr_body, encoding="utf-8") as handle:
             body = handle.read()
+        body = strip_code(body)
         if TRAILER.search(body):
             problems.append("pull request body: carries an attribution trailer")
         if ATTRIBUTION.search(body):
