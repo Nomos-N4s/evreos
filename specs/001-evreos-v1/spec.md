@@ -560,42 +560,75 @@ produced a paragraph whose clauses no longer agreed with each other.
 ### Measurable Outcomes
 
 **Footprint and responsiveness.** Principle II requires every budget it names —
-download size, installed size, cold start, shell memory, idle CPU, chrome input
-latency — to live in one budget file and be enforced by a CI gate that fails the
-build on regression. No budget named there may be un-gated at any point on the
-release path.
+download size, installed size, cold start, shell memory overhead, idle CPU,
+chrome input latency — to live in one budget file and be enforced by a CI gate
+that fails the build on regression. No budget it names may be un-gated at any
+point on the release path. Nothing below creates an exception to that sentence;
+where anything below appears to, this sentence governs and the passage below is
+the defect.
 
-Every budget below is therefore gated in CI from M0 in two ways. **Absolute** —
-the build fails if the measured figure exceeds the stated value. **Regression** —
-the build fails if the figure is worse than the current recorded baseline by more
-than the runner's stated noise band. A change may reset the baseline upward while
-the figure stays inside the ratified absolute value, recording the byte or
-millisecond cost FR-043 requires; a baseline may never be reset above that value.
-Without that, the effective bar becomes the best figure ever recorded and no
-feature may cost anything, which is not what Principle II says.
+Each budget carries a **figure** and a **status**. The figure is the number. The
+status is *ratified*, set by a recorded founder decision, or *provisional*,
+standing until such a decision replaces it. Status describes the figure alone and
+never whether a gate exists. One criterion may carry more than one figure with
+different statuses — SC-004 states one for tier 1 and one for tier 2 — and every
+rule below applies to each figure separately rather than to the criterion.
 
-For SC-001 both gates are blocking from M0. For the hardware-dependent four —
-SC-002, SC-004, SC-005, SC-006 — the regression gate is blocking from M0 and the
-absolute gate is advisory until Q-E9a names the reference machines and, for a
-provisional figure, the founder decision replacing it is recorded. A replaced
-figure is ratified from the moment that decision lands and is tighten-only
-thereafter. Where a spike exists to establish a figure, its own change is not
-gated on that figure.
+Every figure is gated in CI from M0 by two gates. The **absolute** gate fails the
+build when the measured figure exceeds the stated value. The **regression** gate
+fails the build when the measured figure is worse than the baseline recorded for
+it in the budget file by more than that budget's declared tolerance. The tolerance
+is declared per budget in that file, is justified by measured run-to-run variation
+on the pinned runner, and may not exceed 5% of the budget's stated value. A budget
+whose variation exceeds that is not gateable on the runner it was measured on, and
+the runner is replaced rather than the tolerance widened; an undeclared tolerance
+is zero, not unbounded.
 
-Other passages refer to this rule; where any of them disagrees with it, this
-paragraph governs.
+A change may reset a baseline upward, stating in its pull request the byte or
+millisecond cost Principle II requires of it. A reset may never place a baseline
+above the budget's stated value, and a provisional value binds a reset exactly as
+a ratified one does — a provisional figure is a ceiling for as long as it stands,
+which is the whole of its function. Without upward resets the effective bar would
+be the best figure ever recorded and no feature could cost anything, which is not
+what Principle II says.
 
-Ratified and provisional describe the *figure*, never whether the gate exists. A
-ratified figure may afterwards only be tightened. Relaxing one requires an
+Which gate blocks depends on the figure. SC-001's two figures are ratified and
+measured from build output, so both of their gates block from M0. For a
+hardware-dependent figure — SC-002's, both of SC-004's, SC-005's and SC-006's —
+the regression gate blocks from M0, because it compares one machine against
+itself. The absolute gate on such a figure blocks once two conditions hold: Q-E9a
+has named the reference machines, and the figure is ratified. Until both hold it
+is advisory. Neither condition is discretionary: a figure measured on an unnamed
+machine is not reproducible under SC-013 and so cannot be what a build fails on,
+and answering Q-E9a is a release prerequisite rather than an option, since a
+budget whose absolute gate never blocks is un-gated in the sense the first
+paragraph forbids. Principle II's own requirement — a gate that fails the build on
+regression — is met from M0 in every case, because no regression gate waits on
+anything. Where any
+other passage in this specification describes when a budget gate blocks, these
+paragraphs govern and that passage is corrected rather than read as an exception.
+
+A change whose purpose is to establish a figure that does not yet exist — a spike
+— is exempt from that one figure's absolute gate and from nothing else. The
+exemption is available only to a change that ships no behaviour, and the pull
+request states which figure it measures. It never lifts a regression gate, which
+is what stops a spike being a route around a baseline, and it never extends to
+another figure.
+
+A ratified figure may afterwards only be tightened. Relaxing one requires an
 amendment to this specification recording the founder decision, the measured
 evidence for it, and what discipline replaces the budget it removes — the
 standard the constitution's amendment procedure sets for relaxing a principle.
-Principle II permits budgets to move by recorded founder decision; the founder's
-clarify answer narrowed that to tighten-only, and this specification keeps the
-narrower rule. A provisional figure may be replaced once, by recorded founder
-decision on spike evidence, and is tighten-only thereafter.
-SC-003 states a required experience rather than a figure; it is verified by
-acceptance test, not by a budget gate.
+Principle II permits budgets to move by recorded founder decision and sets tighter
+as the default direction; the founder's clarify answer narrowed that to
+tighten-only, and this specification keeps the narrower rule. A provisional figure
+may be replaced once, by recorded founder decision on spike evidence; it is
+ratified from the moment that decision lands, and tighten-only from the same
+moment.
+
+SC-003 states a required experience rather than a figure. It is verified by
+acceptance test and carries no budget gate. That is not an exception to the first
+paragraph, because it names no budget Principle II names.
 
 Reference machines are named in Assumptions as a class rather than by model, so a
 figure may be reported as *met* only against a machine Q-E9a names. Ratification
@@ -603,7 +636,7 @@ is a founder decision and is not reopened here; this is about reproducibility,
 which SC-013 requires and which no unnamed machine can give. The regression gate
 needs a pinned benchmark runner of stable identity, not a fungible hosted one:
 neighbour noise on shared cloud machines moves memory and latency by more than a
-real regression, which is the same reason the absolute figures are held.
+real regression, which is the same reason the absolute gates wait on Q-E9a.
 
 - **SC-001** *(ratified)*: The download is 20 MB or less and the installed
   footprint 60 MB or less per platform, counting only the bytes Evreos ships and
