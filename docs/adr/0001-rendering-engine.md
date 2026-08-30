@@ -37,29 +37,46 @@ input, and the departure is deliberate:
 | Platform | Tier | Meaning |
 | --- | --- | --- |
 | Windows | 1 | Release criteria apply. WebView2 is evergreen Chromium, security-patched by Microsoft. |
-| macOS | 2 | Ships at a declared minimum OS version. WKWebView is frozen to the user's OS. |
+| macOS | 2 | Ships at a minimum OS version, **not yet declared** — deferred to clarify. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement that depends on it. |
 | Linux | Separate decision | Removed from "cross-platform". Its own budget row, its own go/no-go. |
 
-The alignment is fortunate rather than clever: Germany is Windows-dominant, and a
-non-technical cohort arriving through a retail counter skews further that way. The
-platform where this architecture is strongest is most of the market.
+The tiering rests on a market assumption that is **not yet verified**: that the
+first cohort's platform mix is heavily Windows, and that a non-technical cohort
+arriving through a retail counter skews further that way. If true, the platform
+where this architecture is strongest is also most of the market. That figure has
+not been measured for this cohort and appears in the risks below; measure it
+before treating the tiering as settled.
 
 ## Rationale, in evidence order
 
 1. **Windowed hosting hands input, IME and the accessibility tree to the OS
-   engine.** `wry` uses `CreateCoreWebView2Controller` — windowed hosting — where
-   Microsoft documents that the platform handles input, IME and accessibility.
-   WCAG 2.1 AA, full keyboard operation, 200% scaling, German dead keys and Greek
-   input therefore arrive by construction rather than by one person implementing
-   them. This is the strongest argument and it is not the one about bytes.
+   engine — verified on Windows.** `wry` uses `CreateCoreWebView2Controller`,
+   the windowed hosting mode Microsoft documents as having the platform handle
+   input, IME and accessibility. For *page content* on that platform, keyboard
+   operation, scaling, German dead keys and Greek input therefore come from the
+   engine rather than from one person implementing them.
+
+   Three limits on this argument, stated because the constitution makes
+   accessibility a release blocker and an overstated claim here is expensive.
+   It is **evidenced on Windows only**; the equivalent guarantees for WKWebView
+   and WebKitGTK are assumed, not verified, and are a risk below. It covers
+   **page content, not the shell's own chrome** — the tab strip, address field
+   and app surfaces carry their own accessibility obligation, and what renders
+   them is an output of spike S4, not settled here. And WCAG 2.1 AA is a
+   property of the whole product, so no engine choice delivers it by itself.
+   This remains the strongest argument for the decision; it is not a guarantee
+   of compliance.
 2. **It is the only route to the size budgets.** Bundled Chromium adds 80–120 MB
    before any product code; Microsoft's own documentation puts the fixed-version
    WebView2 runtime at "over 250 MB". An empty Electron application boots at
    150–200 MB RSS, which is the entire shell-overhead budget at zero tabs. Engine
    choice is downstream of the size budget, not an independent decision.
-3. **It is the only maintained cross-platform native-webview abstraction that
-   includes Linux.** Alternatives fail there specifically: Qt WebView falls back to
-   bundled QtWebEngine, which is the thing permanently rejected below.
+3. **It is the only maintained Rust native-webview abstraction covering all
+   three platforms.** Non-Rust abstractions over the same three backends exist
+   and are maintained — `webview/webview`, Photino and pywebview among them — so
+   the claim is about the Rust ecosystem, not the field. Rust-adjacent
+   alternatives fail on Linux specifically: Qt WebView falls back to bundled
+   QtWebEngine, which is the thing permanently rejected below.
 
 Rust follows from `wry` rather than the other way round. What rides on Rust is
 access to `wry` and `adblock-rust`, and memory safety in the layer that parses
@@ -77,8 +94,10 @@ content, which belongs to the engine.
   checkout, permanently a major version behind. Chrome moves to a two-week major
   release cadence with Chrome 153 on 8 September 2026, doubling that treadmill.
 - **An own engine.** Servo began at Mozilla Research in 2012 and only started
-  landing visible, interactive text selection in June 2026, against a tracker
-  issue open since December 2014; it still embeds SpiderMonkey for JavaScript.
+  landing visible, interactive text selection in June 2026 — against a tracker
+  issue raised in December 2014 and closed in August 2026, roughly eleven and a
+  half years later, with initial support still carrying documented gaps. It
+  embeds SpiderMonkey for JavaScript, so it is not independent throughout.
   Ladybird, the only credible from-scratch effort, is a US public charity funded
   by donations, whose co-founder and anchor donor resigned in July 2025. Neither
   is authorable by a solo founder. **Revisit trigger:** either becomes
@@ -93,11 +112,15 @@ content, which belongs to the engine.
 What this architecture cannot deliver. Stated here so it is not rediscovered as a
 surprise, and so no marketing claim outruns it.
 
-- **No DRM on any engine.** Netflix, Disney+, Spotify web, ARD/ZDF DRM streams
-  fail. Note this is **not** something a Chromium fork would have fixed: the
-  Widevine CDM is not in open-source Chromium, Brave and Vivaldi ship it under
-  agreements, and Google has refused open-source projects. DRM is a licensing wall
-  in both architectures. Requires a documented hand-off to the system browser.
+- **Content-protected media is excluded, on evidence that covers one system.**
+  The content-protection module most streaming services require is not in
+  open-source Chromium; Brave and Vivaldi ship it under agreements and its owner
+  has refused open-source projects. That is a licensing wall in **both**
+  architectures, so a fork would not have fixed it. **Unverified:** whether the
+  content-protection system native to Windows — the one the platform's own
+  browser uses, shipping in the same binaries as the WebView2 runtime — covers
+  any service members actually use. Until tested, assume exclusion and provide
+  the hand-off; see the risks below.
 - **No single cross-platform content-blocking primitive.** `wry` exposes no
   `WKContentRuleList` or `WebKitUserContentFilterStore` binding; what exists is
   top-level navigation gating, a macOS-14+ proxy config behind a feature flag,
@@ -123,19 +146,37 @@ surprise, and so no marketing claim outruns it.
 
 ## Accepted costs
 
-- **A `wry` fork is required, not optional.** `PageLoadEvent` is `{ Started,
-  Finished }` with no failure variant, and there is no certificate or
-  authentication-challenge handling in the desktop paths. Today a mistyped URL, an
-  expired certificate, a captive portal or an HTTP-auth prompt each produce a
-  blank page and a spinner that never stops. That is not a missing feature; it is
-  the browser not existing. The fix cannot be applied from outside, because
-  supplying a navigation delegate breaks `wry`'s IPC and custom protocols. Budget
-  the fork and upstream the load-failure and TLS hooks.
+- **Navigation failure is not surfaced, and the remedy differs by platform.**
+  `PageLoadEvent` is `{ Started, Finished }` with no failure variant, and there
+  is no certificate or authentication-challenge handling in `wry`'s desktop
+  paths. The consequence is that the shell cannot distinguish a failed load from
+  a successful one — which is browser table stakes missing, and must be fixed.
+  The symptom differs: on Windows the load terminates but reports success,
+  because `Finished` is raised from `NavigationCompleted` with the success and
+  error-status arguments discarded; on Linux the finished event always follows a
+  failure; only on macOS does the load never terminate at all.
+
+  The remedy also differs, and a fork is **not** required everywhere. IPC is
+  attached to the user-content controller and custom protocols are URL scheme
+  handlers on the configuration, so neither depends on the navigation delegate.
+  On Windows and Linux there is no replaceable delegate: event registrations are
+  additive and `wry` exposes the raw native handles, so the shell can add its own
+  navigation-completed, server-certificate-error and basic-authentication
+  handlers, or the GTK load-failed, load-failed-with-tls-errors and authenticate
+  signals, without forking. On macOS replacing the navigation delegate is
+  necessary and costs `wry`'s page-load, download, navigation-gating and
+  deferred init-script callbacks. Budget a wrapper over exposed handles on
+  Windows and Linux, a fork or upstream contribution on macOS, and upstream the
+  load-failure and TLS hooks regardless.
 - **Three engines is three QA surfaces** for the whole web, not for our own pages.
   A support ticket may not reproduce across platforms.
-- **A shared `CoreWebView2Environment` and `WKProcessPool` must be an explicit
-  requirement of the `Engine` trait.** `wry` creates a fresh environment per
-  webview unless one is passed in, and does not cache.
+- **Environment sharing must be an explicit requirement of the `Engine`
+  trait, on Windows.** `wry` creates a fresh `CoreWebView2Environment` per
+  webview unless one is passed in, and does not cache, so sharing must be
+  designed in rather than assumed. The macOS equivalent originally recorded here
+  — sharing a process pool — is withdrawn: that interface has been a documented
+  no-op for several OS versions and has no binding in `wry`. What actually
+  governs macOS memory at ten tabs is unestablished and belongs to the spikes.
 - **Benchmark honesty.** Page rendering belongs to the OS engine, so the public
   benchmark measures only what is ours: download and installed size, cold start,
   shell overhead, idle behaviour, chrome latency. The "≥40% below Chrome at 10
@@ -162,13 +203,60 @@ surprise, and so no marketing claim outruns it.
 5. **Blocking parity** — compile EasyList, EasyPrivacy and German regional lists
    against the 150,000-rule ceiling, and measure parity on real German sites as a
    CI gate.
+6. **The cohort's platform mix.** The tiering above assumes it. Instrument the
+   partner's landing page before committing to the tier order.
+7. **Accessibility on the tier-2 and deferred platforms.** The rationale is
+   evidenced on Windows only. Drive each shell surface with the platform's own
+   assistive technology before claiming WCAG 2.1 AA anywhere else.
+8. **Content protection on Windows.** Test whether the platform-native system
+   covers services members use, before the exclusion is treated as settled.
+
+## Revisit triggers
+
+The decision itself, not only its rejected alternatives, should be reopened if:
+
+- Accessibility on a tier-2 or deferred platform cannot be brought to WCAG 2.1
+  AA within the shell, since the constitution makes that a release blocker;
+- the cohort's measured platform mix contradicts the tiering assumption above;
+- the size budgets are formally relaxed, since the engine choice is downstream
+  of them and a different answer becomes available if 20 MB is no longer binding;
+- an independent engine becomes daily-drivable, in which case the `Engine` trait
+  is intended to make adoption a backend swap — an intention that is untested
+  until a second real backend exists beside the headless one.
 
 ## Evidence status
 
-Claims about `wry`'s API surface, WebKit's rule ceiling, Microsoft's runtime size
-and documented WebView2 behaviour, Servo's and Ladybird's status, and Thorium's
-maintenance load were verified against primary sources — source code, official
-documentation, release notes and project statements. Claims about ITP versus
-affiliate attribution, German platform-share figures, and Chrome-extension
-behaviour on macOS 15.4 in practice are **unverified** and appear above as risks
-to retire rather than as findings.
+**Verified against primary sources** — source code, official documentation,
+release notes and project statements: `wry`'s API surface and its per-platform
+navigation behaviour; WebKit's compiled-rule-list ceiling; Microsoft's documented
+runtime size and WebView2 feature list; Servo's and Ladybird's status and
+funding; Thorium's maintenance load; the licensing position on the content
+protection module discussed above.
+
+**Unverified, and each appears in the risks to retire above** rather than as a
+finding: tracking prevention versus affiliate attribution; the cohort's platform
+mix, which the tiering assumes; accessibility guarantees on the tier-2 and
+deferred platforms; Windows-native content protection; and browser-extension
+behaviour on recent macOS in practice.
+
+**Size and memory figures** quoted in the rationale come from vendor
+documentation and published project statements rather than from measurement on
+this project's own targets. Treat them as sound enough to eliminate options by
+an order of magnitude, and not as budgets; the budgets are measured in the
+spikes.
+
+## Corrections
+
+This record was amended after an adversarial review confirmed defects in its
+supporting claims. The decision is unchanged; the corrections concern accuracy.
+
+Corrected: the assertion that a `wry` fork was required on every platform, which
+was false on Windows and Linux; the description of navigation failure as an
+endless loading indicator, which is accurate only on macOS; the claim to be the
+only maintained cross-platform native-webview abstraction including Linux, which
+several non-Rust projects refute; a process-pool sharing requirement naming an
+interface that is a documented no-op; a media exclusion argued from one
+content-protection system while another is native to the tier-1 platform; a
+stale tracker-issue state; the accessibility rationale, which was evidenced on
+one platform and asserted for three; and an unverified platform-share figure
+that was stated as fact while the evidence section called it unverified.
