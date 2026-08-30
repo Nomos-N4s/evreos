@@ -28,13 +28,62 @@
   field is encountered. No site-credential storage is built in v1.
 - Q: Should the placeholder performance budgets be ratified now, or replaced
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
-  budgets now as tighten-only CI gates; hold the cold-start figure (SC-002)
-  until the cold-start spike measures engine initialisation on the reference
-  hardware.
+  budgets now as tighten-only CI gates; hold SC-002's start-up figures — warm
+  start and cold start alike — until the cold-start spike measures engine
+  initialisation on the reference machine for each tier.
 - Q: Is claim-code redemption in v1, or does it wait for the campaign backend?
   → A: They are two different flows. Member-facing claim-code redemption ships
   in v1. Partner-facing campaign administration is the flow blocked on the
   backend decision, and only that one ships disabled.
+
+### Session 2026-08-30 (second pass)
+
+- Q: Which platform ships first, and does a mobile platform precede desktop
+  polish? (Q-E1) → A: Windows first; macOS follows at its declared floor. No
+  mobile platform in v1. This confirms the tiering Platform Scope states rather
+  than changing it.
+- Q: Which engine is the default search provider, and is the placement paid?
+  (Q-E2) → A: DuckDuckGo, changeable by the member from first run, with no
+  revenue arrangement of any kind in v1. Payment is revisited only if traffic
+  volume makes a deal real, and that reopening is not scheduled.
+- Q: How is Evreos distributed at beta? (Q-E3) → A: Direct download from the
+  distribution page, plus the partner-counter QR that carries the claim code. No
+  app stores in beta.
+- Q: What is the minimum opt-in diagnostic set? (Q-E6) → A: Retention reports
+  and crash counters only. Any further datum requires its own justification
+  under Principle VI before it may be added.
+- Q: Is brand and trademark clearance settled here? (Q-E7) → A: It is not a
+  specification decision. A trademark search on "Evreos" and "Apivo" across the
+  German, Greek and EUIPO registers is required before any public beta, and is
+  tracked as work rather than as an open question.
+- Q: Which exact machine models are the reference hardware? (Q-E9a) → A: The
+  reference machine for each tier is the oldest configuration that tier's
+  declared operating-system floor admits, at 8 GB RAM, held as a pinned runner
+  of stable identity. That rule yields an 8th-generation Intel i3/i5 laptop,
+  8 GB, 2018 on tier 1, and a 2017 MacBook Pro, 8 GB on tier 2.
+- Q: Does the existing service serve claim-code redemption in v1? (Q-E11a) →
+  A: Not yet confirmed. FR-029 ships present in the interface and disabled, with
+  an honest explanation, on the treatment FR-029a already receives, and enables
+  when the service is confirmed to hold campaign records and accept a
+  redemption. SC-010 cannot be measured until then. This answer governs over the
+  first session's on the same question.
+- Q: Does a partner-branded distribution ship in v1? (Q-E13) → A: No, and none
+  is promised. The brand seam is built and proved by a fixture brand building in
+  CI on every change regardless, because Principle VIII requires that
+  independently of any partner build.
+- Q: Will the existing service record a client-type field on member-initiated
+  requests and run the retention computation on EU-hosted infrastructure?
+  (Q-E14) → A: Yes. The dependency is accepted rather than assumed.
+- Q: What threshold must signed-in 30-day retention clear? (Q-E15) → A: 40%
+  stands as provisional, replaced once by recorded founder decision after the
+  first two full cohorts and tighten-only thereafter. The figure stays labelled
+  a placeholder rather than a measurement.
+- Q: Does crash reporting ship in v1? (Q-E16) → A: Yes, counters only:
+  symbol-keyed counters, no retained exemplar, and the 50-report disclosure
+  floor.
+- Q: What of Q-E10, Q-E11, Q-E11b and Q-E12? → A: None of the four can be
+  answered by choosing; each is a measurement. They are carried in Spikes rather
+  than in Open Decisions, under the identifiers they were opened with.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -55,14 +104,14 @@ it, and a browser that cannot browse has no second chance with a reviewer.
 **Independent Test**: Install on the reference hardware, complete a full session
 — search, ten tabs, bookmark, download, print, find-in-page, close and reopen
 — entirely signed out, and confirm every ratified budget in Success Criteria
-holds, recording the measured first-run and warm-start times against the two
+holds, recording the measured cold-start and warm-start times against the two
 provisional figures SC-002 states.
 
 **Acceptance Scenarios**:
 
 1. **Given** a first launch on a machine with no prior profile and the system
    web runtime already present, **When** the person opens the browser, **Then**
-   an interactive window appears within the first-run figure SC-002 states,
+   an interactive window appears within the cold-start figure SC-002 states,
    which is provisional, and tracker blocking is already active. *(FR-008)*
 2. **Given** ten open tabs, **When** the person leaves the machine idle,
    **Then** background tabs are suspended and processor use falls below the
@@ -223,7 +272,9 @@ unchanged.
   entries and a chosen time range; and to see downloads in progress and
   completed, each with its destination on disk, to cancel one in progress, and
   to remove one from the list. Each of the three stores MUST survive closing and
-  reopening the browser, and a deletion MUST NOT reappear afterwards. All three
+  reopening the browser. A deletion MUST erase the record from the store and from
+  every index derived from it, not merely from the list presented to the member,
+  and MUST NOT reappear afterwards. All three
   are local stores, and FR-007a governs what may leave the machine: none of the
   three is among the transmissions it enumerates, so none of them may be sent
   anywhere.
@@ -235,8 +286,13 @@ unchanged.
   it is closed.
 - **FR-007a**: Browsing history is the record of where the member has been: the
   addresses the member navigated to, when, and in what order, together with any
-  store or transmission from which that record could be reconstructed. It MUST
-  NOT be transmitted to, or retained by, any server. This binds by the
+  store or transmission from which that record could be reconstructed, and any
+  value derived from that record — a classification, an interest cohort or
+  audience segment, a score, a count, a summary, an embedding, a hash, or any
+  other function of what the member visited — whether or not the record can be
+  reconstructed from that value. It MUST NOT be transmitted to, or retained by,
+  any server, save as the closed enumeration below permits, which is the whole of
+  what may carry any of it off the machine. This binds by the
   transmission and not by who receives it — a server Evreos operates, one it
   contracts for, one a partner operates, and one named only by brand
   configuration under FR-042 are all covered equally. Principle VI states the
@@ -247,8 +303,9 @@ unchanged.
   been, so the unqualified "any server" needs no exception carved out of it.
 
   The transmissions Evreos may make that carry an address the member navigated
-  to, a term the member typed into the FR-003 field, or content of a page the
-  member visited are exactly the four below, and the list is exhaustive:
+  to, a term the member typed into the FR-003 field, content of a page the
+  member visited, or any value derived from any of those are exactly the four
+  below, and the list is exhaustive:
   - **Page load**: the requests that load and use the site the member opened —
     the navigation request, the name resolution it requires, the subresource
     requests the page itself makes, and the form submissions and other requests
@@ -269,8 +326,13 @@ unchanged.
   Named because each is a plausible addition: no address-bar or as-you-type
   suggestion service; no reputation, safe-browsing or malware lookup keyed to the
   address being visited; no prefetch, preconnect or name resolution derived from
-  history or from a partly typed address; no synchronisation of history or
-  bookmarks; and no diagnostic or crash payload carrying either, which FR-039's
+  history or from a partly typed address; no interest cohort, audience segment,
+  topic or category computed from what the member visited, whether for offer
+  targeting or for anything else; no visit count, frequency or dwell-time
+  summary per site or per registrable domain, ordered or unordered, timestamped
+  or not; no embedding, model or score trained or computed on what the member
+  visited; no synchronisation of history or bookmarks; and no diagnostic or
+  crash payload carrying either, which FR-039's
   payload rule and FR-039c's closed list of crash-report contents also exclude.
   Adding an entry to the list is an amendment to this specification, made in the
   pull request that would add the transmission and checked against the Permanent
@@ -289,6 +351,15 @@ unchanged.
   machine: the member's history, bookmarks and open tabs. The field therefore
   transmits nothing as the member types, and no suggestion service exists to be
   consented to.
+
+  What this requirement binds is transmission and off-machine retention, never
+  local computation: deriving a value from the record on the member's own
+  machine is permitted, and the FR-003 field's suggestions, the FR-004 history
+  view and the FR-012 import are that computation. A derived value becomes
+  governed the moment it is transmitted anywhere or retained off the machine.
+  The definition above is the definition of browsing history every other
+  requirement in this specification uses where it names browsing history —
+  FR-039's and FR-039c's content bans included.
 
   Conformance MUST be demonstrated by a network-capture test committed to this
   repository and run in CI, exercising first launch, typing in the FR-003 field
@@ -376,7 +447,12 @@ unchanged.
   entirely, and to dismiss the wallet and claim surfaces, and each choice MUST
   persist across restarts and updates. An app update or a browser release MUST
   NOT reverse a dismissal, and every dismissal MUST be reversible by the member
-  from the same menu entry. Dismissal removes a surface from the browsing
+  from the same menu entry. A dismissal is keyed to the app identity declared in
+  the signed manifest FR-017 requires; that identity MUST NOT change across an
+  update, and an app republished under a new identity MUST be treated as
+  dismissed for every member who dismissed its predecessor. Without that, an
+  operator clears every dismissal by renaming, and Principle IV's dismissibility
+  mandate — a release criterion — holds only until it is inconvenient. Dismissal removes a surface from the browsing
   experience, never from the member's reach: FR-028 requires a withdrawal to be
   followable to a terminal state, which a wallet with no way back would make
   unsatisfiable.
@@ -391,7 +467,10 @@ unchanged.
     member in that control, rather than injection in general;
   - it is taken on the page load it authorises and authorises that page load
     alone; a later navigation, a reload, and a restored tab are each a new
-    occasion.
+    occasion. A navigation is any change to the address the member is on,
+    including one the page performs without fetching a new document, because on
+    a site that never reloads a document-scoped occasion would last the whole
+    session — which is most merchant sites.
 
   Interaction with page content is never such an action. A click, keypress,
   scroll or pointer movement anywhere in the page authorises nothing, at any
@@ -523,7 +602,8 @@ unchanged.
 - **FR-026**: The wallet MUST present every amount the service reports, in the
   state the service reports for it — pending, confirmed, declined and reversed,
   and payable where the service reports a payable amount — exactly as reported,
-  and MUST NOT compute, estimate, aggregate or omit any of them. Principle V
+  and MUST NOT present any amount the service did not report, nor compute,
+  estimate, aggregate or omit any amount whatever its source. Principle V
   requires all four states to be displayed as the ledger reports them: a wallet
   that shows pending and confirmed but drops declined and reversed states a
   larger entitlement than the ledger holds, and the member believes the wallet.
@@ -545,14 +625,17 @@ unchanged.
   to a terminal state.
 - **FR-029**: Member-facing claim-code redemption — scanning or entering a code,
   binding the member to an existing campaign, and showing the resulting entry in
-  the wallet — MUST work in v1, against campaigns already held by the existing
-  service. It is a distinct flow from FR-029a and is not blocked by it. It does
-  depend on the existing service holding campaign records and accepting a
-  redemption, because Principle V forbids the client producing either; if that
-  service does not serve redemption, FR-029 is blocked by the same decision as
-  FR-029a and both ship disabled. Q-E11a records that dependency and SC-010 rests
-  on it; if it resolves negatively this requirement is renegotiated rather than
-  silently disabled.
+  the wallet — MUST be present in the interface and disabled until the existing
+  service is confirmed to hold campaign records and accept a redemption, and MUST
+  be enabled once it is. Until then it receives the treatment FR-029a states, in
+  full: the disabled control MUST state in plain language that redemption is not
+  yet available, MUST NOT be presented as a control that failed, and MUST make no
+  request to any service when the member activates it. It remains a distinct flow
+  from FR-029a, blocked by a distinct dependency — that service rather than
+  FR-029a's backing service — and Principle V forbids the client producing either
+  a campaign record or a redemption, so no client-side stand-in is available.
+  Q-E11a records that the service is not yet confirmed, and SC-010 cannot be
+  measured until it is.
 - **FR-029a**: Partner-facing campaign administration, by which a partner
   business creates or funds a campaign, MUST be present in the interface and
   disabled until its backing service exists. The disabled control MUST state in
@@ -595,12 +678,24 @@ unchanged.
   second implementation can be kept working at all. The seam is proved by that
   second implementation rather than asserted. The shell MUST be stable Rust with
   no nightly features on the release path. Electron, CEF and any bundled
-  Chromium are permanently rejected, exactly as Principle III rejects them. A
-  web engine Evreos itself fetches, unpacks or installs — at first run, on
-  update, or on demand — is bundled for the purposes of this requirement and of
-  the SC-001 count, whether or not it is present in the build output; the only
-  web engine that is not bundled in that sense is one the operating system
-  provides and shares with other applications. Principle III leaves room for a
+  Chromium are permanently rejected, exactly as Principle III rejects them, and
+  no other web engine may ship or be acquired either: on the release path the
+  only rendering implementations are the web runtime the operating system
+  provides and shares with other applications, and the headless implementation
+  this requirement already mandates. A web engine Evreos itself fetches, unpacks
+  or installs — at first run, on update, or on demand — is bundled for the
+  purposes of this requirement whether or not it is present in the build output,
+  and is therefore excluded on the same terms. Naming only the three Principle
+  III names would leave a private WebKitGTK or Gecko build fetched at first run
+  rejected by nothing, which forfeits the same budgets in the same way and is
+  the outcome the principle exists to prevent. Triggering the installation of
+  the operating system's own shared runtime, which SC-003 requires where it is
+  absent, is not acquiring an engine of Evreos's own: what the carve-out turns
+  on is that the runtime is the platform's and shared, never on who starts the
+  installer. What such an engine costs the size budgets is settled by
+  SC-001's rule and stated only there — installed footprint is the disk delta
+  after first run has completed — so this requirement states no second counting
+  rule of its own. Principle III leaves room for a
   pure Rust engine as an experimental third backend when one becomes
   daily-drivable, and this requirement MUST NOT be read to foreclose it; such a
   backend ships inside the same budgets and states its cost under FR-043 like
@@ -657,15 +752,26 @@ unchanged.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
   layouts.
 - **FR-036a**: Neither the shell nor any app it hosts may derive, store or
-  transmit a stable identifier for a device or a member from device, display,
-  font, network or timing characteristics, or from any combination of them.
+  transmit any identifier or correlator for a device or a member from device,
+  display, font, network or timing characteristics, or from any combination of
+  them, however long it persists. "Stable" is not the test and MUST NOT be read
+  in: a value re-derived from the same characteristics under a salt rotated
+  daily is not stable and identifies the member all the same, so the prohibition
+  binds on the derivation rather than on the lifetime of what it produces.
+  Neither may a capability be declared under FR-017 or granted under FR-018
+  whose effect is to place those characteristics in the hands of a party that
+  could perform the derivation; an app that derives nothing itself but forwards
+  the inputs has done the prohibited thing at one remove.
   Principle VI prohibits fingerprinting outright, alongside the install-referrer
   tricks FR-033 carries, and the prohibition admits no consent exception and no
   diagnostic exception. It binds every channel Evreos has, not only the
   diagnostic signal FR-039 governs and the origin marker FR-040 constrains. A
   manifest under FR-017 MUST NOT declare a capability that requires such a
   derivation, and a per-app grant under FR-018 authorises page-adjacent access
-  but never this.
+  but never this. A value derived from what the member visited — a cohort, a
+  category, a count — is governed by FR-007a rather than by this requirement,
+  and is forbidden there even where it identifies no one; neither requirement
+  licenses what the other forbids.
 
 **Diagnostics**
 
@@ -704,9 +810,10 @@ conditions first, and the measure is defined inside what remains.
   transmitted. **Signed-out retention for an enrolment week is that week's
   retention-report count divided by its enrolment-report count less its
   withdrawal-report count.** The withdrawal count MUST be published beside the
-  rate, or every opt-out reads as churn. Where that denominator is not positive —
-  withdrawals equalling or exceeding enrolments for the week — no rate is reported
-  for that week: the counts are reported and the rate is stated as not computable.
+  rate — banded under FR-039e where it is below 50 — or every opt-out reads as
+  churn. Where that denominator is not positive — withdrawals equalling or
+  exceeding enrolments for the week — no rate is reported for that week: the
+  counts are reported and the rate is stated as not computable.
   Every publication of a count or a rate under this requirement is subject to
   FR-039e.
 
@@ -747,8 +854,11 @@ conditions first, and the measure is defined inside what remains.
   retransmission cannot be deduplicated and would inflate the denominator. These
   constraints apply identically to crash reports; the enrolment-week and
   report-count constraints above do not, since crash reporting is separately
-  consented and may exist where no enrolment does.
-- **FR-039c**: Crash reporting, if it ships in v1 at all (Q-E16), MUST be opt-in,
+  consented and may exist where no enrolment does. Carrying no identifier is not
+  by itself a licence on contents: a report carries only what FR-039a and
+  FR-039c enumerate, and a field derived from what the member visited is
+  browsing history under FR-007a however unlinkable the report is.
+- **FR-039c**: Crash reporting ships in v1 and MUST be opt-in,
   off by default, and separately consented from FR-039's signal, which Principle
   VI treats as a distinct thing. Separate consent does not narrow FR-039's content
   ban: a crash report MUST NOT carry browsing history, URLs, page content or
@@ -769,7 +879,8 @@ conditions first, and the measure is defined inside what remains.
   or transmitted: it necessarily contains URLs and page content, and forbidding
   those inside a memory image is not implementable, so the capture is bounded
   instead. Before consent the member MUST be shown in plain language exactly what
-  a crash report contains, and the per-install daily cap FR-039e requires.
+  a crash report contains, and the once-per-install crash-report cap FR-039e
+  requires.
 - **FR-039d**: Counters, not reports, are the retained artefact — this is what
   Principle VI's *aggregate* condition requires. A diagnostic report MUST be added
   to its (report type, enrolment week) counter on receipt and discarded by the end
@@ -797,29 +908,57 @@ conditions first, and the measure is defined inside what remains.
   act on, and holding it longer preserves a near-unique record of the machines
   that hit it for no diagnostic return.
 
-  If symbol-keyed counters prove insufficient to diagnose crashes, crash reporting
-  does not ship in v1 (Q-E16) unless Principle VI is amended through its own
-  procedure; this specification grants no exception to it.
-- **FR-039e**: No counter of either kind may be published, exported, or used in
-  any derived figure until it covers at least 50 reports. Below that threshold the
-  counter is held and nothing drawn from it is released, in any form — not the
-  count, not a rate computed from it, not a range, and not a confidence interval,
-  since an interval around a small count discloses the same thing more politely. A
-  crash counter of one is one member's crash on one code path. Where a figure this
-  specification names would be drawn from a counter below the threshold — the
-  signed-out retention rate FR-039a computes among them — the figure is withheld
-  and its absence stated, never reported with a wider interval instead. At or
-  above the threshold this requirement does not settle how a figure is expressed;
-  below it, no expression is permitted.
+  Symbol-keyed counters are the form crash reporting takes in v1 (Q-E16). Where
+  they prove insufficient to diagnose a crash, the answer is neither a retained
+  exemplar nor a wider counter key: Principle VI is amended only through its own
+  procedure, and this specification grants no exception to it.
+- **FR-039e**: The publication threshold is 50 reports, and it applies to a
+  **disclosure unit** rather than to each counter in isolation. The units are a
+  closed pair:
+  - a **crash stack** — one (symbolised stack, release, operating-system version,
+    reason code) counter, gated on its own report count;
+  - an **enrolment week** — the enrolment, retention and withdrawal counters for
+    one week under FR-039a taken together, gated on that week's enrolment-report
+    count less its withdrawal-report count — the population the published rate is
+    actually computed over. Gating on enrolments alone would clear the threshold
+    on a week of 60 enrolments and 56 withdrawals and then publish a rate over
+    four people. It is that population's size, not the smallest number counted
+    within it, that decides whether a published figure narrows to an individual,
+    and a unit whose population is not positive is held under the rule below.
+
+  Below its threshold a unit is held, and nothing drawn from it may be published,
+  exported, or used in any derived figure, in any form — not a count, not a rate
+  computed from it, not a range, and not a confidence interval, since an interval
+  around a small count discloses the same thing more politely. A crash counter of
+  one is one member's crash on one code path; a week of fewer than 50 enrolments
+  is a cohort in which one member's behaviour moves the published rate visibly.
+  Such a unit is withheld and its absence stated, never reported with a wider
+  interval instead.
+
+  At or above its threshold a unit is published, and a count inside it that is
+  itself below 50 — in a healthy week the withdrawal count, which FR-039a requires
+  beside the rate — MUST be published as a band rather than exactly: "fewer than
+  10", or otherwise the decade it falls in (10 to 19, 20 to 29, 30 to 39, 40 to
+  49). The rate is then published rounded to the nearest whole percentage point,
+  and no further figure may be published from the same unit that would recover a
+  banded count exactly. A qualifying week is therefore always publishable: the gate
+  is the cohort, the band is the protection, and no implementer may cite this
+  requirement to withhold a rate whose cohort clears the threshold. Subject to the
+  banding rule, this requirement does not settle how a figure is expressed; below
+  the threshold, no expression is permitted.
 
   The threshold counts reports, and it is a lower bound on distinct installs only
   if no install can contribute twice. A client MUST therefore emit at most one
   crash report per (symbolised stack, release, operating-system version, reason
-  code) key per calendar day, enforced on the device and stated in the pre-consent
-  disclosure FR-039c requires. Without that cap one machine in a crash loop clears
-  the threshold on its own, which is exactly the single member on a single code
-  path the threshold exists to suppress. FR-039a already admits at most one report
-  of each type per enrolment, so the diagnostic counters need no further cap.
+  code) key for the life of the install, enforced on the device and stated in the
+  pre-consent disclosure FR-039c requires. A cap of one report per key per
+  calendar day would not carry the claim: one machine in a crash loop still
+  reaches 50 over 50 days, which is exactly the single member on a single code
+  path the threshold exists to suppress. Because the key carries the release, a
+  stack that survives into the next release is reported once more by the same
+  install, so 50 reports under one key are 50 distinct installs. FR-039a already
+  admits at most one report of each type per enrolment, so the diagnostic counters
+  need no further cap.
   Because FR-039b admits no client credential, this cap binds the client and is
   not a guarantee against a fabricated stream; FR-039a states what that leaves the
   published figure worth.
@@ -895,12 +1034,21 @@ them states when a gate blocks.
 A **budget entry** is one number, for one criterion, on one platform, under one
 stated measurement condition. Every rule in this preamble applies to the entry
 rather than to the criterion that states it, because a criterion may state
-several: SC-004 states a single number under two entries, tier 1 and tier 2,
-whose statuses differ, and SC-002 states two numbers, warm start and cold start,
-which are two entries each carrying its own status. Every entry MUST appear in
-the budget file FR-043 requires, carrying its figure, its platform, its
-measurement condition, its status, its baseline, its declared tolerance and, on
-SC-004, its declared cross-check margin.
+several, and a figure a criterion states per platform is one entry per platform
+rather than one entry: SC-004 states a single number under two entries, tier 1
+and tier 2, whose statuses differ, and SC-002 states two numbers, warm start and
+cold start, which are two entries per platform — four in all — each carrying its
+own status. Every entry MUST appear in the budget file FR-043 requires, carrying
+its figure, its platform, its measurement condition, its status, its baseline,
+its declared tolerance and, on SC-004, its declared cross-check margin.
+
+The entries are these, and the list is closed: per platform, SC-001's download
+size and its installed footprint; SC-002's warm start and its cold start;
+SC-004's ten-tab memory; SC-005's 60-minute window figure and its wake-free
+1-second sample; and SC-006's tab switch and its address-field keystroke. That
+is nine entries per platform and eighteen across tier 1 and tier 2. SC-003
+states no figure and carries no entry. Adding an entry is an amendment to this
+specification, made in the change that states the figure.
 
 Each entry's **status** is *ratified*, set by a recorded founder decision, or
 *provisional*, standing until such a decision replaces it. Status describes the
@@ -916,7 +1064,7 @@ build:
   status is absent, or an entry recorded as ratified names no founder decision;
   when a declared tolerance or cross-check margin exceeds the limit this
   preamble sets for it; when an upward baseline reset names no recorded founder
-  decision; when the pinned runner's identity is absent; or when SC-005's wake
+  decision; when either tier's pinned runner identity is absent; or when SC-005's wake
   enumeration is absent or a wake in it lacks a period, a processor-time bound
   or a justifying requirement.
 - The **absolute gate** fails the build when the figure measured on the pinned
@@ -925,17 +1073,32 @@ build:
   runner is worse than the entry's recorded baseline by more than that entry's
   declared tolerance.
 
-The **pinned benchmark runner** is a single machine of stable identity, recorded
-in the budget file from M0 by model, operating-system version and a durable
-machine identifier. A fungible hosted machine is not one: neighbour noise on
-shared cloud machines moves memory and latency by more than a real regression
-does. Both measuring gates run on it and block from M0, and every measured
-figure is reported against the runner named in the file. Naming the reference
-machine models is a separate release prerequisite (Q-E9a): a figure may be
-reported as *met on reference hardware*, or published under SC-013, only against
-a machine Q-E9a names, because no unnamed machine gives the reproducibility
-SC-013 requires. The runner may be one of those machines, and MUST be one once
-they are named.
+The **pinned benchmark runner** is one machine per tier, each of stable
+identity, recorded in the budget file from M0 by model, operating-system
+version, memory configuration and a durable machine identifier. A fungible
+hosted machine is not one: neighbour noise on shared cloud machines moves memory
+and latency by more than a real regression does. Both measuring gates run on the
+runner for the entry's platform and block from M0, and every measured figure is
+reported against that runner and no other — a tier-1 figure against the tier-1
+runner, a tier-2 figure against the tier-2 runner.
+
+The **reference machine** for a tier is the oldest configuration that tier's
+declared operating-system floor admits, at 8 GB of memory, and it is that tier's
+pinned runner. The rule binds and the models follow from it, so a change of
+floor changes the machines without reopening the decision: today the rule yields
+an 8th-generation Intel i3/i5 laptop with 8 GB on tier 1, the oldest processor
+the tier-1 Windows floor admits, and a 2017 MacBook Pro with 8 GB on tier 2, the
+oldest actively cooled portable macOS 13 admits — Assumptions records why the
+fanless 2017 MacBook, which that floor also admits, cannot serve as a runner. Q-E9a records that decision, so a
+figure may be reported as *met on reference hardware*, or published under
+SC-013, against the pinned runner for its tier and against no other machine.
+Both gates are defined and enforced from M0. On a hardware-dependent entry the
+absolute gate has nothing to run against until that tier's runner exists, so
+until both are procured and pinned its result is advisory; the regression gate
+and the budget-file gate block from M0 regardless, and the budget-file gate
+fails on a missing runner identity, so the advisory period is bounded by a gate
+rather than by good intentions. Procuring the two machines is the whole of what
+stands between the absolute gate and blocking.
 
 The tolerance is declared per entry in the budget file, is justified by measured
 run-to-run variation on the pinned runner, and may not exceed 5% of that entry's
@@ -986,7 +1149,7 @@ SC-003 states a required experience rather than a figure. It is verified by
 acceptance test and carries no budget entry and no budget gate, and it names no
 budget Principle II names.
 
-- **SC-001** *(both entries ratified)*: The download is 20 MB or less per
+- **SC-001** *(all four entries ratified)*: The download is 20 MB or less per
   platform — the size of the installer artefact CI publishes — and the installed
   footprint is 60 MB or less per platform. **Installed footprint** is the
   difference in occupied disk space between a clean machine image and that same
@@ -996,21 +1159,28 @@ budget Principle II names.
   and fetches its engine on first launch otherwise passes a gate on bytes it
   only postponed. The single exclusion is a web runtime the operating system
   itself provides, which is not shipped and is shared with other applications; a
-  runtime Evreos downloads, installs or carries is Evreos's bytes. Member data
-  the first run creates — profile, cache and downloads — is excluded, and the
-  measurement script published under SC-013 states how each is identified.
-- **SC-002** *(both entries provisional)*: With the system web runtime already
+  runtime Evreos downloads, installs or carries is Evreos's bytes, which is the
+  same test FR-044 applies to a bundled engine, stated once here for the count.
+  Deferring an acquisition past first run does not move it outside the boundary:
+  where Evreos fetches, unpacks or installs a web engine on update or on demand
+  rather than at first run, the measured first run is the run that performs that
+  acquisition, and the entry is judged on the disk delta that run produces.
+  Member data the first run creates — profile, cache and downloads — is
+  excluded, and the measurement script published under SC-013 states how each is
+  identified.
+- **SC-002** *(all four entries provisional)*: With the system web runtime already
   present, an interactive window appears within 800 ms on a **warm start** — a
   launch on an existing profile, after the browser has already run on that
   machine since boot — and within 2 s on a **cold start** — the first launch
   after installation, on a fresh profile, with no Evreos process running and no
   cached profile state on the machine. These are the two names used for these
-  two entries everywhere in this specification and in the budget file, and the
-  cold-start entry is the cold-start budget Principle II names. The
-  runtime-absent path is SC-003's and is not a cold start. Both entries are held
-  open deliberately: a large share of each is the engine's own initialisation
-  rather than Evreos's code, so each is ratified only after the cold-start spike
-  measures that floor on the reference machines. The shell architecture is
+  two figures everywhere in this specification and in the budget file; each is
+  an entry per platform, so SC-002 carries four, and the cold-start figure is
+  the cold-start budget Principle II names. The runtime-absent path is SC-003's
+  and is not a cold start. All four entries are held open deliberately: a large
+  share of each is the engine's own initialisation rather than Evreos's code, so
+  each is ratified only after the cold-start spike measures that floor on the
+  reference machine for its tier. The shell architecture is
   expected to be shaped by what that spike finds.
 - **SC-003**: Where the system web runtime is absent, first run presents
   continuous, honest progress and completes without user intervention beyond
@@ -1146,8 +1316,9 @@ budget Principle II names.
   the count of distinct issued codes that reach a completed redemption under
   FR-029. A tally of conversations kept by the counter is not the denominator:
   the party this criterion judges may not also supply the number it is judged
-  on. Both counts are published beside the figure. Whether FR-029 redemption
-  exists to be counted at all rests on Q-E11a.
+  on. Both counts are published beside the figure. FR-029 redemption is
+  disabled until the existing service is confirmed (Q-E11a), so this criterion is
+  not measurable until it is enabled.
 - **SC-011**: Thirty-day retention is measured two ways and reported separately,
   never as one blended figure.
 
@@ -1188,9 +1359,11 @@ budget Principle II names.
   mechanism is not a free property of FR-014 and must be specified where the
   channel is.
 
-  **Small cohorts.** The signed-out figure is governed by FR-039e, which holds
-  anything derived from a counter below 50 reports in any form: such a cohort is
-  withheld, not published with an uncertainty band around it. The signed-in
+  **Small cohorts.** The signed-out figure is governed by FR-039e, which gates a
+  week on its enrolment-report count reaching 50: a smaller cohort is withheld
+  whole, not published with an uncertainty band around it, and inside a
+  qualifying week any count below 50 — in practice the withdrawals — is published
+  as a band rather than exactly. The signed-in
   figure is drawn from account activity rather than from a diagnostic counter, so
   FR-039e does not reach it; there, a cohort of fewer than 200 first sign-ins is
   published with its cohort size and labelled direction-only, and the 40% bar is
@@ -1282,7 +1455,16 @@ governs.
 
 ## Platform Scope
 
-- **Tier 1 — Windows.** Release criteria apply in full.
+- **Tier 1 — Windows 11 and later.** Release criteria apply in full. Windows 10
+  reached end of support in October 2025, so it is not a floor this product can
+  declare. This floor sets the minimum operating-system version FR-041 requires
+  the distribution page to state before download, the source of the operating
+  system's security patches, and — under Q-E9a's rule — the tier-1 reference
+  machine, which is the oldest configuration this floor admits. Unlike tier 2 it
+  does not set the rendering engine version or the web features available: the
+  tier-1 system web runtime is evergreen and patched independently of the
+  operating-system version, which is why the tier-2 entry below carries
+  consequences this one does not.
 - **Tier 2 — macOS 13 and later.** Because the engine is the operating system's
   own, this floor sets the rendering engine version, the web features available
   on this platform, and the security patch source. The platform's extension API
@@ -1307,14 +1489,22 @@ This supersedes the master prompt's equal treatment of three platforms.
 ## Open Decisions
 
 Routed to `/speckit-clarify`. These are founder decisions and MUST NOT be
-resolved silently by this specification.
+resolved silently by this specification. A question that only a measurement can
+answer is not a founder decision and is not carried here; those are in Spikes
+below, under the identifiers they were opened with.
 
-- **Q-E1** Platform order, and whether a mobile platform precedes desktop
-  polish.
-- **Q-E2** *Settled 2026-08-30*: a privacy-preserving default with no paid
-  placement in v1 (FR-003a). Which specific engine, and whether to revisit
-  payment once traffic volume makes a deal realistic, remain open.
-- **Q-E3** Distribution channels at beta.
+- **Q-E1** *Settled 2026-08-30*: Windows first, macOS following at its declared
+  floor, and no mobile platform in v1. This confirms the tiering Platform Scope
+  states rather than changing it.
+- **Q-E2** *Settled 2026-08-30*: DuckDuckGo is the default search provider,
+  changeable by the member from first run, with no revenue arrangement of any
+  kind in v1 (FR-003a). Payment is revisited only if traffic volume makes a deal
+  real, and that reopening is not scheduled. FR-003a states the boundary the
+  provider is held to and is not narrowed by naming one, since brand
+  configuration under FR-042 may change which service receives the query.
+- **Q-E3** *Settled 2026-08-30*: at beta, direct download from the distribution
+  page FR-041 governs, plus the partner-counter QR that carries the claim code
+  (FR-032). No app stores in beta.
 - **Q-E4** *Settled 2026-08-30*: platform autofill where available, an honest
   limitation and a system-browser hand-off where it is not (FR-015a). Whether to
   integrate the platform keychain on tier 2 later remains open.
@@ -1322,28 +1512,40 @@ resolved silently by this specification.
   scope for v1, because FR-015a forbids Evreos holding site credentials — what
   may not be held cannot be imported. Whether a later version imports them
   reopens with the tier-2 keychain question in Q-E4.
-- **Q-E6** The minimum opt-in diagnostic set. Partly settled by the session
-  2026-08-30 clarification: the set must at minimum support signed-out retention
-  (FR-039). What else it carries, if anything, remains open.
-- **Q-E7** Brand and trademark clearance, and standalone versus endorsed
-  branding.
+- **Q-E6** *Settled 2026-08-30*: the diagnostic set is retention reports
+  (FR-039a) and crash counters (FR-039c, FR-039d), and nothing else. Any further
+  datum requires its own justification under Principle VI before it may be added,
+  which is an amendment to this specification rather than an implementation
+  choice.
+- **Q-E7** *Settled 2026-08-30*: brand clearance is not a specification
+  decision. A trademark search on "Evreos" and "Apivo" across the German, Greek
+  and EUIPO registers is required before any public beta, and is tracked as work
+  rather than as an open question. Standalone versus endorsed branding is
+  likewise not a requirement here: FR-042 holds every brand name and colour in
+  one configuration, so it is a value in that configuration.
 - **Q-E8** *Superseded by Q-E13.*
 - **Q-E9** *Settled 2026-08-30, in part*: SC-001, SC-005, SC-006 and SC-004 on
-  tier 1 are ratified as tighten-only figures. Two figures stay provisional and
-  open — SC-002's, pending the cold-start spike, and SC-004's on tier 2,
-  pending the spike ADR-0001 requires into what governs macOS memory at ten
-  tabs. The gate structure is defined in the Success Criteria preamble, not
+  tier 1 are ratified as tighten-only figures. Three figures stay provisional
+  and open — SC-002's warm start and SC-002's cold start, both pending the
+  cold-start spike, and SC-004's on tier 2, pending the spike ADR-0001 requires
+  into what governs macOS memory at ten tabs. Counted as budget entries rather
+  than as figures those three are five, since SC-002's two stand on each
+  platform. The gate structure is defined in the Success Criteria preamble, not
   here.
-- **Q-E9a** Which exact machine models are the reference hardware. This is not a
-  presentational question. The Success Criteria preamble sets the conditions
-  under which an absolute budget gate on a hardware-dependent figure blocks the
-  build, and naming the machines is one of them; that preamble governs, and this
-  entry does not restate it. A figure measured on an unnamed machine is not
-  reproducible by a third party, which SC-013 requires, and a budget whose
-  absolute gate never blocks is un-gated, which Principle II does not admit — so
-  answering this is a release prerequisite rather than a preference. The
-  Assumptions entry on reference hardware states what the answer must record and
-  by when.
+- **Q-E9a** *Settled 2026-08-30*: the reference machine for each tier is the
+  oldest configuration that tier's declared operating-system floor admits, at
+  8 GB of memory, held as that tier's pinned benchmark runner of stable
+  identity — today an 8th-generation Intel i3/i5 laptop with 8 GB on tier 1 and
+  a 2017 MacBook Pro with 8 GB on tier 2, the oldest actively cooled portable
+  macOS 13 admits. The rule governs and the models
+  follow from it, so a change of operating-system floor changes the machines
+  without reopening this decision. What remains is procurement: acquiring those
+  two machines and pinning them in the budget file FR-043 names. Until that is
+  done the hardware-dependent absolute gates do not block, which Principle II
+  does not admit as a resting state, so procurement is a release prerequisite
+  and is the only thing standing between those gates and blocking. The Success
+  Criteria preamble states the rule; the Assumptions entry on reference hardware
+  states what the budget file must record.
 - **Q-E10** Whether affiliate attribution survives tracking prevention on the
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
@@ -1353,10 +1555,49 @@ resolved silently by this specification.
   does, whether it covers any streaming service members actually use and at
   which security level, since commercial streamers commonly gate higher
   resolutions behind a hardware tier. ADR-0001 risk 8 carries the measurement.
-- **Q-E11a** Whether the existing service serves claim-code redemption in v1 —
-  holding campaign records and accepting a redemption. FR-029 ships on the
-  assumption that it does, Principle V forbids the client producing either, and
-  SC-010 rests on the answer.
+- **Q-E11a** *Settled 2026-08-30*: the existing service is not yet confirmed to
+  hold campaign records and accept a redemption. FR-029 therefore ships present
+  in the interface and disabled, with the honest explanation FR-029a's treatment
+  requires, and enables when the service is confirmed. SC-010 cannot be measured
+  until then. Principle V forbids the client producing either a campaign record
+  or a redemption, so no client-side stand-in closes the gap.
+- **Q-E13** *Settled 2026-08-30*: no partner-branded distribution in v1, and
+  none is promised. The rebrandable seam is built and proved regardless, by the
+  fixture brand FR-042 requires to build in CI on every change, because Principle
+  VIII requires that independently of any partner build.
+- **Q-E16** *Settled 2026-08-30*: crash reporting ships in v1, counters only —
+  symbol-keyed counters, no retained exemplar, and FR-039e's 50-report
+  disclosure floor (FR-039c, FR-039d). Where those counters prove insufficient to
+  diagnose a crash, the answer is not a retained exemplar: this specification
+  grants no exception to Principle VI.
+- **Q-E15** *Settled 2026-08-30*: 40% stands as the signed-in 30-day retention
+  bar, provisional, replaced once by recorded founder decision after the first
+  two full cohorts and tighten-only thereafter (SC-011). It stays labelled a
+  placeholder rather than a measurement. The base criterion's 20% was set over
+  everyone who installs, a population SC-011 records as unmeasurable, and the
+  number does not carry across to the members who sign in.
+- **Q-E14** *Settled 2026-08-30*: yes. The Apivo service will record a
+  client-type field on member-initiated requests and run the retention
+  computation on EU-hosted infrastructure, as FR-040 requires. Both are changes
+  to a service outside this repository; the dependency is accepted rather than
+  assumed, and SC-011's signed-in figure rests on it.
+
+## Spikes
+
+These are measurements, not decisions: no founder answer settles them, and each
+is carried into `/speckit-tasks` as a spike implementation MUST run. Each keeps
+the identifier it was opened with, so every cross-reference to it elsewhere in
+this specification still resolves.
+
+- **Q-E10** Whether affiliate attribution survives tracking prevention on the
+  tier-2 platform. Recorded in ADR-0001 as unverified and as the only
+  identified risk that can invalidate the business rather than the
+  architecture.
+- **Q-E11** Whether PlayReady reaches the Win32 WebView2 host Evreos ships —
+  the one located positive report comes from a WinUI2/UWP host — and, if it
+  does, whether it covers any streaming service members actually use and at
+  which security level, since commercial streamers commonly gate higher
+  resolutions behind a hardware tier. ADR-0001 risk 8 carries the measurement.
 - **Q-E11b** Whether a third-party host of the tier-2 platform's web view
   reaches that platform's content-protection system through EME at all, and
   which services members use depend on it. ADR-0001 records both as
@@ -1366,23 +1607,11 @@ resolved silently by this specification.
   route ADR-0001 records, by binding WebKit's compiled rule lists outside `wry`,
   or whether the tier-2 floor must move to macOS 14. Blocking parity on tier 2
   MUST be measured before the floor is treated as settled.
-- **Q-E13** Whether a partner-branded distribution ships in v1. The rebrandable
-  seam itself is not open: Principle VIII requires it and requires a fixture
-  brand to build in CI on every change, regardless of whether any partner build
-  is promised (FR-042).
-- **Q-E16** Whether crash reporting ships in v1 at all. FR-039d requires
-  signature-level aggregation with no individual retention; if that is
-  insufficient to diagnose crashes, the alternative is cutting crash reporting
-  from v1, because this specification grants no exception to Principle VI.
-- **Q-E15** What threshold signed-in 30-day retention must clear. The base
-  criterion set 20% over everyone who installs; that population is unmeasurable
-  (SC-011), and the measurable population — members who sign in — is a
-  self-selected minority whose retention is expected to be materially higher.
-  The number does not carry across.
-- **Q-E14** Whether the existing service will record a client-type field on
-  member-initiated requests, and run the retention computation on EU-hosted
-  infrastructure, as FR-040 requires. Both are changes to a service outside this
-  repository, and SC-011's signed-in figure rests on them.
+
+Two further spikes carry no identifier of their own and are named where the
+figures they settle are: the cold-start spike SC-002's two entries wait on, and
+the spike into what governs macOS memory at ten tabs that SC-004's tier-2 entry
+waits on (Q-E9).
 
 ## Assumptions
 
@@ -1390,13 +1619,25 @@ resolved silently by this specification.
   CI; it is the point from which Principle II's budget gates are required.
 - **Cohort week** is an ISO-8601 week, Monday to Sunday, in UTC, wherever a week
   is named.
-- **Reference hardware** for SC-002, SC-004, SC-005 and SC-006 is a 2020
-  mid-range x86 laptop and an M1-class portable. Q-E9a is answered by recording,
-  in the budget file FR-043 names, one machine per tier by model,
-  operating-system version and configuration, on a recorded founder decision.
-  That record MUST land before any hardware-dependent figure is ratified, and in
-  any case before the first release. Until it does, no hardware-dependent figure
-  is reproducible under SC-013.
+- **Reference hardware** for the hardware-dependent criteria — SC-002, SC-004,
+  SC-005 and SC-006 — is, for each tier, the oldest configuration that tier's
+  declared operating-system floor admits, at 8 GB of memory, held as that tier's
+  pinned benchmark runner of stable identity. On the floors this specification
+  declares, that rule names an 8th-generation Intel i3/i5 laptop with 8 GB on
+  tier 1 — the oldest processor Windows 11 admits — and a 2017 MacBook Pro with
+  8 GB on tier 2. macOS 13 admits the 12-inch MacBook of 2017 as well, which is
+  older still; it is excluded because it is fanless, and a machine that throttles
+  under sustained load cannot hold run-to-run variation inside the 5% tolerance
+  cap a pinned runner has to satisfy. That exclusion is stated rather than left
+  to the procurer, because "oldest admitted" and "usable as a runner" diverge
+  here and nowhere else. Q-E9a records that
+  decision, so each hardware-dependent figure is reproducible under SC-013
+  against the runner for its tier. The budget file FR-043 names MUST record both
+  machines by model, operating-system version, memory configuration and a
+  durable machine identifier. Procuring the two machines and pinning them is
+  what remains before a hardware-dependent absolute gate blocks the build; it
+  MUST be done before the first release, and nothing else stands between those
+  gates and blocking.
 - **Import sources** are Chrome, Firefox and Edge, covering bookmarks and
   history. Site credentials are out of scope; Q-E5 records that decision and
   what reopens it.
@@ -1404,12 +1645,18 @@ resolved silently by this specification.
   for the pilot cohort is month-two retention, not day-one delivery.
 - **Partner-facing campaign administration ships disabled** (FR-029a), because
   its backing service is a decision not yet taken outside this repository.
-  Member-facing claim-code redemption (FR-029) is a distinct flow, is unaffected
-  by that decision, and ships in v1.
+  Member-facing claim-code redemption (FR-029) is a distinct flow blocked by a
+  distinct dependency: the existing service is not yet confirmed to hold campaign
+  records and accept a redemption (Q-E11a), so it too ships present and disabled,
+  and enables on confirmation.
 - **Money state originates entirely from the existing service.** This
   specification adds no money logic and assumes the ledger's vocabulary of
   pending, confirmed, declined and reversed.
 - **The reader app consumes the existing publication**, rather than
   reimplementing it.
-- **The SC-001 measurement boundary** excludes any system-provided web runtime,
-  since it is not shipped and is shared with other applications.
+- **The SC-001 measurement boundary** is the disk delta SC-001 defines: occupied
+  disk space on a clean machine image subtracted from the same image after
+  installation and after first run has completed. Its single exclusion is a
+  system-provided web runtime, since that is not shipped and is shared with
+  other applications; an engine Evreos fetches, unpacks or installs is counted,
+  which is the same test FR-044 applies.
