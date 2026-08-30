@@ -362,6 +362,18 @@ spikes.
 This record was amended after an adversarial review confirmed defects in its
 supporting claims. The decision is unchanged; the corrections concern accuracy.
 
+Corrected in the first amendment: the assertion that a `wry` fork was required on
+every platform, which was false on Windows and Linux; the description of
+navigation failure as an endless loading indicator, which is accurate only on
+macOS; the claim to be the only maintained cross-platform native-webview
+abstraction including Linux, which
+several non-Rust projects refute; a process-pool sharing requirement naming an
+interface that is a documented no-op; a media exclusion argued from one
+content-protection system while another is native to the tier-1 platform; a
+stale tracker-issue state; the accessibility rationale, which was evidenced on
+one platform and asserted for three; and an unverified platform-share figure
+that was stated as fact while the evidence section called it unverified.
+
 A second amendment followed a review of the first. Corrected then: a risk that
 still budgeted a fork on Windows, contradicting the accepted cost this same
 document had just corrected, and which also omitted Linux while claiming to name
@@ -389,14 +401,3 @@ same add-on handles PlayReady too, and had kept an uncitable claim about RTL+.
 Declaring a question unanswerable is as much an overstatement as answering it
 without evidence.
 
-Corrected in the first amendment: the assertion that a `wry` fork was required on
-every platform, which was false on Windows and Linux; the description of
-navigation failure as an endless loading indicator, which is accurate only on
-macOS; the claim to be the
-only maintained cross-platform native-webview abstraction including Linux, which
-several non-Rust projects refute; a process-pool sharing requirement naming an
-interface that is a documented no-op; a media exclusion argued from one
-content-protection system while another is native to the tier-1 platform; a
-stale tracker-issue state; the accessibility rationale, which was evidenced on
-one platform and asserted for three; and an unverified platform-share figure
-that was stated as fact while the evidence section called it unverified.
