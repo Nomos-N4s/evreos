@@ -24,7 +24,7 @@
   revenue arrangement in v1. Members can change it freely.
 - Q: What happens when a macOS member needs a saved password, given platform
   autofill is unavailable there? (Q-E4) → A: State the limitation before
-  install, and offer to hand the site off to the system browser when a password
+  install, and offer to hand the site off to the hand-off browser when a password
   field is encountered. No credential storage is built in v1.
 - Q: Should the placeholder performance budgets be ratified now, or replaced
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
@@ -159,7 +159,7 @@ unchanged.
   path from the cold-start budget.
 - **A site depends on protected media.** Streaming that requires content
   protection cannot play. The member must be offered a clear hand-off to their
-  system browser rather than a failure they must diagnose.
+  hand-off browser rather than a failure they must diagnose.
 - **A site behaves differently across platforms.** The same page may render
   differently on tier 1 and tier 2, so a reported problem may not reproduce.
   Reports must capture enough context to tell platform-specific faults apart.
@@ -224,12 +224,16 @@ unchanged.
   present an error state naming the cause and offering a next step. Treating a
   failed load as a successful empty page is a defect, as is a loading indicator
   that never resolves.
-- **FR-015a**: Where the platform provides credential autofill through the
-  engine, the browser MUST use it. Where it does not — currently the tier-2
-  platform — the browser MUST state that limitation before installation rather
-  than after, and MUST offer to open the site in the member's system browser
-  when a credential field is encountered. Evreos stores no credentials of its
-  own in v1.
+- **FR-015a**: Where the platform provides site-credential autofill through the
+  engine, the browser MUST use it. Where it does not, the browser MUST state
+  that limitation before installation rather than after, and MUST offer to open
+  the site in the hand-off browser when a site-credential field is detected.
+  Detection MUST be local to the device, MUST inspect only whether a
+  password-type input is present, and MUST NOT transmit or retain page content.
+  Evreos stores no site credentials of its own in v1. Which platforms provide
+  autofill to an embedder is unverified — it appears in neither ADR-0001's
+  verified nor its unverified list — so it MUST be tested on both tiers before
+  release, and any assumption of absence recorded as an assumption.
 
 **Super-app platform**
 
@@ -248,7 +252,8 @@ unchanged.
 - **FR-021**: One account MUST serve every app.
 - **FR-022**: Signing in MUST be required for money surfaces and MUST NOT be
   required for browsing.
-- **FR-023**: Credentials MUST be held in the operating system's secure store.
+- **FR-023**: Account credentials MUST be held in the operating system's secure
+  store.
 
 **Cashback**
 
@@ -345,6 +350,15 @@ unchanged.
   progresses to a terminal state.
 - **Claim code**: a deliberately presented token binding a member to a partner
   campaign.
+- **Site credential**: a username and password belonging to a third-party
+  website the member visits.
+- **Account credential**: the member's Apivo sign-in secret or token.
+- **Campaign**: a partner-funded offer held by the Apivo service, to which a
+  claim code binds a member.
+- **Hand-off browser**: the browser Evreos opens a site in when it cannot serve
+  it — the OS default browser, or, where Evreos is itself the default, the
+  browser the member nominates once in settings, defaulting to the platform's
+  own. Evreos MUST NOT nominate itself.
 - **Session**: the set of open tabs and their state, restored across restarts.
 
 ## Success Criteria *(mandatory)*
