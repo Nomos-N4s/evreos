@@ -498,21 +498,29 @@ SC-013 requires and which no unnamed machine can give.
 - **SC-010**: At least 25% of people pitched at the pilot counter install
   Evreos and complete a claim.
 - **SC-011**: Thirty-day retention is measured two ways and reported separately,
-  never as one blended figure. **Signed-in retention** is at least 20%: the share
-  of members whose first Evreos-originated sign-in falls in a given calendar week
-  and who record at least one further Evreos-originated account request (FR-040)
-  on any day from 24 to 30 after that first sign-in. The clock is the sign-in,
-  not the install: the service has no install date, FR-040 authorises no such
-  datum, and Principle VI closes the substitutes. It is derived from server-side account activity, which is
+  never as one blended figure. **Signed-in retention** is the share of members
+  whose first Evreos-originated sign-in falls in a given ISO cohort week and who
+  record at least one further Evreos-originated account request (FR-040) on any
+  day from 24 to 30 after that first sign-in. The clock is the sign-in, not the
+  install: the service has no install date, FR-040 authorises no such datum, and
+  Principle VI closes the substitutes. **This measure states no threshold.** The
+  base criterion's 20% applied to everyone who installs; this one applies to
+  members who sign in, a self-selected minority whose retention is expected to be
+  materially higher — 25 of 100 sign-ins out of 1,000 installs would pass a 20%
+  bar here and fail it there by a factor of eight. Carrying the number across
+  unexamined would be a large undisclosed loosening of the product's headline
+  bar, so Q-E15 records the bar for this population as a founder decision this
+  specification does not make. It is derived from server-side account activity, which is
   transactional rather than diagnostic and needs no opt-in. **Signed-out
-  retention** is reported alongside it over the same weekly cohorts, computed
-  from the FR-039a reports over weekly install cohorts, which are not the same
-  cohorts as the signed-in figure and MUST NOT be compared item to item; it is a
-  self-selected sample, MUST be labelled as such and stated with its opt-in rate
-  wherever it is reported, and carries no bar — it is reported for direction. The
-  20% bar applies to the signed-in figure only. A cohort of fewer than 200 — first
-  sign-ins for the signed-in figure, enrolment reports for the signed-out one — is
-  reported with confidence intervals rather than as a point figure.
+  retention** is reported alongside it over weekly enrolment cohorts (FR-039a),
+  which are not the same cohorts as the signed-in figure and MUST NOT be compared
+  item to item. It is a self-selected sample and MUST be labelled as such wherever
+  it is reported. Its opt-in rate cannot be computed — the denominator would
+  require counting installs that did not opt in, which FR-039a forbids by
+  construction — and that the rate is unknown MUST be stated alongside the figure.
+  It carries no bar and is reported for direction. A cohort of fewer than 200 —
+  first sign-ins for the signed-in figure, enrolment reports for the signed-out
+  one — is reported with confidence intervals rather than as a point figure.
 
 - **SC-012**: Active members average at least one cashback activation per month.
 
@@ -617,6 +625,11 @@ resolved silently by this specification.
   Blocking parity on tier 2 MUST be measured before the floor is treated as
   settled.
 - **Q-E13** Whether a partner-branded distribution ships in v1.
+- **Q-E15** What threshold signed-in 30-day retention must clear. The base
+  criterion set 20% over everyone who installs; that population is unmeasurable
+  (SC-011), and the measurable population — members who sign in — is a
+  self-selected minority whose retention is expected to be materially higher.
+  The number does not carry across.
 - **Q-E14** Whether the existing service will record a client-type field on
   member-initiated requests, and run the retention computation on EU-hosted
   infrastructure, as FR-040 requires. Both are changes outside this repository,
