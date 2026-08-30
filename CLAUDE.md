@@ -31,21 +31,12 @@
 - Commits are atomic: exactly one logical change per commit. Never bundle
   unrelated changes; split mechanical moves and refactors from behavior
   changes so each commit stands, builds, and reverts on its own.
-- After EVERY push of commits to an open pull request, run an adversarial
-  review of the PR's full current diff: independent reviewers instructed to
-  refute the changes (correctness, security, consistency, rules compliance),
-  with findings verified before they count. Confirmed findings are fixed and
-  pushed — which triggers a new review round — before the PR is ready to
-  merge. Record the outcome of each round on the PR or to the founder.
-- A pull request is NOT mergeable until a review round has been recorded green
-  — no confirmed findings — against the exact diff that would merge. The record
-  lives ON THE PULL REQUEST, in its body or a comment, and names the head SHA it
-  covers; a round asserted anywhere else has not been recorded. A round is
-  invalidated by a new push AND by the base moving, because either changes what
-  would actually merge. Green checks are not a substitute; the two run in
-  parallel and the merge will win. The founder may override, but the override is
-  stated on the pull request and names what it overrides — never an accident of
-  timing.
+- Adversarial review after every push, and the merge gate that depends on it,
+  are governed by the Development Workflow section of
+  `.specify/memory/constitution.md`. That document supersedes this one, so the
+  rules are stated there and NOT restated here — a stricter copy in this file
+  would be void wherever the two disagreed, which is how this note came to
+  exist.
 
 ## Spec-driven development
 
