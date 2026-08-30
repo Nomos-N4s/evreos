@@ -41,7 +41,8 @@ it, and a browser that cannot browse has no second chance with a reviewer.
 4. **Given** a mistyped address, an expired certificate, a captive portal, or a
    site requesting HTTP authentication, **When** navigation fails, **Then** the
    person sees an error page in their language that names the problem and offers
-   a next step. A blank page with a running spinner is a defect.
+   a next step. Presenting the failure as a successful, blank page is a defect,
+   as is a loading indicator that never resolves.
 5. **Given** a site whose blocking breaks it, **When** the person opens the
    per-site control, **Then** blocking can be turned off for that site alone and
    the setting persists.
@@ -186,9 +187,10 @@ unchanged.
   users at a time.
 - **FR-015**: When navigation fails — an unresolvable address, an untrusted or
   expired certificate, an intercepting network, or a request for authentication
-  — the browser MUST present an error state naming the cause and offering a next
-  step. A blank surface with an active loading indicator is a defect, not an
-  acceptable outcome.
+  — the browser MUST distinguish that failure from a successful load, and MUST
+  present an error state naming the cause and offering a next step. Treating a
+  failed load as a successful empty page is a defect, as is a loading indicator
+  that never resolves.
 
 **Super-app platform**
 
@@ -305,7 +307,8 @@ replaced during clarify, and may only be tightened thereafter.
   keyboard, remains usable at 200% scaling, and accepts German dead-key and
   Greek text entry correctly.
 - **SC-009**: Every navigation failure in the Edge Cases above produces a named,
-  actionable error state. Zero blank surfaces with an active loading indicator.
+  actionable error state. Zero failures presented as successful blank pages, and
+  zero loading indicators that never resolve.
 
 **Business**
 
@@ -338,9 +341,13 @@ a landing page:
   the tier-1 platform, without interface surfaces and by manual installation;
   restricted by operating-system version on tier 2; unavailable on the deferred
   platform. It cannot be offered consistently and so is not offered.
-- **Playback of content-protected streaming media.** Unavailable in every
-  engine option considered, and not obtainable by adopting a different engine
-  strategy. Requires the hand-off in FR-037.
+- **Playback of content-protected streaming media.** Excluded from v1. The
+  content-protection system most streaming services require is unavailable in
+  every engine option considered, and is not obtainable by adopting a different
+  engine strategy — it is a licensing wall rather than a technical one. Whether
+  a different content-protection system available on the tier-1 platform covers
+  any of these services is untested; see Q-E11. Until that is settled, FR-037's
+  hand-off applies to all such media.
 
 ## Platform Scope
 
@@ -374,6 +381,10 @@ resolved silently by this specification.
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
   architecture.
+- **Q-E11** Whether the content-protection system native to the tier-1
+  platform covers any streaming services members actually use. The non-goal
+  above is currently argued from a different system only, so the exclusion may
+  be broader than the evidence supports.
 
 ## Assumptions
 
