@@ -54,13 +54,15 @@ it, and a browser that cannot browse has no second chance with a reviewer.
 
 **Independent Test**: Install on the reference hardware, complete a full session
 — search, ten tabs, bookmark, download, print, find-in-page, close and reopen
-— entirely signed out, and confirm every budget in Success Criteria holds.
+— entirely signed out, and confirm every ratified budget in Success Criteria
+holds, recording the measured cold start against the provisional SC-002 target.
 
 **Acceptance Scenarios**:
 
 1. **Given** a first launch on a machine with no prior profile, **When** the
    person opens the browser, **Then** an interactive window appears within the
-   cold-start budget and tracker blocking is already active.
+   SC-002 cold-start target, which is provisional, and tracker blocking is
+   already active.
 2. **Given** ten open tabs, **When** the person leaves the machine idle,
    **Then** background tabs are suspended and processor use falls below the idle
    budget without audible fan activity.
@@ -596,5 +598,5 @@ resolved silently by this specification.
   pending, confirmed, declined and reversed.
 - **The reader app consumes the existing publication**, rather than
   reimplementing it.
-- **"Our bytes" in SC-001** excludes any system-provided web runtime, since it
-  is not shipped and is shared with other applications.
+- **The SC-001 measurement boundary** excludes any system-provided web runtime,
+  since it is not shipped and is shared with other applications.
