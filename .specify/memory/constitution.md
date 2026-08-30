@@ -21,6 +21,10 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     bullet; what is withdrawn is its "or to the founder" destination, because a record
     only the founder can see makes the gate unverifiable by anyone reading the pull
     request. Every round, green or not, is now recorded on the pull request itself.
+  - The override must be stated before the merge, not merely stated. The repository rules
+    file said "never an accident of timing"; deferring to this document dropped the phrase,
+    and without it a merge over confirmed blockers could be regularised by a comment
+    posted afterwards — the failure recorded in the issue this amendment closes.
   - The review dimensions — correctness, security, internal consistency, compliance —
     move here from the repository rules file, which was the only place that stated them.
     Deferring to this document would otherwise have deleted them.
@@ -219,7 +223,9 @@ of them requires a MAJOR amendment to this constitution:
   a reader could check. A round is invalidated by a new push and
   by the base moving, because either changes what would merge. Green automated checks are
   not a substitute: the two run in parallel and the merge will win. The founder may
-  override, but the override is stated on the pull request and names what it overrides.
+  override, but the override is stated on the pull request before the merge, and names
+  what it overrides and the confirmed findings it merges over. Stated afterwards it is
+  not a decision, only an account of an accident.
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
