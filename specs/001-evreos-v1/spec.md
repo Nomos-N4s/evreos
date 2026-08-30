@@ -419,9 +419,14 @@ release path, so every figure below is a gate from milestone M0, at the value
 stated.
 
 Ratified and provisional describe the *figure*, never whether the gate exists. A
-ratified figure may afterwards only be tightened, never relaxed, except by
-recorded founder decision. A provisional figure may be replaced once, by
-recorded founder decision on spike evidence, and is tighten-only thereafter.
+ratified figure may afterwards only be tightened. Relaxing one requires an
+amendment to this specification recording the founder decision, the measured
+evidence for it, and what discipline replaces the budget it removes — the
+standard the constitution's amendment procedure sets for relaxing a principle.
+Principle II permits budgets to move by recorded founder decision; the founder's
+clarify answer narrowed that to tighten-only, and this specification keeps the
+narrower rule. A provisional figure may be replaced once, by recorded founder
+decision on spike evidence, and is tighten-only thereafter.
 SC-003 states a required experience rather than a figure; it is verified by
 acceptance test, not by a budget gate.
 
@@ -446,19 +451,28 @@ SC-013 requires and which no unnamed machine can give.
   continuous, honest progress and completes without user intervention beyond
   consent. This path is a designed experience and is deliberately not held to
   SC-002.
-- **SC-004** *(ratified)*: With ten tabs open,
-  proportional set size attributable to Evreos processes, excluding the system
-  web runtime's own processes, stays at or below 150 MB, measured 60 s after the
-  tenth tab finishes loading on each named reference machine. USS and PSS give
-  different answers for the same state, so the metric has to be named; PSS is
-  used because it charges shared pages proportionally rather than discarding
-  them, which is the conservative reading of a shell-overhead budget.
+- **SC-004** *(ratified)*: With ten tabs open, memory attributable to Evreos's
+  own processes, excluding the system web runtime's processes, stays at or below
+  150 MB at every 5-second sample from the first tab opening until 5 minutes
+  after the tenth finishes loading. The metric is resident set size on macOS
+  (`phys_footprint`) and private working set plus proportional shared bytes on
+  Windows; the exact counters and the sampling script are published under SC-013,
+  because the two platforms expose different quantities and an unnamed "memory"
+  figure is not reproducible. Proportional set size is a Linux construct read
+  from `smaps`, unavailable on either supported platform, and is not used.
 - **SC-005** *(ratified)*: When idle, processor use stays below 0.5% of one core
-  at every 1-second sample across a 10-minute window, with no periodic wake
-  activity, and background tabs are suspended.
+  at every 1-second sample across a window of at least 60 minutes, with no
+  periodic wake activity at any period observable in that window, and background
+  tabs are suspended. A 10-minute window cannot falsify a wake timer with a
+  longer period.
 - **SC-006** *(ratified)*: Switching tabs and typing in the address field produce
-  a visible response within one frame at the display's native refresh rate, at
-  the 99th percentile over 100 trials and with no trial exceeding two frames.
+  a visible response within 16 ms, measured on a display driven at 60 Hz on each
+  named reference machine, at the 99th percentile of at least 1000 trials per
+  interaction, with no trial exceeding 16 ms by more than one further frame. The
+  bar stays 16 ms where a machine's native refresh is higher: this is a
+  human-perception budget, not a hardware-relative one, and a hardware-relative
+  bar is not reproducible under SC-013 — on a 30 Hz panel one frame is 33 ms,
+  twice the budget.
 
 **Experience**
 
