@@ -38,8 +38,9 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     Deferring to this document would otherwise have deleted them.
   - Reason for amending here rather than in the repository rules file: this document
     supersedes that one, so a stricter rule placed there was void wherever the two
-    disagreed. Workflow rules now live here; the rules file defers to this document
-    rather than restating it.
+    disagreed. The review and merge-gate rules now live here; the rules file defers to
+    this document for them. Its remaining workflow bullets — branch prefixes, issue
+    linking, commit format, atomicity — stay there as operational reminders.
 Templates requiring updates:
   - .specify/templates/plan-template.md ✅ reads the constitution at runtime; no change needed
   - .specify/templates/spec-template.md ✅ no change needed

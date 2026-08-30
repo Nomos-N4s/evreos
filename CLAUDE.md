@@ -71,6 +71,12 @@
   rules are stated there and NOT restated here — a stricter copy in this file
   would be void wherever the two disagreed, which is how this note came to
   exist.
+- The bullets above this one restate rules the constitution also states. That is
+  deliberate and it is the narrower case: they are short reminders of settled
+  rules whose exact wording carries no gate, kept here for reach. Where a rule's
+  exact wording IS the gate — the review round, the merge record, the override —
+  it is stated in the constitution only. When the constitution is amended, the
+  reminders above MUST be re-checked against it.
 
 ## Spec-driven development
 
