@@ -330,11 +330,12 @@ unchanged.
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
 - **FR-043**: Every budget Principle II names — download size, installed size,
   cold start, shell memory overhead, idle CPU, chrome input latency — MUST live
-  in one budget file in this repository, and MUST be enforced by a CI gate that
-  fails the build on regression, from milestone M0. Every pull request that
+  in one budget file in this repository, and MUST be enforced by the CI gates the
+  Success Criteria preamble defines, from milestone M0. Every pull request that
   changes shipped behaviour MUST state its byte and millisecond cost against that
-  file. Principle II requires both, and the Success Criteria preamble described
-  them as narrative rather than requiring them.
+  file. Principle II requires both, and the preamble described them as narrative
+  rather than requiring them; the gate rule itself is stated there once and is
+  not restated here.
 - **FR-042**: No brand name, colour, endpoint or support address may be
   hardcoded outside a single brand configuration, and a fixture brand MUST build
   in CI on every change. Principle VIII requires both; the spec previously
@@ -476,8 +477,17 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
 download size, installed size, cold start, shell memory, idle CPU, chrome input
 latency — to live in one budget file and be enforced by a CI gate that fails the
 build on regression. No budget named there may be un-gated at any point on the
-release path, so every figure below is a gate from milestone M0, at the value
-stated.
+release path.
+
+Every budget below is therefore gated in CI from M0 in two ways, and this is the
+only statement of the rule: **absolute** — the build fails if the measured figure
+exceeds the stated value; and **regression** — the build fails if the figure is
+worse than the previous run on the same pinned benchmark runner. For SC-001 both
+are blocking from M0. For the hardware-dependent four — SC-002, SC-004, SC-005,
+SC-006 — the regression gate is blocking from M0 and the absolute gate is
+advisory until Q-E9a names the reference machines AND the figure is ratified,
+so the cold-start spike's own pull request is never gated on the figure it exists
+to establish.
 
 Ratified and provisional describe the *figure*, never whether the gate exists. A
 ratified figure may afterwards only be tightened. Relaxing one requires an
@@ -491,18 +501,13 @@ decision on spike evidence, and is tighten-only thereafter.
 SC-003 states a required experience rather than a figure; it is verified by
 acceptance test, not by a budget gate.
 
-Reference machines are named in Assumptions as a class rather than by model. The
-gates run and record from M0 on whatever hardware CI provides, and for the four
-hardware-dependent criteria — SC-002, SC-004, SC-005, SC-006 — their result is
-advisory until Q-E9a names the exact models: a regression against the previous
-run on the same CI machine fails the build, which is what Principle II requires
-and what an unnamed machine can still deliver, but a figure may be reported as
-*met* only against a named machine. Blocking enforcement against the absolute
-figure begins when Q-E9a is answered. Stated any other way, the same paragraph
-would require the gates to run, forbid their result being green, and let a
-not-green budget gate fail every merge. Ratification is a founder decision and is
-not reopened here; this is about reproducibility, which SC-013 requires and which
-no unnamed machine can give.
+Reference machines are named in Assumptions as a class rather than by model, so a
+figure may be reported as *met* only against a machine Q-E9a names. Ratification
+is a founder decision and is not reopened here; this is about reproducibility,
+which SC-013 requires and which no unnamed machine can give. The regression gate
+needs a pinned benchmark runner of stable identity, not a fungible hosted one:
+neighbour noise on shared cloud machines moves memory and latency by more than a
+real regression, which is the same reason the absolute figures are held.
 
 - **SC-001** *(ratified)*: The download is 20 MB or less and the installed
   footprint 60 MB or less per platform, counting only the bytes Evreos ships and
