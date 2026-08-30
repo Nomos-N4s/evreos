@@ -244,6 +244,10 @@ unchanged.
 **Super-app platform**
 
 - **FR-016**: A home surface MUST present the installed first-party apps.
+- **FR-016a**: Apivo surfaces MUST be dismissible, as Principle IV requires: a
+  member MUST be able to remove any first-party app from the home surface and to
+  hide the home surface entirely, and the choice MUST persist across restarts and
+  updates. An app update or a browser release MUST NOT reverse a dismissal.
 - **FR-017**: Each app MUST declare its capabilities in a signed, versioned
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
@@ -418,10 +422,12 @@ recorded founder decision on spike evidence, and is tighten-only thereafter.
 SC-003 states a required experience rather than a figure; it is verified by
 acceptance test, not by a budget gate.
 
-Reference machines are named in Assumptions as a class rather than by model.
-SC-002 already says a figure is meaningless without them; that is equally true
-of SC-004, SC-005 and SC-006, which the founder has ratified. Ratification is
-not reopened here — see Q-E9a for the naming that reproducibility still needs.
+Reference machines are named in Assumptions as a class rather than by model. No
+hardware-dependent criterion — SC-002, SC-004, SC-005, SC-006 — may be reported
+as met, and no gate on it may be treated as green, until Q-E9a names the exact
+models there. The gates run and record from M0 regardless. Ratification is a
+founder decision and is not reopened here; this is about reproducibility, which
+SC-013 requires and which no unnamed machine can give.
 
 - **SC-001** *(ratified)*: The download is 20 MB or less and the installed
   footprint 60 MB or less per platform, counting only the bytes Evreos ships and
@@ -432,10 +438,7 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
   Held open deliberately: a large share of this figure is the engine's own
   initialisation rather than Evreos's code, so the figure is ratified only after
   the cold-start spike measures that floor on the reference machines. The shell
-  architecture is expected to be shaped by what that spike finds. Assumptions
-  currently describes a class of machine rather than exact models; until models
-  are recorded there this criterion cannot be measured reproducibly and MUST NOT
-  be reported as met.
+  architecture is expected to be shaped by what that spike finds.
 - **SC-003**: Where the system web runtime is absent, first run presents
   continuous, honest progress and completes without user intervention beyond
   consent. This path is a designed experience and is deliberately not held to
