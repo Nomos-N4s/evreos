@@ -34,7 +34,8 @@
 
 - [ ] All functional requirements have clear acceptance criteria — FR-003a,
   FR-014, FR-015a, FR-016a, FR-018a, FR-021, FR-023, FR-029a, FR-031, FR-039a,
-  FR-039b, FR-039c, FR-039d, FR-039e, FR-042, FR-043 and FR-044 have neither a
+  FR-039b, FR-039c, FR-039d, FR-039e, FR-039f, FR-042, FR-043 and FR-044 have
+  neither a
   success criterion nor an acceptance scenario. This list is maintained with the
   requirements: a requirement added without a criterion is added here. Two earlier
   versions read as exhaustive and were not, and
@@ -81,9 +82,9 @@ contrary to the earlier claim that all still did. Rounds 3 and 4 additionally
 carried four constitutional mandates that no requirement had held: Principle II's
 budget file and per-change cost (FR-043), Principle IV's discoverable, opt-in and
 no-injection mandates (FR-016a, FR-018a), Principle VI's *aggregate* condition
-(FR-039d and FR-039e, which count crash reports by signature rather than
-retaining an exemplar — an exemplar would be the same per-install payload under
-another name), Principle III's engine seam and no-bundled-engine rule (FR-044),
+(FR-039d, which counts crash reports under a symbol-keyed key rather than
+retaining a report — a retained exemplar would be the same per-install payload
+under another name — and FR-039e, which sets the disclosure floor), Principle III's engine seam and no-bundled-engine rule (FR-044),
 and Principle VII's BCP-47 keying and language/place
 separation (FR-035). Three further gaps are recorded in issue #28 rather than
 fixed here, because adding requirements reactively is what each round has been

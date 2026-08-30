@@ -396,106 +396,95 @@ unchanged.
 
 **Diagnostics**
 
-Principle VI requires telemetry to be opt-in, aggregate AND EU-hosted — three
-conditions, not two. A payload keyed to a stable per-install identifier is
-pseudonymous rather than aggregate however well that identifier is bounded, so
-FR-039a computes retention on the device rather than shipping a key that would
-satisfy the fingerprinting prohibition while failing the aggregate requirement.
+Principle VI sets three conditions on telemetry and crash reporting — opt-in,
+aggregate, and EU-hosted — and prohibits fingerprinting separately. All three
+conditions bind independently: a payload keyed to a stable per-install identifier
+is pseudonymous rather than aggregate however well that identifier is bounded, so
+satisfying the fingerprinting prohibition does not satisfy the aggregate one.
+These requirements are written from those conditions rather than from a
+measurement wish-list, because four rounds of amendment to the previous version
+produced a paragraph whose clauses no longer agreed with each other.
 
 - **FR-039**: The browser MUST offer an opt-in diagnostic signal, off until the
-  member turns it on. It MUST NOT carry browsing history, URLs or search terms,
-  and MUST be reportable to a member in plain language before they consent.
-- **FR-039a**: The signal MUST support 30-day retention without carrying any
-  per-install identifier. The client MUST evaluate its own retention locally and
-  emit at most two reports per enrolment, and at most one enrolment per install:
-  an **enrolment report** on the first day diagnostics are enabled after
-  installation, carrying only the enrolment week; and then either a **retention
-  report** on the first day the browser runs in the window 24 to 30 days after
-  that enrolment, or a **withdrawal report**, never both. Re-enabling after a
-  withdrawal emits no further report. Both reports are keyed
-  to enrolment, not to install: keying them to different events makes the ratio
-  meaningless, since an install enrolling late would emit both at once or
-  neither. Nothing about the install date enters the measurement. If diagnostics
-  are disabled before the retention report is due, no retention report is emitted
-  and the enrolment is withdrawn: the client MUST emit a single withdrawal report
-  carrying only the enrolment week, and the service MUST subtract it from that
-  week's enrolment count. The ratio is computed over enrolments net of
-  withdrawals, and the withdrawal count MUST be published beside the rate —
-  otherwise every opt-out reads as churn. A withdrawal MUST be emitted only if the
-  enrolment report for that enrolment was acknowledged as delivered, and the
-  service MUST floor each week's net enrolment count at zero and publish any
-  flooring event; otherwise an enrolment that never arrived is subtracted from a
-  week that never counted it. No report may carry an identifier.
-  The receiving service MUST NOT retain the source network address, transport
-  metadata, or a receipt timestamp finer than the day, and reports MUST reach it
-  through a relay operated by a party that is not the receiving service, such
-  that no single party sees both the source address and the payload. The relay
-  MUST NOT retain source addresses, transport metadata, or any log correlating an
-  inbound and an outbound request. Without that, two reports from one residential
-  address in a small cohort are linkable and the identifier-free property is
-  defeated at the network layer — and a first-party relay defeats it against
-  exactly the party this protects against. The transport constraints in this
-  paragraph — no source address, no transport metadata, no receipt timestamp finer
-  than the day, delivery through a relay operated by a party that is not the
-  receiving service — apply identically to crash reports under FR-039b. The
-  report-count, enrolment-week and ratio constraints do not: crash reporting is
-  separately consented, so a crash report may exist where no enrolment week
-  does. Signed-out
-  retention is a 24-to-30-day retention rate for opted-in installs, not for
-  installs; its denominator is the net enrolment count defined above. The diagnostic signal MUST carry no per-install state beyond
-  these two reports; crash reports are governed separately by FR-039b, and any
-  addition under Q-E6 requires this requirement to be amended.
-- **FR-039b**: If crash reporting ships in v1 at all (Q-E16), it MUST be opt-in,
-  off by default, and separately consented from FR-039's diagnostic signal, which
-  Principle VI treats as a distinct thing. A crash report MUST be limited to a stack trace with symbol
-  names, the browser and operating-system version, and a crash-reason code. Full
-  process memory MUST NOT be captured or transmitted, because it necessarily
-  contains URLs and page content — forbidding those in a memory image is not
-  implementable, so the capture is bounded instead. A crash report MUST NOT
-  carry any per-install identifier and MUST NOT be transmitted in the same
-  session as an FR-039a report, or the two together defeat FR-039a's
-  unlinkability. Before consent the member MUST be shown in plain language
-  exactly what a crash report contains. FR-039c governs its hosting and
-  retention.
-- **FR-039c**: The diagnostic signal, crash reports, and any computation over
-  them MUST be received, processed and retained only on infrastructure hosted in
-  the European Union. No diagnostic or crash payload may be transmitted to or
-  stored on infrastructure outside it. Diagnostic reports are deleted within 24
-  hours under FR-039d, and crash reports are discarded on receipt under FR-039e;
-  neither is retained individually at all. Aggregate counters, signatures and
-  ratios derived from either carry no per-install content and are retained; the EU-hosting constraint
-  applies to those derivatives too, and without that sentence a deletion rule
-  reaching "any computation over them" would delete the retention figure
-  itself.
-- **FR-039d**: A diagnostic report MUST be added to its (report type, enrolment
-  week) counter on receipt and discarded by the end of the following calendar
-  day; no diagnostic report may be retained individually. Counters, not reports,
-  are the retained artefact — this is what Principle VI's *aggregate* condition
-  requires and what nothing else here carried. A counter MUST NOT be published,
-  exported or used in a derived figure until it covers at least 50 reports; below
-  that it is held, or published only as an interval. That floor is a disclosure
-  control, not a formatting rule.
-- **FR-039e**: Crash reports MUST be aggregated into a per-(signature, release)
-  counter on receipt and discarded; the signature is a hash of the symbolised
-  stack, the release, and the reason code. No crash report may be retained
-  individually — an exemplar is a per-install payload, however well bounded, so
-  retaining one would keep the substance of the exception this requirement exists
-  to remove. The counter is what gives crash reporting its value, since a list of
-  distinct signatures without frequencies is not a crash rate. This specification
-  grants no exception to Principle VI: if signature-level counters are
-  insufficient to diagnose crashes, crash reporting does not ship in v1 (Q-E16)
-  unless and until Principle VI is amended through its own procedure.
-- **FR-040**: Signed-in retention MUST be derived from existing account and
-  wallet activity that the service records as originating from an Evreos client,
-  rather than from the diagnostic signal, so that members who decline
-  diagnostics are still counted in the figure that matters most. The origin
-  marker MUST be a client-type field on requests the member's own action
-  initiates; it MUST NOT be a device fingerprint. Both that field and the hosting
-  constraint are changes to a service outside this repository, recorded as Q-E14.
-  Without it, a member who
-  uninstalls Evreos and keeps using the existing web wallet produces the same
-  account activity as a retained member and would be counted as retained. The
-  retention computation MUST run on EU-hosted infrastructure.
+  member turns it on and turnable off again at any time, taking effect before the
+  next report. Before consent the member MUST be shown, in plain language, every
+  transmission the signal causes — including the withdrawal report FR-039a
+  requires when they turn it off. The signal MUST NOT carry browsing history,
+  URLs, page content or search terms.
+- **FR-039a**: Signed-out 30-day retention MUST be measured without any
+  per-install identifier. The client evaluates its own retention locally, whenever
+  it runs, and emits at most two reports per enrolment and at most one enrolment
+  per install:
+  - an **enrolment report** on the first day diagnostics are enabled after
+    installation, carrying only the enrolment week;
+  - then exactly one of a **retention report**, on the first day the browser runs
+    in the window 24 to 30 days after that enrolment, or a **withdrawal report**,
+    if diagnostics are disabled before that window closes. Both carry only the
+    same enrolment week. Re-enabling after a withdrawal emits nothing further.
+
+  Both are keyed to enrolment, never to install: keying them to different events
+  makes the measure meaningless, and nothing about the install date is
+  transmitted. **Signed-out retention for an enrolment week is that week's
+  retention-report count divided by its enrolment-report count less its
+  withdrawal-report count.** The withdrawal count MUST be published beside the
+  rate, or every opt-out reads as churn, and the denominator MUST be floored at
+  zero with any flooring published.
+- **FR-039b**: No report may carry an identifier, and identifier-free MUST hold at
+  the network layer too, where two reports from one address in a small cohort are
+  otherwise trivially linkable. Reports MUST reach the service through a relay
+  operated by a party that is not the receiving service, so that no single party
+  sees both the source address and the payload. The relay MUST NOT retain source
+  addresses, transport metadata, or any log correlating an inbound and an outbound
+  request; it MUST forward the service's delivery acknowledgement on the same
+  connection without retaining it. The receiving service MUST NOT retain the
+  source address, transport metadata, or a receipt timestamp finer than the day. A
+  client MUST NOT retransmit an unacknowledged report — an unacknowledged
+  enrolment is abandoned and emits nothing further — because FR-039d counts on
+  receipt with no identifier, so a retransmission cannot be deduplicated and would
+  inflate the denominator. These constraints apply identically to crash reports;
+  the enrolment-week and report-count constraints above do not, since crash
+  reporting is separately consented and may exist where no enrolment does.
+- **FR-039c**: Crash reporting, if it ships in v1 at all (Q-E16), MUST be opt-in,
+  off by default, and separately consented from FR-039's signal, which Principle
+  VI treats as a distinct thing. A crash report MUST carry only a symbolised stack
+  trace, the browser and operating-system version, and a crash-reason code. Full
+  process memory MUST NOT be captured or transmitted: it necessarily contains URLs
+  and page content, and forbidding those inside a memory image is not
+  implementable, so the capture is bounded instead. Before consent the member MUST
+  be shown in plain language exactly what a crash report contains.
+- **FR-039d**: Counters, not reports, are the retained artefact — this is what
+  Principle VI's *aggregate* condition requires. A diagnostic report MUST be added
+  to its (report type, enrolment week) counter on receipt and discarded by the end
+  of the following calendar day, which is the finest deadline a day-granularity
+  receipt timestamp can audit. A crash report MUST be added to its (symbolised
+  stack, release, operating-system version, reason code) counter on receipt and
+  discarded; the counter's key is the symbol list itself rather than a hash of it,
+  because a retained hash is undiagnosable and a list of Evreos's own symbol names
+  carries no member content and no per-install content. No report of either kind
+  may be retained individually. If symbol-keyed counters prove insufficient to
+  diagnose crashes, crash reporting does not ship in v1 (Q-E16) unless Principle
+  VI is amended through its own procedure; this specification grants no exception
+  to it.
+- **FR-039e**: No counter of either kind may be published, exported, or used in
+  any derived figure until it covers at least 50 reports. Below that it is held
+  and nothing derived from it is released, in any form. This is a disclosure
+  control: a crash counter of one is one member's crash on one code path, and an
+  interval around a small count discloses the same thing more politely.
+- **FR-039f**: The diagnostic signal, crash reports, and every counter and figure
+  derived from them MUST be received, processed and retained only on
+  infrastructure hosted in the European Union. No payload or derivative may be
+  transmitted to or stored on infrastructure outside it. Counters and the figures
+  drawn from them carry no per-install content and are retained; the reports
+  themselves are not, on the deadlines FR-039d sets.
+- **FR-040**: Signed-in retention MUST be derived from existing account and wallet
+  activity that the service records as originating from an Evreos client, rather
+  than from the diagnostic signal, so that members who decline diagnostics are
+  still counted in the figure that matters most. The origin marker MUST be a
+  client-type field on requests the member's own action initiates; it MUST NOT be
+  a device fingerprint. Without it, a member who uninstalls Evreos and keeps using
+  the existing web wallet produces the same account activity as a retained member.
+  Both that field and this computation's hosting are changes to a service outside
+  this repository, recorded as Q-E14.
 
 **Honesty**
 
