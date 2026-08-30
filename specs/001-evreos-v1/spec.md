@@ -302,6 +302,10 @@ unchanged.
 **Accessibility and language**
 
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
+- **FR-042**: No brand name, colour, endpoint or support address may be
+  hardcoded outside a single brand configuration, and a fixture brand MUST build
+  in CI on every change. Principle VIII requires both; the spec previously
+  carried neither.
 - **FR-041**: Before download, the distribution page MUST state the minimum
   operating-system version for each platform and the tier-2 site-credential
   limitation of FR-015a. These are product surfaces, not marketing: they MUST
@@ -506,7 +510,13 @@ a landing page:
 - **Tier 2 — macOS 13 and later.** Because the engine is the operating system's
   own, this floor sets the rendering engine version, the web features available
   on this platform, and the security patch source. It excludes hosting
-  third-party extensions, which is a non-goal regardless.
+  third-party extensions, which is a non-goal regardless. It also excludes the
+  macOS-14-and-later proxy configuration ADR-0001 records as one of only two
+  blocking routes on this platform, leaving top-level navigation gating — which
+  gates page navigations rather than subresources, and is nowhere claimed to be
+  sufficient for tracker and advert blocking. FR-008 is a P1 acceptance
+  scenario, so this consequence of the floor is tracked as Q-E12 rather than
+  left to be discovered.
 - **Deferred — Linux.** Not part of v1 cross-platform scope. It carries its own
   budget and its own go/no-go decision, gated on the spike results recorded in
   ADR-0001.
@@ -527,14 +537,17 @@ resolved silently by this specification.
 - **Q-E4** *Settled 2026-08-30*: platform autofill where available, an honest
   limitation and a system-browser hand-off where it is not (FR-015a). Whether to
   integrate the platform keychain on tier 2 later remains open.
-- **Q-E5** Whether import covers credentials as well as bookmarks and history.
+- **Q-E5** *Settled as a consequence of Q-E4*: site-credential import is out of
+  scope for v1, because FR-015a forbids Evreos holding site credentials — what
+  may not be held cannot be imported. Whether a later version imports them
+  reopens with the tier-2 keychain question in Q-E4.
 - **Q-E6** The minimum opt-in diagnostic set. Partly settled by the session
   2026-08-30 clarification: the set must at minimum support signed-out retention
   (FR-039). What else it carries, if anything, remains open.
 - **Q-E7** Brand and trademark clearance, and standalone versus endorsed
   branding.
-- **Q-E8** Whether partner-branded builds are a v1 requirement or merely kept
-  possible.
+- **Q-E8** *Narrowed 2026-08-30*: superseded by Q-E13. Principle VIII settles the
+  seam; only whether a partner build ships is open.
 - **Q-E9** *Settled 2026-08-30*: SC-001, SC-004, SC-005 and SC-006 are ratified
   as tighten-only CI gates. The SC-002 figure is held provisional pending the
   cold-start spike; the gate itself exists from M0 regardless, because Principle
@@ -552,6 +565,18 @@ resolved silently by this specification.
   platform covers any streaming services members actually use. The non-goal
   above is currently argued from a different system only, so the exclusion may
   be broader than the evidence supports.
+- **Q-E11a** Whether the existing service serves claim-code redemption in v1 —
+  holding campaign records and accepting a redemption. FR-029 ships on the
+  assumption that it does, Principle V forbids the client producing either, and
+  SC-010 rests on the answer.
+- **Q-E12** Whether FR-008 can be met on macOS 13 without the macOS-14 proxy
+  route ADR-0001 records, or whether the tier-2 floor must move to macOS 14.
+  Blocking parity on tier 2 MUST be measured before the floor is treated as
+  settled.
+- **Q-E13** Whether a partner-branded distribution ships in v1. The rebrandable
+  seam itself is not open: Principle VIII requires it and requires a fixture
+  brand to build in CI on every change, regardless of whether any partner build
+  is promised (FR-042).
 
 ## Assumptions
 
