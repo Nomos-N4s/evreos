@@ -210,6 +210,24 @@ unchanged.
   and notification access, and MUST allow those decisions to be revisited.
 - **FR-007**: A private window MUST leave no browsing trace on the machine after
   it is closed.
+- **FR-007a**: Browsing history — the record of what the member visited, and the
+  URLs and page content that record is made of — MUST NOT be transmitted to a
+  server Evreos operates or contracts for, and MUST NOT be retained by one.
+  Principle VI and the Permanent Prohibition on server-side collection of
+  browsing history are written unqualified, "any server", which read literally
+  forbids navigation itself: fetching a page transmits its URL to the site that
+  serves it. This requirement carries the prohibition's subject, collection, and
+  states the boundary the literal wording leaves unstated. A transmission is
+  permitted only where it is inherent in a function the member invoked on that
+  occasion, MUST carry no more than that function needs, and MUST be disclosed in
+  the interface; a query sent to the default search provider under FR-003a is one.
+  A background transfer of visited URLs is not, at any volume, under any
+  retention period, and with or without the member's consent — a Permanent
+  Prohibition admits no consent exception.
+  Address-bar suggestions MUST be off by default and MUST state, in plain
+  language, what they send before the member turns them on: FR-003 combines
+  search, history and bookmarks in one field, so a suggestion service receives
+  keystrokes that include URLs the member is typing.
 - **FR-008**: Tracker and advert blocking MUST be active on first launch without
   configuration, and MUST offer a visible per-site control.
 - **FR-009**: Users MUST be able to view documents in a portable document format

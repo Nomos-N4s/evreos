@@ -35,7 +35,7 @@
 ## Feature Readiness
 
 - [ ] All functional requirements have clear acceptance criteria — FR-003a,
-  FR-014, FR-015a, FR-016a, FR-018a, FR-021, FR-023, FR-029a, FR-031, FR-039a,
+  FR-007a, FR-014, FR-015a, FR-016a, FR-018a, FR-021, FR-023, FR-029a, FR-031, FR-039a,
   FR-039b, FR-039c, FR-039d, FR-039e, FR-039f, FR-042, FR-043 and FR-044 have
   neither a
   success criterion nor an acceptance scenario. This list is maintained with the
