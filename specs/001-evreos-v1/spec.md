@@ -408,9 +408,12 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
 - **SC-008**: Every shell surface passes WCAG 2.1 AA, is fully operable by
   keyboard, remains usable at 200% scaling, and accepts German dead-key and
   Greek text entry correctly.
-- **SC-009**: Every navigation failure in the Edge Cases above produces a named,
-  actionable error state. Zero failures presented as successful blank pages, and
-  zero loading indicators that never resolve.
+- **SC-009**: Each of the four navigation failures FR-015 enumerates — an
+  unresolvable address, an untrusted or expired certificate, an intercepting
+  network, and a request for authentication — is exercised on every supported
+  platform and produces an error state naming the cause and offering a next
+  step. Zero failures presented as successful blank pages, and zero loading
+  indicators that do not resolve within 30 s.
 
 **Business**
 
