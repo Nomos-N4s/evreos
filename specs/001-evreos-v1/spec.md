@@ -8,6 +8,29 @@
 
 **Input**: Block B of the browser programme master prompt, amended where ADR-0001 and verified investigation supersede it.
 
+## Clarifications
+
+### Session 2026-08-30
+
+- Q: How should Evreos measure the 30-day retention target, given telemetry must
+  be opt-in? (SC-011) → A: Measure both, reported separately — signed-in member
+  retention from existing server-side account activity, and signed-out retention
+  from an opt-in diagnostic signal, never combined into a single figure.
+- Q: What is the oldest macOS version Evreos will support? → A: macOS 13
+  Ventura. This sets the tier-2 engine floor, since the engine is the operating
+  system's own.
+- Q: Which search engine ships as default, and do you take payment for that
+  placement? (Q-E2) → A: A privacy-preserving engine, with no paid placement or
+  revenue arrangement in v1. Members can change it freely.
+- Q: What happens when a macOS member needs a saved password, given platform
+  autofill is unavailable there? (Q-E4) → A: State the limitation before
+  install, and offer to hand the site off to the system browser when a password
+  field is encountered. No credential storage is built in v1.
+- Q: Should the placeholder performance budgets be ratified now, or replaced
+  after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
+  budgets now as tighten-only CI gates; hold cold start (SC-002) until spike S3
+  measures engine initialisation on the reference hardware.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Browse privately on an ordinary machine (Priority: P1)
@@ -163,6 +186,11 @@ unchanged.
   and suspension MUST be reversible without losing the page's state visible to
   the user.
 - **FR-003**: A single entry field MUST combine search, history and bookmarks.
+- **FR-003a**: The default search provider MUST be a privacy-preserving engine
+  that does not build an advertising profile of the member, and MUST be
+  changeable by the member without penalty. No paid placement or revenue-sharing
+  arrangement for the default position is entered into for v1; should one ever
+  be, it MUST be disclosed in the product rather than only in a policy document.
 - **FR-004**: Users MUST be able to keep bookmarks, review history, and manage
   downloads.
 - **FR-005**: Users MUST be able to find text within a page, adjust page zoom,
@@ -191,6 +219,12 @@ unchanged.
   present an error state naming the cause and offering a next step. Treating a
   failed load as a successful empty page is a defect, as is a loading indicator
   that never resolves.
+- **FR-015a**: Where the platform provides credential autofill through the
+  engine, the browser MUST use it. Where it does not — currently the tier-2
+  platform — the browser MUST state that limitation before installation rather
+  than after, and MUST offer to open the site in the member's system browser
+  when a credential field is encountered. Evreos stores no credentials of its
+  own in v1.
 
 **Super-app platform**
 
@@ -249,6 +283,16 @@ unchanged.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
   layouts.
 
+**Diagnostics**
+
+- **FR-039**: The browser MUST offer an opt-in diagnostic signal, off until the
+  member turns it on, carrying only aggregate usage sufficient to compute
+  signed-out retention. It MUST NOT carry browsing history, and MUST be
+  reportable to a member in plain language before they consent.
+- **FR-040**: Signed-in retention MUST be derived from existing account and
+  wallet activity rather than from the diagnostic signal, so that members who
+  decline diagnostics are still counted in the figure that matters most.
+
 **Honesty**
 
 - **FR-037**: Where a capability is unavailable — protected media in
@@ -279,15 +323,21 @@ unchanged.
 
 ### Measurable Outcomes
 
-**Footprint and responsiveness** — figures are placeholders to be ratified or
-replaced during clarify, and may only be tightened thereafter.
+**Footprint and responsiveness.** Ratified 2026-08-30 except where marked
+provisional. A ratified figure is a CI gate that fails the build on regression
+and may afterwards only be tightened, never relaxed, except by recorded founder
+decision.
 
 - **SC-001**: The download is 20 MB or less and the installed footprint 60 MB or
   less per platform, counting only the bytes Evreos ships and excluding any
   system-provided web runtime.
-- **SC-002**: With the system web runtime already present, an interactive window
-  appears within 800 ms on a warm start and 2 s on first run, on the reference
-  hardware named in Assumptions.
+- **SC-002** *(provisional — not a CI gate until ratified)*: With the system web
+  runtime already present, an interactive window appears within 800 ms on a warm
+  start and 2 s on first run, on the reference hardware named in Assumptions.
+  Held open deliberately: a large share of this figure is the engine's own
+  initialisation rather than Evreos's code, so it is ratified only after spike
+  S3 measures that floor on the reference machines. Until then it is a target,
+  and the shell architecture is expected to be shaped by what S3 finds.
 - **SC-003**: Where the system web runtime is absent, first run presents
   continuous, honest progress and completes without user intervention beyond
   consent. This path is a designed experience and is deliberately not held to
@@ -315,7 +365,14 @@ replaced during clarify, and may only be tightened thereafter.
 - **SC-010**: At least 25% of people pitched at the pilot counter install
   Evreos and complete a claim.
 - **SC-011**: At least 20% of members who install are still using Evreos 30 days
-  later.
+  later, measured two ways and reported separately, never as one blended figure:
+  signed-in retention derived from existing server-side account activity, which
+  is transactional rather than diagnostic and needs no opt-in; and signed-out
+  retention derived from the opt-in diagnostic signal in FR-039, which is a
+  self-selected sample and MUST be labelled as such wherever it is reported.
+
+- **SC-015**: The tier-2 build installs and runs on macOS 13 and later. Machines
+  below that floor are told so before download, not after installation.
 - **SC-012**: Active members average at least one cashback activation per month.
 
 **Trust**
@@ -352,7 +409,10 @@ a landing page:
 ## Platform Scope
 
 - **Tier 1 — Windows.** Release criteria apply in full.
-- **Tier 2 — macOS**, at a declared minimum operating-system version.
+- **Tier 2 — macOS 13 and later.** Because the engine is the operating system's
+  own, this floor sets the rendering engine version, the web features available
+  on this platform, and the security patch source. It excludes hosting
+  third-party extensions, which is a non-goal regardless.
 - **Deferred — Linux.** Not part of v1 cross-platform scope. It carries its own
   budget and its own go/no-go decision, gated on the spike results recorded in
   ADR-0001.
@@ -366,17 +426,24 @@ resolved silently by this specification.
 
 - **Q-E1** Platform order, and whether a mobile platform precedes desktop
   polish.
-- **Q-E2** Default search provider and the monetisation posture that follows.
+- **Q-E2** *Settled 2026-08-30*: a privacy-preserving default with no paid
+  placement in v1 (FR-003a). Which specific engine, and whether to revisit
+  payment once traffic volume makes a deal realistic, remain open.
 - **Q-E3** Distribution channels at beta.
-- **Q-E4** Whether platform autofill is sufficient for v1.
+- **Q-E4** *Settled 2026-08-30*: platform autofill where available, an honest
+  limitation and a system-browser hand-off where it is not (FR-015a). Whether to
+  integrate the platform keychain on tier 2 later remains open.
 - **Q-E5** Whether import covers credentials as well as bookmarks and history.
-- **Q-E6** The minimum opt-in diagnostic set, if any.
+- **Q-E6** The minimum opt-in diagnostic set. Partly settled by the session
+  2026-08-30 clarification: the set must at minimum support signed-out retention
+  (FR-039). What else it carries, if anything, remains open.
 - **Q-E7** Brand and trademark clearance, and standalone versus endorsed
   branding.
 - **Q-E8** Whether partner-branded builds are a v1 requirement or merely kept
   possible.
-- **Q-E9** Confirmation or replacement of every placeholder figure in Success
-  Criteria.
+- **Q-E9** *Settled 2026-08-30*: SC-001, SC-004, SC-005 and SC-006 are ratified
+  as tighten-only CI gates. SC-002 is held provisional pending spike S3, and the
+  reference hardware models must be named before it can be ratified.
 - **Q-E10** Whether affiliate attribution survives tracking prevention on the
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
@@ -389,7 +456,8 @@ resolved silently by this specification.
 ## Assumptions
 
 - **Reference hardware** for SC-002 and SC-004 is a 2020 mid-range x86 laptop
-  and an M1-class portable. Exact models are to be named during clarify.
+  and an M1-class portable. Exact models remain to be named, and MUST be named
+  before SC-002 can be ratified, since the figure is meaningless without them.
 - **Import sources** are Chrome, Firefox and Edge, covering bookmarks and
   history. Credentials are out of scope pending Q-E5.
 - **The pilot launches on existing web surfaces**, not on Evreos. Evreos's job
