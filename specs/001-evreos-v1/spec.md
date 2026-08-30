@@ -28,8 +28,9 @@
   field is encountered. No credential storage is built in v1.
 - Q: Should the placeholder performance budgets be ratified now, or replaced
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
-  budgets now as tighten-only CI gates; hold cold start (SC-002) until spike S3
-  measures engine initialisation on the reference hardware.
+  budgets now as tighten-only CI gates; hold the cold-start figure (SC-002)
+  until the cold-start spike measures engine initialisation on the reference
+  hardware.
 - Q: Is claim-code redemption in v1, or does it wait for the campaign backend?
   → A: They are two different flows. Member-facing claim-code redemption ships
   in v1. Partner-facing campaign administration is the flow blocked on the
@@ -350,31 +351,55 @@ unchanged.
 
 ### Measurable Outcomes
 
-**Footprint and responsiveness.** Ratified 2026-08-30 except where marked
-provisional. A ratified figure is a CI gate that fails the build on regression
-and may afterwards only be tightened, never relaxed, except by recorded founder
-decision.
+**Footprint and responsiveness.** Principle II requires every budget it names —
+download size, installed size, cold start, shell memory, idle CPU, chrome input
+latency — to live in one budget file and be enforced by a CI gate that fails the
+build on regression. No budget named there may be un-gated at any point on the
+release path, so every figure below is a gate from milestone M0, at the value
+stated.
 
-- **SC-001**: The download is 20 MB or less and the installed footprint 60 MB or
-  less per platform, counting only the bytes Evreos ships and excluding any
-  system-provided web runtime.
-- **SC-002** *(provisional — not a CI gate until ratified)*: With the system web
+Ratified and provisional describe the *figure*, never whether the gate exists. A
+ratified figure may afterwards only be tightened, never relaxed, except by
+recorded founder decision. A provisional figure may be replaced once, by
+recorded founder decision on spike evidence, and is tighten-only thereafter.
+SC-003 states a required experience rather than a figure; it is verified by
+acceptance test, not by a budget gate.
+
+Reference machines are named in Assumptions as a class rather than by model.
+SC-002 already says a figure is meaningless without them; that is equally true
+of SC-004, SC-005 and SC-006, which the founder has ratified. Ratification is
+not reopened here — see Q-E9a for the naming that reproducibility still needs.
+
+- **SC-001** *(ratified)*: The download is 20 MB or less and the installed
+  footprint 60 MB or less per platform, counting only the bytes Evreos ships and
+  excluding any system-provided web runtime.
+- **SC-002** *(figure provisional; gate mandatory from M0)*: With the system web
   runtime already present, an interactive window appears within 800 ms on a warm
-  start and 2 s on first run, on the reference hardware named in Assumptions.
+  start and 2 s on first run, on each reference machine listed in Assumptions.
   Held open deliberately: a large share of this figure is the engine's own
-  initialisation rather than Evreos's code, so it is ratified only after spike
-  S3 measures that floor on the reference machines. Until then it is a target,
-  and the shell architecture is expected to be shaped by what S3 finds.
+  initialisation rather than Evreos's code, so the figure is ratified only after
+  the cold-start spike measures that floor on the reference machines. The shell
+  architecture is expected to be shaped by what that spike finds. Assumptions
+  currently describes a class of machine rather than exact models; until models
+  are recorded there this criterion cannot be measured reproducibly and MUST NOT
+  be reported as met.
 - **SC-003**: Where the system web runtime is absent, first run presents
   continuous, honest progress and completes without user intervention beyond
   consent. This path is a designed experience and is deliberately not held to
   SC-002.
-- **SC-004**: With ten tabs open, memory attributable to Evreos beyond the
-  system web runtime's own processes stays at or below 150 MB.
-- **SC-005**: When idle, processor use stays below 0.5% with no periodic wake
-  activity, and background tabs are suspended.
-- **SC-006**: Switching tabs and typing in the address field produce a visible
-  response within a single 16 ms frame.
+- **SC-004** *(ratified)*: With ten tabs open,
+  unique set size attributable to Evreos processes, excluding the system web
+  runtime's own processes, stays at or below 150 MB, measured 60 s after the
+  tenth tab finishes loading on each named reference machine. The metric is
+  named because ADR-0001 records that the published ordering flips between USS
+  and PSS on the same machine, so "memory attributable to" is not one number.
+- **SC-005** *(ratified)*: When idle, mean
+  processor use over a 10-minute window stays below 0.5% of one core, with no
+  wake activity more frequent than once per minute, and background tabs are
+  suspended.
+- **SC-006** *(ratified)*: Switching tabs and
+  typing in the address field produce a visible response within 16 ms at the
+  display's native refresh rate, at the 95th percentile over 100 trials.
 
 **Experience**
 
@@ -469,8 +494,14 @@ resolved silently by this specification.
 - **Q-E8** Whether partner-branded builds are a v1 requirement or merely kept
   possible.
 - **Q-E9** *Settled 2026-08-30*: SC-001, SC-004, SC-005 and SC-006 are ratified
-  as tighten-only CI gates. SC-002 is held provisional pending spike S3, and the
-  reference hardware models must be named before it can be ratified.
+  as tighten-only CI gates. The SC-002 figure is held provisional pending the
+  cold-start spike; the gate itself exists from M0 regardless, because Principle
+  II admits no un-gated budget.
+- **Q-E9a** Which exact machine models are the reference hardware. SC-002 says a
+  hardware-dependent figure is meaningless without them, which applies equally to
+  SC-004, SC-005 and SC-006. Those three are ratified and stay ratified; until
+  models are named, none of the four is reproducible by a third party, which
+  SC-013 requires.
 - **Q-E10** Whether affiliate attribution survives tracking prevention on the
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
@@ -482,9 +513,9 @@ resolved silently by this specification.
 
 ## Assumptions
 
-- **Reference hardware** for SC-002 and SC-004 is a 2020 mid-range x86 laptop
-  and an M1-class portable. Exact models remain to be named, and MUST be named
-  before SC-002 can be ratified, since the figure is meaningless without them.
+- **Reference hardware** for SC-002, SC-004, SC-005 and SC-006 is a 2020
+  mid-range x86 laptop and an M1-class portable. Exact models remain to be named
+  (Q-E9a). Until they are, no hardware-dependent figure is reproducible.
 - **Import sources** are Chrome, Firefox and Edge, covering bookmarks and
   history. Credentials are out of scope pending Q-E5.
 - **The pilot launches on existing web surfaces**, not on Evreos. Evreos's job
