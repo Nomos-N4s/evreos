@@ -135,16 +135,18 @@ surprise, and so no marketing claim outruns it.
   named these two as the paradigm DRM-dependent services; that was wrong, and
   it matters, because they are heavily used by this cohort.
 
-  **Verified — Joyn uses DRM, and is multi-DRM rather than Widevine-only.** The
+  **Verified — Joyn uses DRM. Which system it serves is not established.** The
   unofficial Kodi add-on `Maven85/plugin.video.joyn` requests playback with the
-  literals `platform='browser'` and `protectionSystem='widevine'`, but those are
-  the add-on's own hardcoded parameters, not Joyn's only option: the add-on
-  branches on a `drm` value Joyn returns and sets a license type of either
-  `com.widevine.alpha` or `com.microsoft.playready`, and ships a "Force PlayReady
-  DRM" setting that sends a Windows Edge user agent. So Joyn is protected, and
-  which system it serves depends on the client. RTL+ is **not characterised
-  here**: an earlier draft said it shows FairPlay asset names on Apple platforms,
-  citing no source, so the claim cannot be re-verified and is withdrawn.
+  literals `platform='browser'` and `protectionSystem='widevine'`, then
+  unconditionally overwrites the response's `drm` key with `'widevine'`
+  (`libjoyn_video.py:146`, the only writer of that key). So the
+  `com.microsoft.playready` branch at `plugin.py:889` is unreachable, and the
+  add-on's "Force PlayReady DRM (Android only)" setting — gated on
+  `System.Platform.Android` — cannot reach it either. This source establishes
+  that Joyn is DRM-protected and that Widevine works for it. It establishes
+  nothing about whether Joyn offers PlayReady to any client. RTL+ is **not
+  characterised here**: an earlier draft said it shows FairPlay asset names on
+  Apple platforms, citing no source, so the claim is withdrawn.
 
   **Verified — PlayReady is reachable in WebView2 through EME, at the software
   security level.** A 2024 WebView2 bug report names `playready.hardware` and
@@ -154,17 +156,22 @@ surprise, and so no marketing claim outruns it.
   playready already" (WebView2Feedback#4828). Microsoft's own WebView2
   documentation says nothing about content protection at all.
 
-  **Verified — Widevine is not an officially supported WebView2 key system.**
-  The feature request above is open and unanswered, and a separate report
-  describes Widevine authentication failing inconsistently where it loads
-  (WebView2Feedback#2021).
+  **Unestablished — whether Widevine is usable in WebView2.** An open, unanswered
+  feature request asks Microsoft to support it (WebView2Feedback#4828), which is
+  evidence of no *documented* support. Against that, a 2021 report on runtime 94
+  describes Widevine in WebView2 loading and working intermittently, failing at
+  the licence-certificate endpoint (WebView2Feedback#2021) — the module was
+  reachable. Neither settles it; it belongs in risk 8.
 
   **Widevine itself** is not in open-source Chromium; it is licensed per vendor,
   and Google has refused at least one independent open-source browser outright.
-  Brave and Vivaldi carry it under commercial agreements — and both are Chromium
-  forks, so the wall is commercial rather than architectural. Forking Chromium
-  does not clear it by itself, and hosting an OS webview does not make it worse.
-  Whether a solo-founder project could obtain such an agreement is untested.
+  Brave and Vivaldi carry it under commercial agreements, and both are Chromium
+  forks, so forking does not clear the commercial wall by itself. Hosting an OS
+  webview adds an architectural wall on top of it: a licensed fork can ship the
+  module in its own binary, whereas an OS-webview host can only use the key
+  systems its host runtime already exposes. A Widevine agreement would therefore
+  not be actionable under this architecture even if one were obtainable, which is
+  itself untested for a solo-founder project.
 
   **Still unestablished:** whether PlayReady at the software security level is
   sufficient for the services members actually use, since commercial streamers
