@@ -6,13 +6,17 @@
   assistance to an AI or generator tool are governed by Principle I of
   `.specify/memory/constitution.md`. That document supersedes this one, so the
   rules are stated there and NOT restated here.
-- Operational detail this file does add, which grants no permission and imposes
-  no rule the constitution does not:
+- Operational detail this file does add. None of it grants a permission the
+  constitution withholds; where it is stricter, it narrows what the constitution
+  leaves open, which supersession allows:
   - Before committing, verify `git config user.name` is `xcoder-es` and
     `git config user.email` is `capintobe@gmail.com`.
-  - Merge commits created by the forge record the forge as committer. The
-    constitution constrains the author, not the committer, so this is permitted;
-    the forge is infrastructure rather than a third party.
+  - Merge commits created by the forge record the forge as committer. The forge is
+    infrastructure rather than a third party, so it is the only committer permitted
+    besides the founder — exactly the set `ALLOWED_COMMITTERS` in
+    `scripts/check-commit-hygiene.py` already enforces on every pull request.
+    Principle I constrains the author and is silent on the committer, so naming
+    the permitted set here is one of those narrowings.
   - `scripts/check-commit-hygiene.py` enforces the mechanical part of Principle I
     on every pull request: author and committer identity, AI-attribution git
     trailers, literal generator footers, Conventional Commits subjects and issue
