@@ -117,7 +117,8 @@ surprise, and so no marketing claim outruns it.
   it at all.** No exclusion is described to anyone until risk 8 is retired. The
   hand-off is built regardless, because it is cheap insurance.
 
-  **Verified — ARD and ZDF Mediathek are not DRM-protected.** Streamlink's ARD
+  **Verified — ARD and ZDF Mediathek are not DRM-protected on the paths three
+  independent clients use.** Streamlink's ARD
   plugin plays them with plain HLS and progressive HTTP and contains no DRM
   handling; yt-dlp's ARD and ZDF extractors contain none either, and yt-dlp
   additionally detects DRM generically from HLS, DASH and Smooth manifests
@@ -358,13 +359,16 @@ funding; Thorium's maintenance load; the licensing position on Widevine
 discussed above.
 
 **Verified from third-party client evidence, not from the subject's own
-sources**: that ARD and ZDF Mediathek carry no DRM (streamlink, yt-dlp, the
-official Kodi ARD add-on); that Joyn is DRM-protected and multi-DRM (an
-unofficial Kodi add-on's request parameters and license-type branching); and
-that PlayReady is reachable in WebView2 at the software security level while
-Widevine is unsupported (WebView2 issue reports, against silent vendor
-documentation). Strong for the negatives, indicative for the positives, and
-superseded by measurement in the spikes.
+sources**: that ARD and ZDF Mediathek carry no DRM on the paths three
+independent clients use (streamlink, yt-dlp's generic manifest detection, the
+official Kodi ARD add-on); that Joyn is DRM-protected and that a maintained
+third-party client obtains playback by requesting Widevine (an unofficial Kodi
+add-on's hardcoded request parameters); and that PlayReady is reachable in
+WebView2 through EME at the software security level in a WinUI2/UWP host
+(WebView2Feedback#4935). Whether Widevine is usable in WebView2, and which
+protection systems Joyn serves to clients other than that add-on, are NOT
+established and appear in risk 8. Strong for the negatives, indicative for the
+positives, and superseded by measurement in the spikes.
 
 **Unverified, and each appears in the risks to retire above** rather than as a
 finding: tracking prevention versus affiliate attribution (risk 1); the cohort's
