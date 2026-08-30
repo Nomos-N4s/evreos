@@ -2,15 +2,20 @@
 
 ## Authorship
 
-- Every commit MUST be authored by `xcoder-es <capintobe@gmail.com>` and MUST be signed.
-  Merge commits created by the forge record the forge as committer; that is
-  infrastructure, not a third party, and is the only permitted committer besides
-  the founder.
-- NO `Co-Authored-By` trailers of any kind. No generator, tool, session, or
-  AI attribution anywhere: not in commit messages, PR titles or bodies, issues,
-  comments, code comments, or generated files. No exceptions, ever.
-- Before committing, verify `git config user.name` is `xcoder-es` and
-  `git config user.email` is `capintobe@gmail.com`.
+- Authorship, commit signing, and the prohibition on attributing authorship or
+  assistance to an AI or generator tool are governed by Principle I of
+  `.specify/memory/constitution.md`. That document supersedes this one, so the
+  rules are stated there and NOT restated here.
+- Operational detail this file does add, which grants no permission and imposes
+  no rule the constitution does not:
+  - Before committing, verify `git config user.name` is `xcoder-es` and
+    `git config user.email` is `capintobe@gmail.com`.
+  - Merge commits created by the forge record the forge as committer. The
+    constitution constrains the author, not the committer, so this is permitted;
+    the forge is infrastructure rather than a third party.
+  - `scripts/check-commit-hygiene.py` enforces the mechanical part of Principle I
+    on every pull request. Its carve-out for naming an integrated tool is the
+    one Principle I grants, not an exception to it.
 
 ## Branches
 
