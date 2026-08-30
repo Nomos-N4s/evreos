@@ -113,14 +113,16 @@ What this architecture cannot deliver. Stated here so it is not rediscovered as 
 surprise, and so no marketing claim outruns it.
 
 - **Content-protected media is excluded, on evidence that covers one system.**
-  The content-protection module most streaming services require is not in
-  open-source Chromium; Brave and Vivaldi ship it under agreements and its owner
-  has refused open-source projects. That is a licensing wall in **both**
-  architectures, so a fork would not have fixed it. **Unverified:** whether the
-  content-protection system native to Windows — the one the platform's own
-  browser uses, shipping in the same binaries as the WebView2 runtime — covers
-  any service members actually use. Until tested, assume exclusion and provide
-  the hand-off; see the risks below.
+  **Widevine** — the content-protection module Netflix, Disney+, Prime Video and
+  Spotify's web player require — is not in open-source Chromium; Brave and
+  Vivaldi ship it under agreements with Google, which has refused open-source
+  projects. That is a licensing wall in **both** architectures, so a fork would
+  not have fixed it. **Unverified:** whether **PlayReady**, the system native to
+  Windows and used by Edge, is reachable from WebView2 and covers any service
+  members actually use — in particular the German public-broadcaster streams
+  (ARD and ZDF Mediathek) and RTL+. Whether PlayReady ships with the WebView2
+  runtime is *not* established here and must not be asserted. Until tested,
+  assume exclusion and provide the hand-off; see the risks below.
 - **No single cross-platform content-blocking primitive.** `wry` exposes no
   `WKContentRuleList` or `WebKitUserContentFilterStore` binding; what exists is
   top-level navigation gating, a macOS-14+ proxy config behind a feature flag,
@@ -195,8 +197,12 @@ surprise, and so no marketing claim outruns it.
    sign-in (blocked in embedded webviews per Microsoft's documentation), and
    public-broadcaster streaming. A cohort member whose bank login breaks does not
    file a bug; they uninstall and tell the shop.
-3. **The `wry` fork spike** — add a load-failure event and a TLS hook on WebView2
-   and WKWebView. The cheapest way to learn what maintaining that fork feels like.
+3. **The navigation-failure spike.** Add a load-failure event and a TLS hook on
+   both engines, by the route each actually requires: a wrapper over the exposed
+   native handles on Windows, where no fork is needed; a fork or upstream
+   contribution on macOS, where the navigation delegate must be replaced. The
+   macOS half is also the cheapest way to learn what maintaining that fork feels
+   like, and it is the only half that carries fork cost.
 4. **Linux go/no-go** — ten live tabs on Wayland, and an AppImage on the scale.
    Note `wry`'s `build_as_child` tab model is X11-only, and Wayland is the default
    on current Ubuntu, Fedora and Plasma.
@@ -208,8 +214,17 @@ surprise, and so no marketing claim outruns it.
 7. **Accessibility on the tier-2 and deferred platforms.** The rationale is
    evidenced on Windows only. Drive each shell surface with the platform's own
    assistive technology before claiming WCAG 2.1 AA anywhere else.
-8. **Content protection on Windows.** Test whether the platform-native system
-   covers services members use, before the exclusion is treated as settled.
+8. **Content protection on Windows.** Test whether PlayReady is reachable from
+   WebView2 and covers the German public-broadcaster streams and RTL+, before
+   the exclusion is treated as settled.
+9. **What governs macOS memory at ten tabs.** The process-pool requirement
+   originally recorded here was withdrawn as a no-op, which left this
+   untracked. Establish what actually shares state between webviews on that
+   platform, or the shell-overhead budget has no mechanism behind it there.
+10. **Browser-extension behaviour on recent macOS in practice.** Cited in the
+    capability floor above and listed as unverified below; nothing has been run
+    to confirm it. It bounds nothing in v1, since hosting third-party extensions
+    is a non-goal, but the claim should not stand unmeasured while being used.
 
 ## Revisit triggers
 
@@ -250,8 +265,17 @@ spikes.
 This record was amended after an adversarial review confirmed defects in its
 supporting claims. The decision is unchanged; the corrections concern accuracy.
 
-Corrected: the assertion that a `wry` fork was required on every platform, which
-was false on Windows and Linux; the description of navigation failure as an
+A second amendment followed a review of the first. Corrected then: a risk that
+still budgeted a fork on Windows, contradicting the accepted cost this same
+document had just corrected; an unsourced claim about how a content-protection
+system is packaged, stated as fact; a media exclusion that named no system or
+service and so could not be acted on or re-verified; and two unverified items the
+evidence section claimed were in the risks list when they were not, one of them
+created by withdrawing the process-pool requirement without putting anything in
+its place.
+
+Corrected in the first amendment: the assertion that a `wry` fork was required on
+every platform, which was false on Windows and Linux; the description of navigation failure as an
 endless loading indicator, which is accurate only on macOS; the claim to be the
 only maintained cross-platform native-webview abstraction including Linux, which
 several non-Rust projects refute; a process-pool sharing requirement naming an
