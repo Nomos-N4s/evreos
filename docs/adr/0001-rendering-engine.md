@@ -328,17 +328,26 @@ The decision itself, not only its rejected alternatives, should be reopened if:
 release notes and project statements: `wry`'s API surface and its per-platform
 navigation behaviour; WebKit's compiled-rule-list ceiling; Microsoft's documented
 runtime size and WebView2 feature list; Servo's and Ladybird's status and
-funding; Thorium's maintenance load; the licensing position on the content
-protection module discussed above.
+funding; Thorium's maintenance load; the licensing position on Widevine
+discussed above.
+
+**Verified from third-party client evidence, not from the subject's own
+sources**: that ARD and ZDF Mediathek carry no DRM (streamlink, yt-dlp, the
+official Kodi ARD add-on); that Joyn is DRM-protected and multi-DRM (an
+unofficial Kodi add-on's request parameters and license-type branching); and
+that PlayReady is reachable in WebView2 at the software security level while
+Widevine is unsupported (WebView2 issue reports, against silent vendor
+documentation). Strong for the negatives, indicative for the positives, and
+superseded by measurement in the spikes.
 
 **Unverified, and each appears in the risks to retire above** rather than as a
 finding: tracking prevention versus affiliate attribution (risk 1); the cohort's
 platform mix, which the tiering assumes (risk 6); accessibility guarantees on the
 tier-2 and deferred platforms (risk 7); what WebView2 can actually play under
-content protection (risk 8); what governs macOS memory at ten tabs (risk 9);
-browser-extension behaviour on recent macOS in practice (risk 10); and passkey
-support on the tier-2 and deferred platforms (risk 11), which the capability
-floor names and which nothing had tracked.
+content protection, and what the other two engines expose (risk 8); what governs
+macOS memory at ten tabs (risk 9); browser-extension behaviour on recent macOS in
+practice (risk 10); and passkey support on all three platforms (risk 11), which
+the capability floor names and which nothing had tracked.
 
 **Size and memory figures** quoted in the rationale come from vendor
 documentation and published project statements rather than from measurement on
@@ -362,12 +371,21 @@ were not — browser-extension behaviour on recent macOS, passkey support, and
 what governs macOS memory at ten tabs, the last created by withdrawing the
 process-pool requirement without putting anything in its place.
 
-The media exclusion was then rewritten a third time, from investigation rather
-than from synthesis, after review found the second version's examples false. The
-substantive correction: ARD and ZDF Mediathek are **not** DRM-protected, and had
-been named as the paradigm services that fail. What WebView2 can play under
-content protection was left explicitly unestablished rather than guessed, which
-is what the two previous versions did wrong.
+The media exclusion was then rewritten twice more, both times within the same
+change rather than on `main`, so no merged version of this record carried the
+intervening text. The third version, from investigation rather than synthesis,
+corrected the second's examples: ARD and ZDF Mediathek are **not**
+DRM-protected, and had been named as the paradigm services that fail.
+
+The fourth version corrected the third. It had recorded what WebView2 can play
+as unestablished and unanswerable — "no source reachable during investigation
+answered it" — when reachable sources answer it: PlayReady is reachable through
+EME at the software security level and Widevine is not an officially supported
+key system. It had also read its own cited source selectively, treating an
+add-on's hardcoded request parameter as Joyn's only protection system when the
+same add-on handles PlayReady too, and had kept an uncitable claim about RTL+.
+Declaring a question unanswerable is as much an overstatement as answering it
+without evidence.
 
 Corrected in the first amendment: the assertion that a `wry` fork was required on
 every platform, which was false on Windows and Linux; the description of navigation failure as an
