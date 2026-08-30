@@ -7,8 +7,10 @@
 ## Content Quality
 
 - [ ] No implementation details (languages, frameworks, APIs) — SC-004 names
-  platform memory counters (`phys_footprint`, Working Set — Private) and FR-039a
-  names a relay. These are measurement and privacy mechanisms rather than
+  platform memory counters — `phys_footprint` via `task_vm_info` on macOS and
+  Private Bytes (`PROCESS_MEMORY_COUNTERS_EX.PrivateUsage`) on Windows, with
+  Working Set — Private named only to exclude it — and FR-039b names a relay.
+  These are measurement and privacy mechanisms rather than
   technology choices, but they are API and infrastructure names, and the item
   cannot be marked complete while that question is open
 - [x] Focused on user value and business needs
@@ -118,11 +120,13 @@ deliberately kept out. Four success criteria reference a "system-provided web
 runtime" as a measurement boundary rather than a technology choice: SC-001
 excludes its bytes, SC-002 assumes it present, SC-003 covers its absence, and
 SC-004 excludes its processes. Three further names entered during review and are
-load-bearing rather than incidental: SC-004 names `phys_footprint` and Working
-Set — Private because the two platforms expose different quantities and an
-unnamed "memory" figure is not reproducible under SC-013; SC-009a names macOS
-13.0 because the tier-2 floor is the criterion; and FR-039a names a relay because
-the unlinkability it requires cannot be met at the application layer alone. Without that boundary the
+load-bearing rather than incidental: SC-004 names `phys_footprint` via
+`task_vm_info` and Private Bytes (`PROCESS_MEMORY_COUNTERS_EX.PrivateUsage`), and
+names Working Set — Private only to exclude it, because the two platforms expose
+different quantities and an unnamed "memory" figure is not reproducible under
+SC-013; SC-009a names macOS 13.0 because the tier-2 floor is the criterion; and
+FR-039b names a relay because the unlinkability it requires cannot be met at the
+application layer alone. Without that boundary the
 figures are not measurable, since what is being budgeted is the part Evreos
 ships. The engine decision itself lives in ADR-0001, not here.
 
