@@ -9,6 +9,10 @@
 - Operational detail this file does add. None of it grants a permission the
   constitution withholds; where it is stricter, it narrows what the constitution
   leaves open, which supersession allows:
+  - No session, run or conversation identifier in any commit message, pull
+    request field, issue or comment. Principle I reaches attribution to an AI or
+    generator tool; this file additionally forbids identifiers that trace a
+    change to a generating session, which name no tool and so fall outside it.
   - NO `Co-Authored-By` trailer of any kind, including one naming a human.
     Principle I forbids trailers that attribute to an AI or generator tool; this
     file goes further and forbids co-authorship trailers outright, because sole
@@ -81,12 +85,14 @@
   rules are stated there and NOT restated here — a stricter copy in this file
   would be void wherever the two disagreed, which is how this note came to
   exist.
-- The bullets above this one restate rules the constitution also states. That is
-  deliberate and it is the narrower case: they are short reminders of settled
-  rules whose exact wording carries no gate, kept here for reach. Where a rule's
-  exact wording IS the gate — the review round, the merge record, the override —
-  it is stated in the constitution only. When the constitution is amended, the
-  reminders above MUST be re-checked against it.
+- The first four bullets of this section restate rules the constitution also
+  states. That is deliberate and it is the narrower case: they are short
+  reminders of settled rules that no reviewer has to weigh wording against, kept
+  here for reach — two of them are gated mechanically by the hygiene check, so
+  the wording is settled by the script rather than by argument. Where a rule's
+  exact wording is what a human gate turns on — the review round, the merge
+  record, the override — it is stated in the constitution only. When the
+  constitution is amended, the reminders above MUST be re-checked against it.
 
 ## Spec-driven development
 
