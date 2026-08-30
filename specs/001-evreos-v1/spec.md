@@ -243,9 +243,10 @@ unchanged.
 
 **Super-app platform**
 
-- **FR-016**: Once the member has opened the home surface at least once and has
-  not since hidden it under FR-016a, the home surface MUST present the installed
-  first-party apps.
+- **FR-016**: The home surface MUST present the installed first-party apps
+  whenever the member opens it. Hiding it under FR-016a removes it from the
+  browsing experience — the new-tab page and the chrome — not from the menu entry,
+  and opening it from that entry clears the hidden state.
 - **FR-016a**: Apivo surfaces MUST be discoverable, opt-in and dismissible, as
   Principle IV requires — all three, of which the spec previously carried none.
   *Discoverable*: a single neutral entry point to the home surface MUST be present
@@ -260,22 +261,29 @@ unchanged.
   else. *Dismissible*: a member MUST be able to remove any first-party app from
   the home surface, to hide the home surface entirely, and to dismiss the wallet
   and claim surfaces, and each choice MUST persist across restarts and updates. An
-  app update or a browser release MUST NOT reverse a dismissal. Dismissal removes
+  app update or a browser release MUST NOT reverse a dismissal, and every
+  dismissal MUST be reversible by the member from the same menu entry — a
+  one-way dismissal would leave a member who hid the wallet unable to follow a
+  withdrawal to a terminal state, which FR-028 requires. Dismissal removes
   a surface from the browsing experience, never from the member's reach — FR-028
   requires a withdrawal to be followable to a terminal state, which a wallet with
   no way back would make unsatisfiable.
-- **FR-018a**: No Apivo surface, app, or commercial content may alter, overlay or
-  annotate a web page without an explicit member action on that page on that
-  visit, as Principle IV requires. A per-app grant under FR-018 authorises an app
+- **FR-018a**: Nothing may be injected into a web page without an explicit member
+  action on that page on that visit, as Principle IV requires — the principle's
+  own subject, which this requirement does not narrow. A per-app grant under FR-018 authorises an app
   to respond to such an action; it does not authorise injection in its absence.
   In particular a cashback offer MUST NOT alter, overlay or annotate a merchant's
   page until the member acts on that page on that visit. FR-018 carries Principle
   IX's standing per-app grant, which is a weaker thing and does not reach this.
-  The browser's own privacy and usability functions — content blocking under
-  FR-008, which needs cosmetic filtering or blocked slots leave holes;
-  find-in-page under FR-005; error states under FR-015 — are not injection within
-  the meaning of this requirement: they carry no commercial interest and are
-  governed by the member's standing settings.
+  The browser's own functions are not injection within the meaning of this
+  requirement: they are the shell speaking on the member's behalf, they carry no
+  commercial interest, and they place no third party's content in the page. That
+  covers content blocking under FR-008, whose cosmetic filtering is what keeps
+  blocked slots from leaving holes; find-in-page under FR-005; error and failure
+  states under FR-015; the site-credential hand-off offer under FR-015a; and the
+  capability hand-off under FR-037. The test is the characterisation, not the
+  list: a later shell function meeting it is equally exempt, and a commercial one
+  is not, however it is packaged.
 - **FR-017**: Each app MUST declare its capabilities in a signed, versioned
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
@@ -678,14 +686,15 @@ real regression, which is the same reason the absolute figures are held.
   retention** is reported alongside it over weekly enrolment cohorts (FR-039a),
   which are not the same cohorts as the signed-in figure and MUST NOT be compared
   item to item. It is a self-selected sample and MUST be labelled as such wherever
-  it is reported. Its opt-in rate is estimated against the
-  aggregate count of daily update-checking installs, which FR-014's update channel
-  produces without any per-install identifier, and MUST be published with the
-  figure; where that estimate is unavailable, that the rate is unknown MUST be
-  stated instead. An earlier version said the rate could not be computed because
-  FR-039a forbids counting installs that did not opt in — but FR-039a governs the
-  diagnostic signal only, and an aggregate active-install count is the standard
-  denominator and needs no identifier.
+  it is reported. Its opt-in rate is estimated against an
+  aggregate count of active installs derived from the update channel, **once a
+  requirement governs what that channel may send and retain** — issue #28 records
+  that gap and this criterion must not outrun it. Until then the rate is unknown
+  and MUST be stated as unknown beside the figure. Note the count is of distinct
+  installs, not of requests: an unidentified request stream cannot distinguish one
+  install checking twenty-four times from twenty-four installs checking once, so
+  the mechanism is not a free property of FR-014 and must be specified where the
+  channel is.
   It carries no bar and is reported for direction. A cohort of fewer than 200 —
   first sign-ins for the signed-in figure, enrolment reports for the signed-out
   one — is reported with confidence intervals rather than as a point figure.

@@ -33,15 +33,19 @@
 ## Feature Readiness
 
 - [ ] All functional requirements have clear acceptance criteria — FR-003a,
-  FR-015a, FR-016a, FR-018a, FR-029a, FR-039a, FR-039b, FR-039c, FR-039d, FR-042
-  and FR-043 have neither a success criterion nor an acceptance scenario, and
+  FR-014, FR-015a, FR-016a, FR-018a, FR-021, FR-023, FR-029a, FR-031, FR-039a,
+  FR-039b, FR-039c, FR-039d, FR-039e, FR-042, FR-043 and FR-044 have neither a
+  success criterion nor an acceptance scenario. This list is maintained with the
+  requirements: a requirement added without a criterion is added here. Two earlier
+  versions read as exhaustive and were not, and
   FR-041's accessibility and language obligations for the distribution page are
   covered by none (SC-009a covers only its operating-system statement and the
   installer refusal). An earlier version of this list named five and read as
   exhaustive
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [x] No implementation details leak into specification
+- [ ] No implementation details leak into specification — same question as the
+  item above, and unticked for the same reason
 
 ## Notes
 
@@ -62,10 +66,12 @@ Two items improved materially rather than changing state:
   separately reported measurements (FR-039, FR-040) fixed the signed-in half.
   The signed-out half stayed untestable until review, because a cohort
   measure appeared to need a per-install key. FR-039a resolves it without one:
-  the client evaluates its own retention locally and emits two unlinkable reports
-  carrying only a cohort week, and the ratio of the two counts is the measure. An
-  earlier version of this paragraph described the identifier design the spec
-  went on to reject — stale in the same round that wrote it.
+  the client evaluates its own retention locally and emits unlinkable reports
+  carrying only a cohort week — an enrolment report, then either a retention or a
+  withdrawal report — and the measure is the ratio of retention reports to
+  enrolments net of withdrawals. Two earlier versions of this paragraph described
+  designs the spec had already moved past, each stale in the round that wrote it;
+  it is now checked against FR-039a whenever that requirement changes.
 - *Scope is clearly bounded* is stronger now that the tier-2 operating-system
   floor is declared with both its consequences, the default search posture is
   fixed, and the site-credential limitation is stated rather than implied.
@@ -75,7 +81,10 @@ contrary to the earlier claim that all still did. Rounds 3 and 4 additionally
 carried four constitutional mandates that no requirement had held: Principle II's
 budget file and per-change cost (FR-043), Principle IV's discoverable, opt-in and
 no-injection mandates (FR-016a, FR-018a), Principle VI's *aggregate* condition
-(FR-039d, FR-039e), and Principle VII's BCP-47 keying and language/place
+(FR-039d and FR-039e, which count crash reports by signature rather than
+retaining an exemplar — an exemplar would be the same per-install payload under
+another name), Principle III's engine seam and no-bundled-engine rule (FR-044),
+and Principle VII's BCP-47 keying and language/place
 separation (FR-035). Three further gaps are recorded in issue #28 rather than
 fixed here, because adding requirements reactively is what each round has been
 correcting. Fixed in this branch: Principle VI's EU-hosting
