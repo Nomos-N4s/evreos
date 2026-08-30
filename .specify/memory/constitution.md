@@ -13,6 +13,10 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Development Workflow gains a merge gate: a pull request is not mergeable until a
     review round is recorded green against the exact diff that would merge, with the
     record on the pull request naming head and base SHAs and the finding counts.
+  - Recording is fixed in time and form: a new comment, before the next push, never an
+    edit to an earlier record. A record kept only in the pull request body is a mutable
+    field the author can silently rewrite, which would let a blocked round be edited
+    green after the fact.
   - The obligation to record every round's outcome is retained and stays on the review
     bullet; what is withdrawn is its "or to the founder" destination, because a record
     only the founder can see makes the gate unverifiable by anyone reading the pull
@@ -200,15 +204,19 @@ of them requires a MAJOR amendment to this constitution:
   changes across correctness, security, internal consistency and compliance with this
   constitution, with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
-  The outcome of every round, green or not, MUST be recorded on the pull request, so that
-  a round which found something stays traceable to the fix that followed it. The next
-  bullet adds what a green record must contain to satisfy the merge gate.
+  The outcome of every round, green or not, MUST be recorded on the pull request as a new
+  comment, before the next push, and never by amending or deleting an earlier record; a
+  record that is edited after the fact invalidates every round on the pull request. That
+  is what keeps a round which found something traceable to the fix that followed it.
 - A pull request is NOT mergeable until a review round has been recorded green — no
-  confirmed findings — against the exact diff that would merge. The record lives on the
-  pull request, in its body or a comment, and states the head SHA and the base SHA it
-  covers, how many findings were raised, and how many were confirmed. Naming both SHAs is
-  what lets a reader decide whether the round is still current; naming the counts is what
-  makes "green" checkable rather than asserted. A round is invalidated by a new push and
+  confirmed findings — against the exact diff that would merge. The record is a comment on
+  the pull request, as the bullet above requires, and states the head SHA and the base SHA
+  it covers, and every finding raised with its severity and its disposition — confirmed
+  and fixed by commit SHA, or dismissed with the reason. Naming both SHAs is
+  what lets a reader decide whether the round is still current; listing the findings is
+  what makes "green" checkable rather than asserted. A bare count is a second assertion,
+  not evidence: it lets two confirmed blockers be recorded as "0 confirmed" with nothing
+  a reader could check. A round is invalidated by a new push and
   by the base moving, because either changes what would merge. Green automated checks are
   not a substitute: the two run in parallel and the merge will win. The founder may
   override, but the override is stated on the pull request and names what it overrides.
