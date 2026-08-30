@@ -671,13 +671,15 @@ a landing page:
   restricted by operating-system version on tier 2; unavailable on the deferred
   platform. It cannot be offered consistently and so is not offered.
 - **Playback of content-protected streaming media.** Excluded from v1 on tier 2,
-  and not claimed on tier 1 until Q-E11 is measured. The
-  content-protection system most streaming services require is unavailable in
-  every engine option considered, and is not obtainable by adopting a different
-  engine strategy — it is a licensing wall rather than a technical one. Whether
-  a different content-protection system available on the tier-1 platform covers
-  any of these services is untested; see Q-E11. Until that is settled, FR-037's
-  hand-off applies to all such media.
+  and not claimed on tier 1 until Q-E11 is measured. The system most streaming
+  services require is not in open-source Chromium and is licensed per vendor, so
+  a commercial wall stands whichever engine strategy is chosen; whether this
+  architecture adds a technical wall on top of it is unestablished, and ADR-0001
+  forbids asserting that it does until the mechanism is measured. A different
+  system native to the tier-1 platform is reachable there, which is why no tier-1
+  exclusion is claimed; whether it covers the services members use is untested —
+  see Q-E11. The German public broadcasters need no content protection at all.
+  Wherever playback does fail, FR-037's hand-off applies.
 
 ## Platform Scope
 
