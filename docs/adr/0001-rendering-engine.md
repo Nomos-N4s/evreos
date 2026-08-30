@@ -399,22 +399,25 @@ stale tracker-issue state; the accessibility rationale, which was evidenced on
 one platform and asserted for three; and an unverified platform-share figure
 that was stated as fact while the evidence section called it unverified.
 
-A second amendment followed a review of the first. Corrected then: a risk that
-still budgeted a fork on Windows, contradicting the accepted cost this same
-document had just corrected, and which also omitted Linux while claiming to name
-the route each platform requires; an unsourced claim about how a
-content-protection system is packaged, stated as fact; a media exclusion that
-named no system or service and so could not be acted on or re-verified; and
-unverified items the evidence section claimed were in the risks list when they
-were not — browser-extension behaviour on recent macOS, passkey support, and
-what governs macOS memory at ten tabs, the last created by withdrawing the
-process-pool requirement without putting anything in its place.
+Three further amendments followed, all of them commits in this same change:
+`main` carries only the first amendment, so no merged version of this record has
+held the intervening text.
 
-The media exclusion was then rewritten twice more, both times within the same
-change rather than on `main`, so no merged version of this record carried the
-intervening text. The third version, from investigation rather than synthesis,
-corrected the second's examples: ARD and ZDF Mediathek are **not**
-DRM-protected, and had been named as the paradigm services that fail.
+The second corrected a risk that still budgeted a fork on Windows, contradicting
+the accepted cost this same document had just corrected; an unsourced claim about
+how a content-protection system is packaged, stated as fact; a media exclusion
+that named no system or service and so could not be acted on or re-verified; and
+two unverified items the evidence section claimed were in the risks list when
+they were not — browser-extension behaviour on recent macOS, and what governs
+macOS memory at ten tabs, the latter created by withdrawing the process-pool
+requirement without putting anything in its place.
+
+The third rewrote the media exclusion from investigation rather than synthesis,
+correcting the second's examples: ARD and ZDF Mediathek are **not**
+DRM-protected, and had been named as the paradigm services that fail. It also
+corrected risk 3's omission of Linux, and added the passkey risk the evidence
+section had likewise claimed was tracked — both of which an earlier version of
+this log misattributed to the second amendment.
 
 The fourth version corrected the third. It had recorded what WebView2 can play
 as unestablished and unanswerable — "no source reachable during investigation
@@ -424,5 +427,17 @@ key system. It had also read its own cited source selectively, treating an
 add-on's hardcoded request parameter as Joyn's only protection system when the
 same add-on handles PlayReady too, and had kept an uncitable claim about RTL+.
 Declaring a question unanswerable is as much an overstatement as answering it
-without evidence.
+without evidence. It also corrected the tiering row's Sequoia hardware floor.
+
+The fifth corrected the fourth, which had repeated the third's error one level
+deeper: it read a second hardcoded add-on literal as a fact about Joyn, claiming
+the add-on branches on a value the service returns when the add-on overwrites
+that value unconditionally. It had also labelled "Widevine is not an officially
+supported WebView2 key system" as verified while resting on an unanswered
+feature request, and cited a report backwards — that report shows Widevine
+loading and working intermittently. And it had argued the licensing wall is
+commercial rather than architectural, when hosting an OS webview adds an
+architectural wall a licensed fork does not face. The recurring failure across
+all five is the same: writing from synthesis without re-reading the source, in
+whichever direction the synthesis leans.
 
