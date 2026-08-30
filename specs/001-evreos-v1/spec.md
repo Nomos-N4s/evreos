@@ -243,26 +243,39 @@ unchanged.
 
 **Super-app platform**
 
-- **FR-016**: Where the member has not hidden it under FR-016a, a home surface
-  MUST present the installed first-party apps.
+- **FR-016**: Once the member has opened the home surface at least once and has
+  not since hidden it under FR-016a, the home surface MUST present the installed
+  first-party apps.
 - **FR-016a**: Apivo surfaces MUST be discoverable, opt-in and dismissible, as
   Principle IV requires — all three, of which the spec previously carried none.
-  *Discoverable*: a member who has never opened an Apivo surface MUST be able to
-  find the home surface from the browser's own menus. *Opt-in*: no Apivo surface
-  may appear in the browsing experience — new-tab page, chrome, or page content —
-  until the member opens it for the first time; a fresh profile presents a
-  browser and nothing else. *Dismissible*: a member MUST be able to remove any
-  first-party app from the home surface, to hide the home surface entirely, and
-  to dismiss the wallet and claim surfaces, and each choice MUST persist across
-  restarts and updates. An app update or a browser release MUST NOT reverse a
-  dismissal.
-- **FR-018a**: Nothing may be injected into a web page without an explicit member
-  action for that occasion, as Principle IV requires. A per-app grant under
-  FR-018 authorises an app to respond to such an action; it does not authorise
-  injection in its absence. In particular a cashback offer MUST NOT alter,
-  overlay or annotate a merchant's page until the member acts on that page on
-  that visit. FR-018 carries Principle IX's standing per-app grant, which is a
-  weaker thing and does not reach this.
+  *Discoverable*: a single neutral entry point to the home surface MUST be present
+  in the browser's own menus from first run, and every dismissible Apivo surface —
+  the home surface, the wallet, the claim surface — MUST remain reachable from
+  those menus after dismissal. That entry point is not itself an Apivo surface and
+  is exempt from the opt-in rule below; without the exemption, opt-in and
+  discoverability would be circular, since opening requires reaching and reaching
+  requires appearing. *Opt-in*: no Apivo surface may be rendered — in the new-tab
+  page, in the chrome beyond that menu entry, or in page content — until the
+  member has activated it once; a fresh profile presents a browser and nothing
+  else. *Dismissible*: a member MUST be able to remove any first-party app from
+  the home surface, to hide the home surface entirely, and to dismiss the wallet
+  and claim surfaces, and each choice MUST persist across restarts and updates. An
+  app update or a browser release MUST NOT reverse a dismissal. Dismissal removes
+  a surface from the browsing experience, never from the member's reach — FR-028
+  requires a withdrawal to be followable to a terminal state, which a wallet with
+  no way back would make unsatisfiable.
+- **FR-018a**: No Apivo surface, app, or commercial content may alter, overlay or
+  annotate a web page without an explicit member action on that page on that
+  visit, as Principle IV requires. A per-app grant under FR-018 authorises an app
+  to respond to such an action; it does not authorise injection in its absence.
+  In particular a cashback offer MUST NOT alter, overlay or annotate a merchant's
+  page until the member acts on that page on that visit. FR-018 carries Principle
+  IX's standing per-app grant, which is a weaker thing and does not reach this.
+  The browser's own privacy and usability functions — content blocking under
+  FR-008, which needs cosmetic filtering or blocked slots leave holes;
+  find-in-page under FR-005; error states under FR-015 — are not injection within
+  the meaning of this requirement: they carry no commercial interest and are
+  governed by the member's standing settings.
 - **FR-017**: Each app MUST declare its capabilities in a signed, versioned
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
