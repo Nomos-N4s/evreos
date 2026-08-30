@@ -126,26 +126,50 @@ surprise, and so no marketing claim outruns it.
   named these two as the paradigm DRM-dependent services; that was wrong, and
   it matters, because they are heavily used by this cohort.
 
-  **Verified — Joyn is Widevine-protected**: its browser playback request
-  declares `platform='browser'` and `protectionSystem='widevine'`. RTL+ shows
-  FairPlay asset names on Apple platforms, on weaker single-source evidence.
+  **Verified — Joyn uses DRM, and is multi-DRM rather than Widevine-only.** The
+  unofficial Kodi add-on `Maven85/plugin.video.joyn` requests playback with the
+  literals `platform='browser'` and `protectionSystem='widevine'`, but those are
+  the add-on's own hardcoded parameters, not Joyn's only option: the add-on
+  branches on a `drm` value Joyn returns and sets a license type of either
+  `com.widevine.alpha` or `com.microsoft.playready`, and ships a "Force PlayReady
+  DRM" setting that sends a Windows Edge user agent. So Joyn is protected, and
+  which system it serves depends on the client. RTL+ is **not characterised
+  here**: an earlier draft said it shows FairPlay asset names on Apple platforms,
+  citing no source, so the claim cannot be re-verified and is withdrawn.
 
-  **Widevine itself** is not in open-source Chromium; Brave and Vivaldi ship it
-  under agreements with Google, which has refused open-source projects. That is
-  a licensing wall in **both** architectures, so a fork would not have fixed it.
+  **Verified — PlayReady is reachable in WebView2 through EME, at the software
+  security level.** A 2024 WebView2 bug report names `playready.hardware` and
+  `playready.recommendation` (SL3000) as producing a black screen while
+  `playready.software` plays correctly (WebView2Feedback#4935, closed as
+  completed). An open Widevine feature request opens with "Webview2 support
+  playready already" (WebView2Feedback#4828). Microsoft's own WebView2
+  documentation says nothing about content protection at all.
 
-  **Not established, and not to be asserted either way:** whether WebView2 can
-  load a Widevine module, and whether it exposes PlayReady through the
-  platform's media stack. This is the decisive scoping question for the tier-1
-  platform and no source reachable during investigation answered it. Netflix's
-  own stated requirements were likewise unreachable. Until tested, assume
-  exclusion for the services shown to use DRM, and provide the hand-off; see the
-  risks below.
+  **Verified — Widevine is not an officially supported WebView2 key system.**
+  The feature request above is open and unanswered, and a separate report
+  describes Widevine authentication failing inconsistently where it loads
+  (WebView2Feedback#2021).
 
-  All of the above rests on convergent client evidence — independent players
-  that succeed without any DRM capability — rather than on broadcaster or vendor
-  statements, which were unreachable. That is strong for the negative claims and
-  is not a substitute for testing the positive ones.
+  **Widevine itself** is not in open-source Chromium; it is licensed per vendor,
+  and Google has refused at least one independent open-source browser outright.
+  Brave and Vivaldi carry it under commercial agreements — and both are Chromium
+  forks, so the wall is commercial rather than architectural. Forking Chromium
+  does not clear it by itself, and hosting an OS webview does not make it worse.
+  Whether a solo-founder project could obtain such an agreement is untested.
+
+  **Still unestablished:** whether PlayReady at the software security level is
+  sufficient for the services members actually use, since commercial streamers
+  commonly require a hardware tier for higher resolutions; whether a third-party
+  `WKWebView` host gets FairPlay through EME at all on tier 2; and what EME
+  WebKitGTK exposes on the deferred platform. Netflix's stated requirements were
+  unreachable during investigation. Provide the hand-off regardless — it is cheap
+  insurance — and see risk 8.
+
+  The negative claims rest on convergent client evidence: independent players
+  that succeed with no DRM capability at all. The positive ones rest on a
+  third-party add-on's request parameters and on vendor issue trackers, which
+  show what a service offers a particular client rather than what it requires of
+  every client. The negatives are strong; the positives are leads for the spike.
 - **No single cross-platform content-blocking primitive.** `wry` exposes no
   `WKContentRuleList` or `WebKitUserContentFilterStore` binding; what exists is
   top-level navigation gating, a macOS-14+ proxy config behind a feature flag,
