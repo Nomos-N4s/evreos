@@ -159,8 +159,10 @@ unchanged.
   system web runtime, first run must be a designed experience with honest
   progress and a resumable download, not a silent stall. This is a separate
   path from the cold-start budget.
-- **A site depends on protected media.** Streaming that requires content
-  protection cannot play. The member must be offered a clear hand-off to their
+- **A site depends on protected media.** Some streaming that requires content
+  protection may not play; which services are affected is unsettled and tracked
+  as Q-E11, so no exclusion is described to anyone until it is measured. Where
+  playback does fail, the member must be offered a clear hand-off to their
   hand-off browser rather than a failure they must diagnose.
 - **A site behaves differently across platforms.** The same page may render
   differently on tier 1 and tier 2, so a reported problem may not reproduce.
