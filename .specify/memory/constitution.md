@@ -61,8 +61,13 @@ Follow-up TODOs (status as of 1.1.0):
     name rather than `xcoder-es <capintobe@gmail.com>`, and so do not satisfy Principle
     I. They escape the check because it runs over `origin/<base>..HEAD`, which never
     contains the merge commit being created. Remedy: set the account's display name.
-  - OPEN — the merge gate above is fully mechanical and is not gated in CI, which the
-    preamble requires of a measurable rule. Tracked as issue #27.
+  - OPEN — the merge gate above is only partly mechanical. A check can verify that a
+    record exists, names the current head and merge base, and reports no confirmed
+    finding; it cannot verify that the round was adversarial, that the findings list is
+    complete, or that a dismissal came from someone other than the author. The
+    preamble's CI requirement is scoped to principles and Development Workflow is not
+    one, so this is a gap worth closing rather than one the preamble compels. Tracked as
+    issue #27, which also notes the record has no defined syntax to parse.
   - OPEN — the budget file and CI gates required by Principle II are not yet present.
     They are ratified here as a requirement, not described as current state, and land
     with milestone M0.
