@@ -349,6 +349,13 @@ unchanged.
 **Accessibility and language**
 
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
+- **FR-044**: Rendering MUST go through an interface the shell defines as the
+  consumer, with the system web runtime as the default implementation and a
+  headless implementation kept working from milestone M0, so the seam is proved by
+  a second implementation rather than asserted. The shell MUST be stable Rust with
+  no nightly features on the release path. No web engine may be bundled in a
+  release: the bytes SC-001 counts are the shell's own. Principle III requires all
+  three and the spec carried none, while ADR-0001 assumes them throughout.
 - **FR-043**: Every budget Principle II names — download size, installed size,
   cold start, shell memory overhead, idle CPU, chrome input latency — MUST live
   in one budget file in this repository, and MUST be enforced by the CI gates the
@@ -681,7 +688,9 @@ real regression, which is the same reason the absolute figures are held.
   20% bar here and fail it there by a factor of eight. 40% is a placeholder, not
   a measurement; Q-E15 records the ratified bar as a founder decision. Stating no
   threshold at all would leave the pilot's stated job — month-two retention —
-  with no criterion any build or release could fail. It is derived from server-side account activity, which is
+  with no criterion the pilot could fail; measured after release rather than at
+  acceptance, it gates no build. It is derived from server-side account activity,
+  which is
   transactional rather than diagnostic and needs no opt-in. **Signed-out
   retention** is reported alongside it over weekly enrolment cohorts (FR-039a),
   which are not the same cohorts as the signed-in figure and MUST NOT be compared
@@ -715,7 +724,8 @@ ecosystems; a built-in password manager; iOS; synchronisation across devices; a
 virtual private network; crypto or web3 surfaces; and assistant sidebars.
 
 Permanently excluded by the constitution: advert injection; silent affiliate
-attribution; and server-side collection of browsing history.
+attribution; server-side collection of browsing history; and bundling a web
+engine, in any release, on any platform.
 
 Added on the evidence recorded in ADR-0001, and stated here so they never reach
 a landing page:
