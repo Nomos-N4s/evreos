@@ -294,21 +294,30 @@ unchanged.
   requires a withdrawal to be followable to a terminal state, which a wallet with
   no way back would make unsatisfiable.
 - **FR-018a**: Nothing may be injected into a web page without an explicit member
-  action on that page on that visit, as Principle IV requires — the principle's
-  own subject, which this requirement does not narrow. A per-app grant under FR-018 authorises an app
-  to respond to such an action; it does not authorise injection in its absence.
-  In particular a cashback offer MUST NOT alter, overlay or annotate a merchant's
-  page until the member acts on that page on that visit. FR-018 carries Principle
-  IX's standing per-app grant, which is a weaker thing and does not reach this.
-  The browser's own functions are not injection within the meaning of this
-  requirement: they are the shell speaking on the member's behalf, they carry no
-  commercial interest, and they place no third party's content in the page. That
-  covers content blocking under FR-008, whose cosmetic filtering is what keeps
-  blocked slots from leaving holes; find-in-page under FR-005; error and failure
-  states under FR-015; the site-credential hand-off offer under FR-015a; and the
-  capability hand-off under FR-037. The test is the characterisation, not the
-  list: a later shell function meeting it is equally exempt, and a commercial one
-  is not, however it is packaged.
+  action on that page on that visit. Principle IV states the rule for "that
+  occasion" and leaves an occasion undefined; this requirement fixes it at the
+  narrowest available reading, so that no standing permission can supply one. A
+  per-app grant under FR-018 authorises an app to respond to such an action; it
+  does not authorise injection in its absence. In particular a cashback offer MUST
+  NOT alter, overlay or annotate a merchant's page until the member acts on that
+  page on that visit. FR-018 carries Principle IX's standing per-app grant, which
+  is a weaker thing and does not reach this.
+
+  This requirement reads *injected* as the placing of third-party or commercial
+  content in a page, not as any modification of one. That reading is narrower than
+  the words of Principle IV, and it is stated here rather than assumed silently.
+  Its justification is that the literal reading forbids content blocking,
+  find-in-page highlighting and error states, and the principle is not there to
+  forbid those; the honest form of that argument is a stated interpretation with a
+  test, not a claim that no interpretation is being made. The test is a
+  characterisation, and all three parts must hold: the shell speaks on the
+  member's behalf, carries no commercial interest, and places no third party's
+  content in the page. Content blocking under FR-008 meets it, as do find-in-page
+  under FR-005, error and failure states under FR-015, the site-credential
+  hand-off offer under FR-015a, and the capability hand-off under FR-037. A later
+  shell function meeting the test is equally exempt; a commercial one is not,
+  however it is packaged. FR-018b forecloses the case the test would otherwise be
+  argued over, advertising, without needing it.
 - **FR-017**: Each app MUST declare its capabilities in a signed, versioned
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
