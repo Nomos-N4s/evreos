@@ -159,11 +159,11 @@ unchanged.
   system web runtime, first run must be a designed experience with honest
   progress and a resumable download, not a silent stall. This is a separate
   path from the cold-start budget.
-- **A site depends on protected media.** On tier 2 the content-protection
-  module most streaming services require is unavailable, so such playback fails.
-  On tier 1, whether the platform-native system covers any service members use
-  is untested (Q-E11), so no tier-1 capability is claimed in either direction
-  until it is measured. Wherever playback does fail, FR-037 applies and the
+- **A site depends on protected media.** On neither tier is the outcome
+  established: on tier 1 whether the platform-native system covers any service
+  members use is untested (Q-E11), and on tier 2 whether that platform's system
+  is reachable to a third-party host is untested (Q-E11b). No capability is
+  claimed in either direction on either tier until measured. Wherever playback does fail, FR-037 applies and the
   member must be offered a clear hand-off to their
   hand-off browser rather than a failure they must diagnose.
 - **A site behaves differently across platforms.** The same page may render
@@ -670,16 +670,20 @@ a landing page:
   the tier-1 platform, without interface surfaces and by manual installation;
   restricted by operating-system version on tier 2; unavailable on the deferred
   platform. It cannot be offered consistently and so is not offered.
-- **Playback of content-protected streaming media.** Excluded from v1 on tier 2,
-  and not claimed on tier 1 until Q-E11 is measured. The system most streaming
-  services require is not in open-source Chromium and is licensed per vendor, so
-  a commercial wall stands whichever engine strategy is chosen; whether this
-  architecture adds a technical wall on top of it is unestablished, and ADR-0001
-  forbids asserting that it does until the mechanism is measured. A different
-  system native to the tier-1 platform is reachable there, which is why no tier-1
-  exclusion is claimed; whether it covers the services members use is untested —
-  see Q-E11. The German public broadcasters need no content protection at all.
-  Wherever playback does fail, FR-037's hand-off applies.
+- **Playback of content-protected streaming media.** Not claimed on either tier
+  until measured, and not excluded on either tier either. The system most
+  streaming services require is not in open-source Chromium and is licensed per
+  vendor, so a commercial wall stands whichever engine strategy is chosen;
+  whether this architecture adds a technical wall on top of it is unestablished,
+  and ADR-0001 forbids asserting that it does until the mechanism is measured.
+  A different system native to the tier-1 platform is reachable there, though
+  whether it covers the services members use is untested (Q-E11). On tier 2,
+  whether the platform's own system is reachable to a third-party host is equally
+  unestablished (Q-E11b), and no service is yet identified as depending on it —
+  so this specification asserts no tier-2 exclusion, having previously asserted
+  one the evidence did not support. The German public broadcasters need no
+  content protection at all. Wherever playback does fail, FR-037's hand-off
+  applies.
 
 ## Platform Scope
 
@@ -745,6 +749,10 @@ resolved silently by this specification.
   holding campaign records and accepting a redemption. FR-029 ships on the
   assumption that it does, Principle V forbids the client producing either, and
   SC-010 rests on the answer.
+- **Q-E11b** Whether the content-protection system native to the tier-2 platform
+  is reachable to a third-party host, and which services members use depend on
+  it. ADR-0001 records both as unestablished; the spec previously asserted a flat
+  tier-2 exclusion on an evidence base that covered neither.
 - **Q-E12** Whether FR-008 can be met on macOS 13 without the macOS-14 proxy
   route ADR-0001 records, or whether the tier-2 floor must move to macOS 14.
   Blocking parity on tier 2 MUST be measured before the floor is treated as
