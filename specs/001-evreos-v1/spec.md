@@ -351,8 +351,11 @@ unchanged.
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
 - **FR-044**: Rendering MUST go through an interface the shell defines as the
   consumer, with the system web runtime as the default implementation and a
-  headless implementation kept working from milestone M0, so the seam is proved by
-  a second implementation rather than asserted. The shell MUST be stable Rust with
+  headless implementation kept working from day one, as Principle III requires —
+  which in this specification means from milestone M0, the first point at which
+  the shell builds and runs in CI and therefore the earliest point at which a
+  second implementation can be kept working at all. The seam is proved by that
+  second implementation rather than asserted. The shell MUST be stable Rust with
   no nightly features on the release path. No web engine may be bundled in a
   release: the bytes SC-001 counts are the shell's own. Principle III requires all
   three and the spec carried none, while ADR-0001 assumes them throughout.
