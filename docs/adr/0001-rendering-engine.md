@@ -37,7 +37,7 @@ input, and the departure is deliberate:
 | Platform | Tier | Meaning |
 | --- | --- | --- |
 | Windows | 1 | Release criteria apply. WebView2 is evergreen Chromium, security-patched by Microsoft. |
-| macOS | 2 | Ships at a minimum OS version. Clarify proposes **macOS 13**, which is not yet on `main` and which clarify itself leaves open (its Q-E12 asks whether blocking parity is achievable there without the macOS-14 proxy route, or whether the floor must move to 14). Treat 13 as provisional. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement depending on it — including the macOS-14 proxy route named below, which a floor of 13 prevents relying on as a baseline though it remains available above 14, and the `WKWebExtension` floor of 15.4, two releases higher still. |
+| macOS | 2 | Ships at a minimum OS version. Clarify proposes **macOS 13**, which is not yet on `main` and which clarify itself leaves open (its Q-E12 asks whether blocking parity is achievable there without the macOS-14 proxy route, or whether the floor must move to 14). Treat 13 as provisional. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement depending on it — including the macOS-14 proxy route named below, which a floor of 13 prevents relying on as a baseline though it remains available above 14, and the `WKWebExtension` floor of 15.4, two major releases above the proposed floor of 13. |
 | Linux | Separate decision | Removed from "cross-platform". Its own budget row, its own go/no-go. |
 
 The tiering rests on a market assumption that is **not yet verified**: that the
@@ -164,8 +164,10 @@ surprise, and so no marketing claim outruns it.
   a WinUI2/UWP WebView2 host. The Win32 case is untested; see risk 8.** A 2024
   WebView2 bug report names `playready.hardware` and
   `playready.recommendation` (SL3000) as producing a black screen while
-  `playready.software` plays correctly (WebView2Feedback#4935, since closed; the
-  closure reason was not reproducible). An open Widevine feature request states in
+  `playready.software` plays correctly (WebView2Feedback#4935, against the Stable
+  runtime channel at runtime 130.0.2849.80; since closed, and the reason for
+  closure could not be retrieved so none is recorded here). An open Widevine feature
+  request states in
   passing that "Webview2
   support playready already" (WebView2Feedback#4828) — a requester's claim, not a
   vendor statement. Microsoft's WebView2 documentation carries no statement of
@@ -174,18 +176,21 @@ surprise, and so no marketing claim outruns it.
   WinUI2/UWP host rather than the Win32 desktop shell this record is about, and a
   separate open report says the fixed-version runtime does not support PlayReady
   at all (WebView2Feedback#4632), which would tie PlayReady to the evergreen
-  distribution mode — no cost here, since rationale 2 already excludes the
-  fixed-version runtime on size grounds.
+  distribution mode — no cost here, since the tiering row already commits to
+  evergreen and rationale 2 rejects the fixed-version runtime on size grounds.
+  The positive datapoint is itself on the Stable channel, so the two reports do
+  not conflict.
 
   **Unestablished — whether Widevine is usable in WebView2.** An open, unanswered
   feature request asks Microsoft to support it (WebView2Feedback#4828), which is
   evidence of no *documented* support. Against that, a 2021 report on runtime 94
   describes Widevine in WebView2 loading and working intermittently, failing at
   the licence-certificate endpoint (WebView2Feedback#2021) — the module was
-  reachable, though that report is against the fixed-version runtime, so the
-  evergreen case is untested. The same distribution caveat applies to #4632 below:
-  this record cannot discount that report for being fixed-version and rely on this
-  one. Neither settles it; it belongs in risk 8.
+  reachable, though that report is against the fixed-version runtime, so what an
+  evergreen host gets is untested. The asymmetry runs the other way from the
+  PlayReady case above, where the positive report is on the Stable channel and the
+  negative is fixed-version; here the only report at all is fixed-version. Neither
+  settles it; it belongs in risk 8.
 
   **Widevine itself** is not in open-source Chromium; it is licensed per vendor,
   and Google has refused at least one independent open-source browser outright.
@@ -194,11 +199,12 @@ surprise, and so no marketing claim outruns it.
   architecture adds a second, technical wall is **unestablished**: a licensed fork
   ships the module in its own binary, whereas how — or whether — an OS-webview
   host can supply or reach a module is untested. The intermittent-success report
-  above shows a module reachable inside WebView2 by an embedder that is not a
-  Widevine licensee. Under whose licence that module was operating is **not
-  established**: nothing located says whether the WebView2 Runtime carries Widevine
-  or on what terms, and the Runtime is a separate redistributable from the Edge
-  browser, which is why the feature request above exists at all. Do not assert that a
+  above shows a module reachable inside WebView2 by a third-party embedder;
+  nothing located establishes whether that embedder held a Widevine agreement.
+  Under whose licence the module was operating is **not established**: nothing
+  located says whether the WebView2 Runtime carries Widevine or on what terms, and
+  Microsoft documents the Runtime as a separate redistributable from the Edge
+  browser, with its own update policy. Do not assert that a
   Widevine agreement would be unactionable here; establish the mechanism in risk 8
   first. Whether a solo-founder project could
   obtain such an agreement is separately untested.
@@ -228,8 +234,9 @@ surprise, and so no marketing claim outruns it.
 - **Hosting third-party Chrome extensions is not a promise Evreos can make.**
   WebView2 has genuine Chrome-extension hosting, but UI-less and sideload-only;
   macOS gained `WKWebExtension` only in 15.4, so it requires Sequoia, whose
-  hardware floor runs from 2017 to 2020 depending on the model line — iMac Pro 2017,
-  MacBook Pro and Mac mini 2018, iMac and Mac Pro 2019, MacBook Air 2020; Linux has
+  hardware floor runs from 2017 to 2020 for every model line that predates it —
+  iMac Pro 2017, MacBook Pro and Mac mini 2018, iMac and Mac Pro 2019, MacBook Air
+  2020 — with Mac Studio supported from its 2022 introduction; Linux has
   nothing and will not. Note the trap: `wry`'s Linux `with_extensions_path` shares
   a name with the Windows method but loads a shared object, not a `manifest.json`.
   **The cashback wallet is therefore built once, natively in the shell**, using
@@ -330,10 +337,10 @@ surprise, and so no marketing claim outruns it.
    FairPlay. Also whether Widevine is usable in WebView2 at all, which the
    capability floor now records as unestablished, and the mechanism itself:
    whether an OS-webview host can supply or reach a key-system module, or is
-   confined to what the host runtime already exposes, and whether an embedder
-   under whose licence, if any, a module reached from an OS-webview host operates. The
-   floor forbids asserting either
-   answer until this is measured. Whether a solo-founder project could obtain a
+   confined to what the host runtime already exposes; and under whose licence, if
+   any, a module reached from an OS-webview host operates. The floor forbids
+   asserting an answer to any of these until they are measured. Whether a solo-founder
+   project could obtain a
    Widevine agreement of its own is a commercial question, not a spike. On Linux, if
    it proceeds: what EME WebKitGTK exposes in distribution builds. The public
    broadcasters are shown by convergent client evidence to need none of this on the
@@ -451,7 +458,7 @@ stale tracker-issue state; the accessibility rationale, which was evidenced on
 one platform and asserted for three; and an unverified platform-share figure
 that was stated as fact while the evidence section called it unverified.
 
-Five further amendments followed, all of them commits in this same change:
+Six further amendments followed, all of them commits in this same change:
 `main` carries only the first amendment, so no merged version of this record has
 held the intervening text.
 
@@ -479,7 +486,9 @@ key system. It had also read its own cited source selectively, treating an
 add-on's hardcoded request parameter as Joyn's only protection system when the
 same add-on handles PlayReady too, and had kept an uncitable claim about RTL+.
 Declaring a question unanswerable is as much an overstatement as answering it
-without evidence. It also corrected the tiering row's Sequoia hardware floor.
+without evidence. It also corrected the extensions bullet's Sequoia hardware floor,
+and recorded
+the macOS floor in the tiering row.
 
 The fifth corrected the fourth, which had repeated the third's error one level
 deeper: it read a second hardcoded add-on literal as a fact about Joyn, claiming
@@ -521,10 +530,14 @@ without a source that the WebView2 Runtime carries Edge's Widevine licence.
 
 The recurring failure across the first six is the same: writing from synthesis
 without re-reading the source, in whichever direction the synthesis leans. The
-structural cause was misdiagnosed as five locations. Content-protection and
-blocking claims live in **eleven**: the tiering row, both capability-floor bullets,
-risks 2, 5, 8 and 11, all three evidence-status paragraphs, and this log. The
-sixth amendment propagated to the five it had named and missed the
-content-blocking bullet, which is where its own scoping error survived. An
-amendment to any of them is not finished until all eleven have been re-read.
+structural cause was misdiagnosed twice — first as five locations, then as
+eleven. Content-protection, extension-floor and blocking claims live in
+**thirteen**: the tiering row; all three capability-floor bullets (content
+protection, content blocking, extensions); risks 2, 5, 8, 10 and 11; all three
+evidence-status paragraphs; and this log. The sixth amendment propagated to the
+five it had named and missed the content-blocking bullet, where its own scoping
+error survived; the seventh named eleven and missed the extensions bullet and
+risk 10, both of which it had just edited. An amendment to any of them is not
+finished until all thirteen have been re-read — and this count has now been wrong
+twice, so verify it rather than trusting it.
 
