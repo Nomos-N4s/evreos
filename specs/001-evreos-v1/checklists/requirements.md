@@ -33,6 +33,23 @@
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
 
+### Re-validation after clarify, 2026-08-30
+
+Five clarifications were integrated (see the spec's Clarifications section). All
+checklist items still pass; the re-check improved two of them materially rather
+than changing their state:
+
+- *Requirements are testable and unambiguous* was previously passing on the
+  strength of wording. SC-011 was in fact **untestable as written** — it required
+  a retention figure the privacy posture made unmeasurable. That contradiction is
+  now resolved by two separately reported measurements (FR-039, FR-040).
+- *Scope is clearly bounded* is stronger now that the tier-2 operating-system
+  floor is declared, the default search posture is fixed, and the credential
+  limitation is stated rather than implied.
+
+Four of the eleven open decisions are settled and two are partly settled. The
+remainder are recorded in Open Decisions with what specifically stays open.
+
 ### Validation record
 
 **No `[NEEDS CLARIFICATION]` markers are used.** The ten founder decisions are
