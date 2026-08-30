@@ -366,10 +366,13 @@ unchanged.
 - **FR-035**: Interface text MUST be available in German, Greek and English,
   keyed by the BCP-47 primary language subtag alone — `de`, `el`, `en` — with no
   region subtag in the key and place never fused into the language value.
-  Language and place MUST travel as separate parameters in every request to an
-  Apivo surface, not only in the merchant catalogue, as Principle VII requires.
-  "Keyed by language alone" alone would be satisfied by `de-DE`, which re-fuses
-  the two.
+  Language and place MUST be represented as two separate values wherever either
+  appears — in stored preferences, in interface state, on the distribution page
+  under FR-041, and in every request Evreos makes to an Apivo service, not only
+  in the merchant catalogue. Principle VII says "everywhere they appear,
+  including in requests to Apivo surfaces": the Apivo case is its example, not
+  its scope. "Keyed by language alone" would on its own be satisfied by `de-DE`,
+  which re-fuses the two.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
   layouts.
 
