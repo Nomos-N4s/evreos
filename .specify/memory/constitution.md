@@ -13,9 +13,10 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Development Workflow gains a merge gate: a pull request is not mergeable until a
     review round is recorded green against the exact diff that would merge, with the
     record on the pull request naming head and base SHAs and the finding counts.
-  - The previous wording allowed a round's outcome to be recorded "to the founder",
-    which made the gate unverifiable by anyone reading the pull request. That option is
-    withdrawn for the gate.
+  - The obligation to record every round's outcome is retained and stays on the review
+    bullet; what is withdrawn is its "or to the founder" destination, because a record
+    only the founder can see makes the gate unverifiable by anyone reading the pull
+    request. Every round, green or not, is now recorded on the pull request itself.
   - Reason for amending here rather than in the repository rules file: this document
     supersedes that one, so a stricter rule placed there was void wherever the two
     disagreed. Workflow rules now live here; the rules file defers to this document
@@ -196,6 +197,9 @@ of them requires a MAJOR amendment to this constitution:
   request's full current diff MUST run: independent reviewers instructed to refute the
   changes, with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
+  The outcome of every round, green or not, MUST be recorded on the pull request, so that
+  a round which found something stays traceable to the fix that followed it. The next
+  bullet adds what a green record must contain to satisfy the merge gate.
 - A pull request is NOT mergeable until a review round has been recorded green — no
   confirmed findings — against the exact diff that would merge. The record lives on the
   pull request, in its body or a comment, and states the head SHA and the base SHA it
