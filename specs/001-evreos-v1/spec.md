@@ -315,6 +315,15 @@ unchanged.
   rendered in the browser's own chrome, never in the page.
 - **FR-019**: App surfaces MUST be updatable without releasing a new browser
   version.
+- **FR-019a**: Every delivered app surface MUST be signed, and the client MUST
+  verify that signature before rendering the surface or writing it to the FR-020
+  cache; an unverifiable surface MUST be refused, the cached copy retained, and
+  the refusal stated rather than shown as a blank surface, which is what FR-020
+  already requires of the offline case. Principle IX requires apps to ship as
+  signed surfaces; FR-017 signs the manifest, which covers the capability
+  declaration and not the surface, so a compromised delivery host or an
+  intercepting network could otherwise render modified content inside the shell
+  that holds the wallet.
 - **FR-020**: App surfaces MUST be cached so that a stated offline state is
   presented rather than a blank surface.
 
