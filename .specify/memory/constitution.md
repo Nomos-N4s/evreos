@@ -35,10 +35,13 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     and without it a merge over confirmed blockers could be regularised by a comment
     posted afterwards. The issue this amendment closes records the adjacent failure:
     two pull requests merged with no round recorded and no override stated at all.
-  - The review dimensions — correctness, security, internal consistency, rules
-    compliance — move here from the repository rules file, which was the only place that
-    stated them. Deferring to this document would otherwise have deleted them. The fourth
-    dimension keeps its original scope deliberately: `CLAUDE.md` retains obligations that
+  - The review dimensions — correctness, security, consistency, rules compliance — move
+    here from the repository rules file, which was the only place that stated them.
+    Deferring to this document would otherwise have deleted them. "Consistency" is spelled
+    out rather than narrowed to "internal": the dominant defect across five rounds has been
+    a statement in a change contradicting untouched text elsewhere, which a reviewer
+    reading "internal consistency" is licensed to skip. The fourth dimension keeps its
+    original scope deliberately: `CLAUDE.md` retains obligations that
     rest on review alone — the co-authorship trailer ban, the branch prefixes, the Spec
     Kit directory rule — so narrowing it to this document would have orphaned them.
   - Reason for amending here rather than in the repository rules file: this document
@@ -230,9 +233,10 @@ of them requires a MAJOR amendment to this constitution:
   budget gate fails the merge.
 - After every push of commits to an open pull request, an adversarial review of the pull
   request's full current diff MUST run: independent reviewers instructed to refute the
-  changes across correctness, security, internal consistency, and compliance with this
-  constitution and with the repository rules in `CLAUDE.md`, with findings verified before
-  they count. Confirmed findings are fixed and pushed — which triggers a new review round
+  changes across correctness, security, consistency — within the change and against the
+  rest of the repository, including text the change does not touch — and compliance with
+  this constitution and with the repository rules in `CLAUDE.md`, with findings verified
+  before they count. Confirmed findings are fixed and pushed — which triggers a new review round
   — before the pull request is ready to merge. The outcome of every round, green or not,
   MUST be recorded on the pull request as a new comment, before the next push and in any
   case before the pull request is merged or closed or an override is stated. A record MUST
