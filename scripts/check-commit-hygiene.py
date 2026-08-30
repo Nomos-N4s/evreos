@@ -5,8 +5,7 @@ WHAT THIS CHECKS, and why the scope is narrow.
 
 The real, recurring problem is mechanical: tooling appends a fixed footer or a
 `Co-Authored-By:` trailer to a commit message or a pull request body. Those are
-literal strings in known shapes, so they can be detected exactly, with no false
-positives.
+literal strings in known shapes, so they can be detected exactly.
 
 An earlier version of this script also tried to detect attribution written as
 free English ("assisted by X", "X's implementation"). Three rounds of adversarial
@@ -17,14 +16,22 @@ trailer. Each pattern that caught more phrasings also rejected more legitimate
 commits. Blocking a real commit is worse than missing prose no tool emits, so
 prose detection was removed.
 
-Free-prose attribution remains forbidden by Principle I of the constitution. It is enforced by review, not by this script, and this script does
-not pretend otherwise.
+Free-prose attribution remains forbidden by Principle I of the constitution.
+It is enforced by review, not by this script, and this script does not pretend
+otherwise.
 
-CHECKED (deterministic, no false positives by construction):
+CHECKED (deterministic; the trailer checks have no false positives by
+construction, the footer list does NOT — see the known defect below):
   * commit author is the founder; committer is the founder or the forge
   * a git trailer in the trailing trailer block whose value names an AI identity
   * a literal generator footer, matched even inside code fences
   * Conventional Commits subject, and an issue reference
+
+KNOWN DEFECT: the generator-footer strings are matched against the whole
+normalised text rather than a trailer block, so they fire on ordinary prose. A
+sentence naming a tool this project integrates with — which Principle I's
+carve-out expressly permits — is rejected, and so is a layout sentence using an
+everyday browser word that sits in the pattern. Tracked as issue #25.
 """
 import argparse
 import re
