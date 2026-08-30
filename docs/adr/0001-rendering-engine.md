@@ -141,12 +141,20 @@ surprise, and so no marketing claim outruns it.
   unofficial Kodi add-on `Maven85/plugin.video.joyn` requests playback with the
   literals `platform='browser'` and `protectionSystem='widevine'`, then
   unconditionally overwrites the response's `drm` key with `'widevine'`
-  (`libjoyn_video.py:146`, the only writer of that key). So the
+  (`libjoyn_video.py:146`, the only assignment to that key in the add-on, applied
+  to the server's parsed response and so discarding any `drm` value Joyn returns). So the
   `com.microsoft.playready` branch at `plugin.py:889` is unreachable, and the
   add-on's "Force PlayReady DRM (Android only)" setting — gated on
   `System.Platform.Android` — cannot reach it either. This source establishes
-  that Joyn is DRM-protected and that Widevine works for it. It establishes
-  nothing about whether Joyn offers PlayReady to any client. RTL+ is **not
+  that Joyn is DRM-protected and that a maintained third-party client obtains
+  playback by requesting Widevine; it does not itself demonstrate successful
+  decryption. Whether Joyn offers PlayReady to any client is not established here
+  — but the add-on's author evidently believed it does, since the Force PlayReady
+  setting still takes effect at `libjoyn_video.py:133`, appending a Windows Edge
+  user agent to the request, and the PlayReady branch is fully written including
+  its SOAP licence-acquisition header. That is a third party's belief, not Joyn's
+  statement, and the branch consuming it is dead: a lead for the spike, not a
+  finding. RTL+ is **not
   characterised here**: an earlier draft said it shows FairPlay asset names on
   Apple platforms, citing no source, so the claim is withdrawn.
 
@@ -174,12 +182,14 @@ surprise, and so no marketing claim outruns it.
   **Widevine itself** is not in open-source Chromium; it is licensed per vendor,
   and Google has refused at least one independent open-source browser outright.
   Brave and Vivaldi carry it under commercial agreements, and both are Chromium
-  forks, so forking does not clear the commercial wall by itself. Hosting an OS
-  webview adds an architectural wall on top of it: a licensed fork can ship the
-  module in its own binary, whereas an OS-webview host can only use the key
-  systems its host runtime already exposes. A Widevine agreement would therefore
-  not be actionable under this architecture even if one were obtainable, which is
-  itself untested for a solo-founder project.
+  forks, so forking does not clear the commercial wall by itself. Whether this
+  architecture adds a second, technical wall is **unestablished**: a licensed fork
+  ships the module in its own binary, whereas how — or whether — an OS-webview
+  host can supply or reach a module is untested, and the intermittent-success
+  report above suggests one was reachable in an older runtime with no agreement at
+  all. Do not assert that a Widevine agreement would be unactionable here;
+  establish the mechanism in risk 8 first. Whether a solo-founder project could
+  obtain such an agreement is separately untested.
 
   **Still unestablished:** whether PlayReady at the software security level is
   sufficient for the services members actually use, since commercial streamers
@@ -326,8 +336,8 @@ surprise, and so no marketing claim outruns it.
     is treated as forced rather than chosen.
 11. **Tier-2 blocking parity at the declared floor.** On macOS 13 the macOS-14
     proxy route is unavailable, leaving top-level navigation gating as the only
-    route this record identifies. Measure parity before the floor is fixed; the
-    v1 spec tracks the same question as its Q-E12.
+    route this record identifies. Measure parity before the floor is fixed;
+    clarify tracks the same question as its Q-E12, which is not yet on `main`.
 12. **Passkey support on all three platforms, tier 1 included.** The capability
     floor calls it uncertain everywhere — entitlement-gated on macOS, absent from
     WebKitGTK release notes, and undocumented for WebView2 — and nothing tracked
@@ -403,7 +413,7 @@ stale tracker-issue state; the accessibility rationale, which was evidenced on
 one platform and asserted for three; and an unverified platform-share figure
 that was stated as fact while the evidence section called it unverified.
 
-Three further amendments followed, all of them commits in this same change:
+Four further amendments followed, all of them commits in this same change:
 `main` carries only the first amendment, so no merged version of this record has
 held the intervening text.
 
