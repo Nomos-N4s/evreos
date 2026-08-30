@@ -263,8 +263,15 @@ unchanged.
 
 - **FR-016**: The home surface MUST present the installed first-party apps
   whenever the member opens it. Hiding it under FR-016a removes it from the
-  browsing experience — the new-tab page and the chrome — not from the menu entry,
-  and opening it from that entry clears the hidden state.
+  browsing experience — the new-tab page and the chrome — and never from the menu
+  entry that requirement guarantees. Opening it from that entry while it is hidden
+  presents it for that occasion only: the hidden state persists, and clearing it
+  MUST be a separate choice the member makes deliberately. An earlier version
+  cleared the hidden state on opening, which made dismissal self-reversing. A
+  member who hid the home surface and later opened it to reach the wallet would
+  have found it back in the new-tab page, so FR-016a's dismissal — a release
+  criterion under Principle IV — would have held only until the member used the
+  reachability the same requirement guarantees.
 - **FR-016a**: Apivo surfaces MUST be discoverable, opt-in and dismissible, as
   Principle IV requires — all three, of which the spec previously carried none.
   *Discoverable*: a single neutral entry point to the home surface MUST be present
