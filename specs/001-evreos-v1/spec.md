@@ -259,8 +259,12 @@ unchanged.
 
 - **FR-024**: Users MUST be able to browse the merchant catalogue, with language
   and place as independent parameters.
-- **FR-025**: Opening an offer MUST route through a tracked click-out, and the
-  user MUST be told that tracking is taking place.
+- **FR-025**: Opening an offer MUST route through a click-out URL issued by the
+  service for that occasion, and the user MUST be told that tracking is taking
+  place. The client MUST NOT construct, template, or modify an affiliate link or
+  any of its parameters. Principle V prohibits the client building an affiliate
+  deeplink, and building the redirect client-side is the obvious implementation,
+  so the prohibition is stated where it will be read.
 - **FR-026**: The wallet MUST present pending, confirmed and payable amounts
   exactly as reported by the service, and MUST NOT compute or estimate any
   amount.
@@ -270,8 +274,13 @@ unchanged.
   to a terminal state.
 - **FR-029**: Member-facing claim-code redemption — scanning or entering a code,
   binding the member to an existing campaign, and showing the resulting entry in
-  the wallet — MUST work in v1. It is a distinct flow from FR-029a and is not
-  blocked by it.
+  the wallet — MUST work in v1, against campaigns already held by the existing
+  service. It is a distinct flow from FR-029a and is not blocked by it. It does
+  depend on the existing service holding campaign records and accepting a
+  redemption, because Principle V forbids the client producing either; if that
+  service does not serve redemption, FR-029 is blocked by the same decision as
+  FR-029a and both ship disabled. Confirm before v1 scope is treated as settled
+  (Q-E11a), since SC-010 rests on the answer.
 - **FR-029a**: Partner-facing campaign administration, by which a partner
   business creates or funds a campaign, MUST be present in the interface and
   disabled until its backing service exists, with an honest explanation rather
