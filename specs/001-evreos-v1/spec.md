@@ -619,21 +619,28 @@ real regression, which is the same reason the absolute figures are held.
   record at least one further Evreos-originated account request (FR-040) on any
   day from 24 to 30 after that first sign-in. The clock is the sign-in, not the
   install: the service has no install date, FR-040 authorises no such datum, and
-  Principle VI closes the substitutes. **This measure states no threshold.** The
-  base criterion's 20% applied to everyone who installs; this one applies to
+  Principle VI closes the substitutes. The figure is **provisional at 40%**,
+  replaced once by recorded founder decision on the first two full cohorts and
+  tighten-only thereafter — the same instrument SC-002 uses. The base criterion's
+  20% applied to everyone who installs and does not transfer: this population is
   members who sign in, a self-selected minority whose retention is expected to be
-  materially higher — 25 of 100 sign-ins out of 1,000 installs would pass a 20%
-  bar here and fail it there by a factor of eight. Carrying the number across
-  unexamined would be a large undisclosed loosening of the product's headline
-  bar, so Q-E15 records the bar for this population as a founder decision this
-  specification does not make. It is derived from server-side account activity, which is
+  materially higher, and 25 of 100 sign-ins out of 1,000 installs would pass a
+  20% bar here and fail it there by a factor of eight. 40% is a placeholder, not
+  a measurement; Q-E15 records the ratified bar as a founder decision. Stating no
+  threshold at all would leave the pilot's stated job — month-two retention —
+  with no criterion any build or release could fail. It is derived from server-side account activity, which is
   transactional rather than diagnostic and needs no opt-in. **Signed-out
   retention** is reported alongside it over weekly enrolment cohorts (FR-039a),
   which are not the same cohorts as the signed-in figure and MUST NOT be compared
   item to item. It is a self-selected sample and MUST be labelled as such wherever
-  it is reported. Its opt-in rate cannot be computed — the denominator would
-  require counting installs that did not opt in, which FR-039a forbids by
-  construction — and that the rate is unknown MUST be stated alongside the figure.
+  it is reported. Its opt-in rate is estimated against the
+  aggregate count of daily update-checking installs, which FR-014's update channel
+  produces without any per-install identifier, and MUST be published with the
+  figure; where that estimate is unavailable, that the rate is unknown MUST be
+  stated instead. An earlier version said the rate could not be computed because
+  FR-039a forbids counting installs that did not opt in — but FR-039a governs the
+  diagnostic signal only, and an aggregate active-install count is the standard
+  denominator and needs no identifier.
   It carries no bar and is reported for direction. A cohort of fewer than 200 —
   first sign-ins for the signed-in figure, enrolment reports for the signed-out
   one — is reported with confidence intervals rather than as a point figure.
