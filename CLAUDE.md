@@ -38,11 +38,14 @@
   pushed — which triggers a new review round — before the PR is ready to
   merge. Record the outcome of each round on the PR or to the founder.
 - A pull request is NOT mergeable until a review round has been recorded green
-  — no confirmed findings — against its CURRENT head. A new push invalidates
-  the previous round: the head changed, so the diff that was reviewed no longer
-  exists. Green checks are not a substitute; the two run in parallel and the
-  merge will win. The founder may override, but the override is stated on the
-  pull request, never an accident of timing.
+  — no confirmed findings — against the exact diff that would merge. The record
+  lives ON THE PULL REQUEST, in its body or a comment, and names the head SHA it
+  covers; a round asserted anywhere else has not been recorded. A round is
+  invalidated by a new push AND by the base moving, because either changes what
+  would actually merge. Green checks are not a substitute; the two run in
+  parallel and the merge will win. The founder may override, but the override is
+  stated on the pull request and names what it overrides — never an accident of
+  timing.
 
 ## Spec-driven development
 
