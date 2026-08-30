@@ -9,6 +9,11 @@
 - Operational detail this file does add. None of it grants a permission the
   constitution withholds; where it is stricter, it narrows what the constitution
   leaves open, which supersession allows:
+  - NO `Co-Authored-By` trailer of any kind, including one naming a human.
+    Principle I forbids trailers that attribute to an AI or generator tool; this
+    file goes further and forbids co-authorship trailers outright, because sole
+    authorship is the point. Nothing mechanical enforces this yet — the checker
+    matches AI identities only — so it is a review obligation.
   - Before committing, verify `git config user.name` is `xcoder-es` and
     `git config user.email` is `capintobe@gmail.com`.
   - Merge commits created by the forge record the forge as committer. The forge is
