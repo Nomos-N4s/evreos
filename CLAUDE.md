@@ -14,8 +14,13 @@
     constitution constrains the author, not the committer, so this is permitted;
     the forge is infrastructure rather than a third party.
   - `scripts/check-commit-hygiene.py` enforces the mechanical part of Principle I
-    on every pull request. Its carve-out for naming an integrated tool is the
-    one Principle I grants, not an exception to it.
+    on every pull request: author and committer identity, AI-attribution git
+    trailers, literal generator footers, Conventional Commits subjects and issue
+    references. It reads no prose, so it neither catches attribution written as
+    free English nor needs a carve-out for naming an integrated tool. Principle
+    I's prose prohibition, and the carve-out that principle grants, are enforced
+    in review — the script's own docstring says so and does not pretend
+    otherwise.
 
 ## Branches
 
