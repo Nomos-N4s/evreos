@@ -1,6 +1,6 @@
 <!--
 Sync Impact Report
-Version change: none → 1.0.0 (initial ratification)
+Version change: 1.0.0 → 1.1.0 (ratified at 1.0.0; amendment log below)
 Modified principles: none (scaffold replaced; no prior principles existed)
 Added sections:
   - Core Principles I–X
@@ -10,6 +10,14 @@ Added sections:
 Removed sections: none (all template placeholders resolved)
 
 Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
+  - Classified MINOR rather than MAJOR deliberately. MAJOR is scoped to a principle being
+    removed or redefined; what changed here is the Development Workflow section, and no
+    Core Principle is touched. The section is tightened, not relaxed, so PATCH does not
+    fit either. The Versioning policy is extended below to name that case rather than
+    leaving the classification to be inferred.
+  - Modified sections: Development Workflow — the review bullet gains the review
+    dimensions and the recording form; the merge gate is new.
+  - Removed: the "or to the founder" destination for a round's outcome.
   - Development Workflow gains a merge gate: a pull request is not mergeable until a
     review round is recorded green against the exact diff that would merge, with the
     record on the pull request naming head and base SHAs and the finding counts.
@@ -248,7 +256,9 @@ replaces the discipline it removes.
 
 - **MAJOR** — a principle is removed or redefined in a backward-incompatible way, including
   any removal from Permanent Prohibitions.
-- **MINOR** — a principle or section is added, or existing guidance is materially expanded.
+- **MINOR** — a principle or section is added, existing guidance is materially expanded,
+  or guidance outside the Core Principles is tightened by withdrawing an option it
+  previously allowed.
 - **PATCH** — clarifications, wording and typo fixes that do not change meaning.
 
 **Compliance review**: Every pull request review verifies compliance with these principles.
