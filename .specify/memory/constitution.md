@@ -17,6 +17,9 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     bullet; what is withdrawn is its "or to the founder" destination, because a record
     only the founder can see makes the gate unverifiable by anyone reading the pull
     request. Every round, green or not, is now recorded on the pull request itself.
+  - The review dimensions — correctness, security, internal consistency, compliance —
+    move here from the repository rules file, which was the only place that stated them.
+    Deferring to this document would otherwise have deleted them.
   - Reason for amending here rather than in the repository rules file: this document
     supersedes that one, so a stricter rule placed there was void wherever the two
     disagreed. Workflow rules now live here; the rules file defers to this document
@@ -194,7 +197,8 @@ of them requires a MAJOR amendment to this constitution:
   budget gate fails the merge.
 - After every push of commits to an open pull request, an adversarial review of the pull
   request's full current diff MUST run: independent reviewers instructed to refute the
-  changes, with findings verified before they count. Confirmed findings are fixed and
+  changes across correctness, security, internal consistency and compliance with this
+  constitution, with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
   The outcome of every round, green or not, MUST be recorded on the pull request, so that
   a round which found something stays traceable to the fix that followed it. The next
