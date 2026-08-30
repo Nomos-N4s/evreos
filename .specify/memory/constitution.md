@@ -12,7 +12,9 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Classified MINOR rather than MAJOR deliberately. MAJOR is scoped to a principle being
     removed or redefined in a backward-incompatible way, or to any removal from
     Permanent Prohibitions; this amendment does neither. What changed is the Development
-    Workflow section, and no Core Principle is touched. The section is tightened, not relaxed, so PATCH does not
+    Workflow section and, in consequence, Governance's Versioning policy. No Core
+    Principle and no Permanent Prohibition is touched, and both sections are tightened
+    or extended rather than relaxed, so PATCH does not fit either. The section is tightened, not relaxed, so PATCH does not
     fit either. The Versioning policy is extended below to name that case rather than
     leaving the classification to be inferred.
   - Modified sections: Development Workflow — the review bullet gains the review
@@ -48,8 +50,10 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Reason for amending here rather than in the repository rules file: this document
     supersedes that one, so a stricter rule placed there was void wherever the two
     disagreed. The review and merge-gate rules now live here; the rules file defers to
-    this document for them. Its remaining workflow bullets — branch prefixes, issue
-    linking, commit format, atomicity — stay there as operational reminders.
+    this document for them. Its remaining workflow bullets — the prohibition on direct
+    pushes to `main`, issue linking, commit format, atomicity — stay there as operational
+    reminders, as do the branch prefixes and the Spec Kit directory rule in their own
+    sections.
 Templates requiring updates:
   - .specify/templates/plan-template.md ✅ reads the constitution at runtime; no change needed
   - .specify/templates/spec-template.md ✅ no change needed
