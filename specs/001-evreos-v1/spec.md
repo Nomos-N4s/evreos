@@ -289,8 +289,9 @@ unchanged.
   depend on the existing service holding campaign records and accepting a
   redemption, because Principle V forbids the client producing either; if that
   service does not serve redemption, FR-029 is blocked by the same decision as
-  FR-029a and both ship disabled. Confirm before v1 scope is treated as settled
-  (Q-E11a), since SC-010 rests on the answer.
+  FR-029a and both ship disabled. Q-E11a records that dependency and SC-010 rests
+  on it; if it resolves negatively this requirement is renegotiated rather than
+  silently disabled.
 - **FR-029a**: Partner-facing campaign administration, by which a partner
   business creates or funds a campaign, MUST be present in the interface and
   disabled until its backing service exists, with an honest explanation rather
@@ -364,7 +365,9 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   rather than from the diagnostic signal, so that members who decline
   diagnostics are still counted in the figure that matters most. The origin
   marker MUST be a client-type field on requests the member's own action
-  initiates; it MUST NOT be a device fingerprint. Without it, a member who
+  initiates; it MUST NOT be a device fingerprint. Both that field and the hosting
+  constraint are changes to a service outside this repository, recorded as Q-E14.
+  Without it, a member who
   uninstalls Evreos and keeps using the existing web wallet produces the same
   account activity as a retained member and would be counted as retained. The
   retention computation MUST run on EU-hosted infrastructure.
@@ -573,8 +576,7 @@ resolved silently by this specification.
   (FR-039). What else it carries, if anything, remains open.
 - **Q-E7** Brand and trademark clearance, and standalone versus endorsed
   branding.
-- **Q-E8** *Narrowed 2026-08-30*: superseded by Q-E13. Principle VIII settles the
-  seam; only whether a partner build ships is open.
+- **Q-E8** *Superseded by Q-E13.*
 - **Q-E9** *Settled 2026-08-30*: SC-001, SC-004, SC-005 and SC-006 are ratified
   as tighten-only CI gates. The SC-002 figure is held provisional pending the
   cold-start spike; the gate itself exists from M0 regardless, because Principle
@@ -600,7 +602,12 @@ resolved silently by this specification.
   route ADR-0001 records, or whether the tier-2 floor must move to macOS 14.
   Blocking parity on tier 2 MUST be measured before the floor is treated as
   settled.
-- **Q-E13** Whether a partner-branded distribution ships in v1. The rebrandable
+- **Q-E13** Whether a partner-branded distribution ships in v1.
+- **Q-E14** Whether the existing service will record a client-type field on
+  member-initiated requests, and run the retention computation on EU-hosted
+  infrastructure, as FR-040 requires. Both are changes outside this repository,
+  and SC-011's signed-in bar rests on them. Q-E11a records the parallel
+  dependency for claim-code redemption; this one was left implicit. The rebrandable
   seam itself is not open: Principle VIII requires it and requires a fixture
   brand to build in CI on every change, regardless of whether any partner build
   is promised (FR-042).
