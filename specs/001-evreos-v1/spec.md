@@ -813,9 +813,11 @@ Carried from the master prompt: compatibility with existing browser extension
 ecosystems; a built-in password manager; iOS; synchronisation across devices; a
 virtual private network; crypto or web3 surfaces; and assistant sidebars.
 
-Permanently excluded by the constitution: advert injection; silent affiliate
-attribution; server-side collection of browsing history; and bundling a web
-engine, in any release, on any platform.
+Permanently excluded by the constitution, each with the requirement that
+enforces it: advert injection (FR-018b); silent affiliate attribution (FR-030,
+FR-033); server-side collection of browsing history (FR-007a); and bundling a web
+engine, in any release, on any platform (FR-044). Listing them here bounds scope;
+the requirements are what a build can be held to.
 
 Added on the evidence recorded in ADR-0001, and stated here so they never reach
 a landing page:
