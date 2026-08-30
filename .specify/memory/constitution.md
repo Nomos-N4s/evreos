@@ -240,7 +240,7 @@ of them requires a MAJOR amendment to this constitution:
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
-  decision is to be recorded as ADR-0001.
+  decision is recorded as ADR-0001.
 
 ## Governance
 
