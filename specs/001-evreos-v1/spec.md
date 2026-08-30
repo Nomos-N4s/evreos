@@ -389,10 +389,12 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   and MUST be reportable to a member in plain language before they consent.
 - **FR-039a**: The signal MUST support 30-day retention without carrying any
   per-install identifier. The client MUST evaluate its own retention locally and
-  emit at most two reports per install: an **enrolment report** on the first day
-  diagnostics are enabled, carrying only the enrolment week; and a **retention
+  emit at most two reports per enrolment, and at most one enrolment per install:
+  an **enrolment report** on the first day diagnostics are enabled after
+  installation, carrying only the enrolment week; and then either a **retention
   report** on the first day the browser runs in the window 24 to 30 days after
-  that enrolment, carrying only the same enrolment week. Both reports are keyed
+  that enrolment, or a **withdrawal report**, never both. Re-enabling after a
+  withdrawal emits no further report. Both reports are keyed
   to enrolment, not to install: keying them to different events makes the ratio
   meaningless, since an install enrolling late would emit both at once or
   neither. Nothing about the install date enters the measurement. If diagnostics
@@ -401,7 +403,11 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   carrying only the enrolment week, and the service MUST subtract it from that
   week's enrolment count. The ratio is computed over enrolments net of
   withdrawals, and the withdrawal count MUST be published beside the rate —
-  otherwise every opt-out reads as churn. Neither report may carry an identifier.
+  otherwise every opt-out reads as churn. A withdrawal MUST be emitted only if the
+  enrolment report for that enrolment was acknowledged as delivered, and the
+  service MUST floor each week's net enrolment count at zero and publish any
+  flooring event; otherwise an enrolment that never arrived is subtracted from a
+  week that never counted it. No report may carry an identifier.
   The receiving service MUST NOT retain the source network address, transport
   metadata, or a receipt timestamp finer than the day, and reports MUST reach it
   through a relay operated by a party that is not the receiving service, such
@@ -410,11 +416,15 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   inbound and an outbound request. Without that, two reports from one residential
   address in a small cohort are linkable and the identifier-free property is
   defeated at the network layer — and a first-party relay defeats it against
-  exactly the party this protects against. Every constraint in this paragraph
-  applies identically to crash reports under FR-039b. Signed-out
-  retention is the ratio of retention reports to enrolment reports for an
-  enrolment week, and is a 24-to-30-day retention rate for opted-in installs,
-  not for installs. The diagnostic signal MUST carry no per-install state beyond
+  exactly the party this protects against. The transport constraints in this
+  paragraph — no source address, no transport metadata, no receipt timestamp finer
+  than the day, delivery through a relay operated by a party that is not the
+  receiving service — apply identically to crash reports under FR-039b. The
+  report-count, enrolment-week and ratio constraints do not: crash reporting is
+  separately consented, so a crash report may exist where no enrolment week
+  does. Signed-out
+  retention is a 24-to-30-day retention rate for opted-in installs, not for
+  installs; its denominator is the net enrolment count defined above. The diagnostic signal MUST carry no per-install state beyond
   these two reports; crash reports are governed separately by FR-039b, and any
   addition under Q-E6 requires this requirement to be amended.
 - **FR-039b**: If crash reporting ships in v1 at all (Q-E16), it MUST be opt-in,
