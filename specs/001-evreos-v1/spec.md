@@ -306,6 +306,13 @@ unchanged.
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
   a per-app grant from the user.
+- **FR-018b**: No advertising may be placed in a web page by Evreos, by any app,
+  or under any commercial arrangement, with or without a member action. The
+  Permanent Prohibitions forbid advert injection "under any commercial
+  arrangement" and admit no consent exception, so FR-018a's per-occasion consent
+  rule does not reach it: a member tapping "show offers here" does not make an
+  injected offer panel permissible. A cashback offer surface MUST therefore be
+  rendered in the browser's own chrome, never in the page.
 - **FR-019**: App surfaces MUST be updatable without releasing a new browser
   version.
 - **FR-020**: App surfaces MUST be cached so that a stated offline state is
