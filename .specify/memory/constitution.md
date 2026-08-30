@@ -20,7 +20,8 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Removed: the "or to the founder" destination for a round's outcome.
   - Development Workflow gains a merge gate: a pull request is not mergeable until a
     review round is recorded green against the exact diff that would merge, with the
-    record on the pull request naming head and base SHAs and the finding counts.
+    record on the pull request naming head and base SHAs and every finding raised with
+    its severity and disposition — not counts.
   - Recording is fixed in time and form: a new comment, before the next push, never an
     edit to an earlier record. A record kept only in the pull request body is a mutable
     field the author can silently rewrite, which would let a blocked round be edited
@@ -33,9 +34,12 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     file said "never an accident of timing"; deferring to this document dropped the phrase,
     and without it a merge over confirmed blockers could be regularised by a comment
     posted afterwards — the failure recorded in the issue this amendment closes.
-  - The review dimensions — correctness, security, internal consistency, compliance —
-    move here from the repository rules file, which was the only place that stated them.
-    Deferring to this document would otherwise have deleted them.
+  - The review dimensions — correctness, security, internal consistency, rules
+    compliance — move here from the repository rules file, which was the only place that
+    stated them. Deferring to this document would otherwise have deleted them. The fourth
+    dimension keeps its original scope deliberately: `CLAUDE.md` retains obligations that
+    rest on review alone — the co-authorship trailer ban, the branch prefixes, the Spec
+    Kit directory rule — so narrowing it to this document would have orphaned them.
   - Reason for amending here rather than in the repository rules file: this document
     supersedes that one, so a stricter rule placed there was void wherever the two
     disagreed. The review and merge-gate rules now live here; the rules file defers to
@@ -214,8 +218,9 @@ of them requires a MAJOR amendment to this constitution:
   budget gate fails the merge.
 - After every push of commits to an open pull request, an adversarial review of the pull
   request's full current diff MUST run: independent reviewers instructed to refute the
-  changes across correctness, security, internal consistency and compliance with this
-  constitution, with findings verified before they count. Confirmed findings are fixed and
+  changes across correctness, security, internal consistency, and compliance with this
+  constitution and with the repository rules in `CLAUDE.md`, with findings verified
+  before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
   The outcome of every round, green or not, MUST be recorded on the pull request as a new
   comment, before the next push, and never by amending or deleting an earlier record; a
