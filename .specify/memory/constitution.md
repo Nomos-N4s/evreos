@@ -14,9 +14,9 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     Permanent Prohibitions; this amendment does neither. What changed is the Development
     Workflow section and, in consequence, Governance's Versioning policy. No Core
     Principle and no Permanent Prohibition is touched, and both sections are tightened
-    or extended rather than relaxed, so PATCH does not fit either. The section is tightened, not relaxed, so PATCH does not
-    fit either. The Versioning policy is extended below to name that case rather than
-    leaving the classification to be inferred.
+    or extended rather than relaxed, so PATCH does not fit either. The Versioning
+    policy is extended below to name that case rather than leaving the classification
+    to be inferred.
   - Modified sections: Development Workflow — the review bullet gains the review
     dimensions and the recording form; the merge gate is new; the ADR-0001 bullet moves
     to the past tense. Governance — the Versioning policy gains the tightening case.
