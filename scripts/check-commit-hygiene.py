@@ -27,7 +27,8 @@ the known defects below):
   * a literal generator footer, matched even inside code fences
   * Conventional Commits subject, and an issue reference
 
-KNOWN DEFECTS, both tracked as issue #25.
+KNOWN DEFECTS, both tracked as issue #25. Note #26 tracks the inverse of the
+second one: a co-authorship trailer naming a human currently passes.
 
 First, the generator-footer strings are matched against the whole normalised
 text rather than a trailer block, so they fire on ordinary prose containing
