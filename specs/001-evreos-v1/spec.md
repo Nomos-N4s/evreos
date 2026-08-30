@@ -550,24 +550,41 @@ real regression, which is the same reason the absolute figures are held.
   continuous, honest progress and completes without user intervention beyond
   consent. This path is a designed experience and is deliberately not held to
   SC-002.
-- **SC-004** *(ratified)*: With ten tabs open, memory attributable to Evreos's
-  own processes, excluding the system web runtime's processes, stays at or below
-  150 MB at every 5-second sample from the first tab opening until 5 minutes
-  after the tenth finishes loading. The metric is resident set size on macOS
-  (`phys_footprint`) and private working set plus proportional shared bytes on
-  Windows; the exact counters and the sampling script are published under SC-013,
-  because the two platforms expose different quantities and an unnamed "memory"
-  figure is not reproducible. Proportional set size is a Linux construct read
-  from `smaps`, unavailable on either supported platform, and is not used.
+- **SC-004** *(ratified on tier 1; figure provisional on tier 2)*: With ten tabs
+  open, memory attributable to Evreos's own processes, excluding the system web
+  runtime's processes, stays at or below 150 MB at every 5-second sample from the
+  first tab opening until the session is closed, over a soak of at least 8 hours
+  with the ten tabs left open; the gate reports the maximum sample, and a shorter
+  run may be used for the per-change regression gate. A ten-tab leak over tens of
+  minutes is the failure this budget exists to catch, on a cohort that leaves the
+  browser open all day, so the window is not bounded at load time. The metric is
+  `phys_footprint` (from `task_vm_info`) on macOS and Working Set — Private on
+  Windows, summed over Evreos's own processes; these are different quantities, so
+  the 150 MB figure is stated per platform and figures MUST NOT be compared
+  across them. Proportional apportionment of shared pages is not used: it is a
+  Linux `smaps` construct, and the nearest Windows equivalent caps its share
+  count at 7. The exact counters and the sampling script are published under
+  SC-013. The tier-2 figure is provisional on the same terms as SC-002, because
+  ADR-0001 records that what governs macOS memory at ten tabs is unestablished
+  and belongs to the spikes; Q-E9's ratification was given before that caveat was
+  carried here.
 - **SC-005** *(ratified)*: When idle, processor use stays below 0.5% of one core
   at every 1-second sample across a window of at least 60 minutes, with no
-  periodic wake activity at any period observable in that window, and background
-  tabs are suspended. A 10-minute window cannot falsify a wake timer with a
-  longer period.
+  periodic wake activity, and background tabs are suspended. The prohibition is
+  absolute: the idle path MUST contain no periodic timer of any period, verified
+  by design review and by instrumentation of scheduled work, because no finite
+  window can falsify a timer with a longer period. Scoping it to "any period
+  observable in that window" would make a 61-minute timer compliant by
+  construction. The 60-minute window is the acceptance test for the CPU figure,
+  not the definition of the wake prohibition.
 - **SC-006** *(ratified)*: Switching tabs and typing in the address field produce
   a visible response within 16 ms, measured on a display driven at 60 Hz on each
   named reference machine, at the 99th percentile of at least 1000 trials per
-  interaction, with no trial exceeding 16 ms by more than one further frame. The
+  interaction, and no trial may exceed 16 ms at all — a single trial over 16 ms
+  fails the gate, since the base criterion admitted none and dropping a frame
+  once every hundred interactions is perceptible on tab switching. Where an
+  outlier is attributable to the measurement environment rather than the shell,
+  the run is discarded and repeated rather than passed. The
   bar stays 16 ms where a machine's native refresh is higher: this is a
   human-perception budget, not a hardware-relative one, and a hardware-relative
   bar is not reproducible under SC-013 — on a 30 Hz panel one frame is 33 ms,
