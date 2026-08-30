@@ -328,6 +328,13 @@ unchanged.
 **Accessibility and language**
 
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
+- **FR-043**: Every budget Principle II names — download size, installed size,
+  cold start, shell memory overhead, idle CPU, chrome input latency — MUST live
+  in one budget file in this repository, and MUST be enforced by a CI gate that
+  fails the build on regression, from milestone M0. Every pull request that
+  changes shipped behaviour MUST state its byte and millisecond cost against that
+  file. Principle II requires both, and the Success Criteria preamble described
+  them as narrative rather than requiring them.
 - **FR-042**: No brand name, colour, endpoint or support address may be
   hardcoded outside a single brand configuration, and a fixture brand MUST build
   in CI on every change. Principle VIII requires both; the spec previously
@@ -343,7 +350,12 @@ unchanged.
   The tier-2 installer MUST additionally refuse to install below the floor with a
   plain-language reason, rather than failing at first launch.
 - **FR-035**: Interface text MUST be available in German, Greek and English,
-  keyed by language alone, with place never fused into the language value.
+  keyed by the BCP-47 primary language subtag alone — `de`, `el`, `en` — with no
+  region subtag in the key and place never fused into the language value.
+  Language and place MUST travel as separate parameters in every request to an
+  Apivo surface, not only in the merchant catalogue, as Principle VII requires.
+  "Keyed by language alone" alone would be satisfied by `de-DE`, which re-fuses
+  the two.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
   layouts.
 
@@ -479,12 +491,18 @@ decision on spike evidence, and is tighten-only thereafter.
 SC-003 states a required experience rather than a figure; it is verified by
 acceptance test, not by a budget gate.
 
-Reference machines are named in Assumptions as a class rather than by model. No
-hardware-dependent criterion — SC-002, SC-004, SC-005, SC-006 — may be reported
-as met, and no gate on it may be treated as green, until Q-E9a names the exact
-models there. The gates run and record from M0 regardless. Ratification is a
-founder decision and is not reopened here; this is about reproducibility, which
-SC-013 requires and which no unnamed machine can give.
+Reference machines are named in Assumptions as a class rather than by model. The
+gates run and record from M0 on whatever hardware CI provides, and for the four
+hardware-dependent criteria — SC-002, SC-004, SC-005, SC-006 — their result is
+advisory until Q-E9a names the exact models: a regression against the previous
+run on the same CI machine fails the build, which is what Principle II requires
+and what an unnamed machine can still deliver, but a figure may be reported as
+*met* only against a named machine. Blocking enforcement against the absolute
+figure begins when Q-E9a is answered. Stated any other way, the same paragraph
+would require the gates to run, forbid their result being green, and let a
+not-green budget gate fail every merge. Ratification is a founder decision and is
+not reopened here; this is about reproducibility, which SC-013 requires and which
+no unnamed machine can give.
 
 - **SC-001** *(ratified)*: The download is 20 MB or less and the installed
   footprint 60 MB or less per platform, counting only the bytes Evreos ships and
@@ -693,6 +711,10 @@ resolved silently by this specification.
 
 ## Assumptions
 
+- **Milestone M0** is the first milestone at which the shell builds and runs in
+  CI; it is the point from which Principle II's budget gates are required.
+- **Cohort week** is an ISO-8601 week, Monday to Sunday, in UTC, wherever a week
+  is named.
 - **Reference hardware** for SC-002, SC-004, SC-005 and SC-006 is a 2020
   mid-range x86 laptop and an M1-class portable. Exact models remain to be named
   (Q-E9a). Until they are, no hardware-dependent figure is reproducible.

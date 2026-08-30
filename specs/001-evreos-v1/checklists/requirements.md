@@ -27,8 +27,12 @@
 ## Feature Readiness
 
 - [ ] All functional requirements have clear acceptance criteria — FR-003a,
-  FR-039a, FR-039b, FR-039c and FR-042 have neither a success criterion nor an
-  acceptance scenario
+  FR-015a, FR-016a, FR-018a, FR-029a, FR-039a, FR-039b, FR-039c, FR-039d, FR-042
+  and FR-043 have neither a success criterion nor an acceptance scenario, and
+  FR-041's accessibility and language obligations for the distribution page are
+  covered by none (SC-009a covers only its operating-system statement and the
+  installer refusal). An earlier version of this list named five and read as
+  exhaustive
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
@@ -50,9 +54,12 @@ Two items improved materially rather than changing state:
   strength of wording. SC-011 was **untestable as written** — it required a
   retention figure the privacy posture made unmeasurable. Splitting it into two
   separately reported measurements (FR-039, FR-040) fixed the signed-in half.
-  The signed-out half stayed untestable until review, because a cohort measure
-  cannot be computed from counts carrying no per-install key; FR-039a now
-  authorises a bounded, non-fingerprinting install identifier.
+  The signed-out half stayed untestable until review, because a cohort
+  measure appeared to need a per-install key. FR-039a resolves it without one:
+  the client evaluates its own retention locally and emits two unlinkable reports
+  carrying only a cohort week, and the ratio of the two counts is the measure. An
+  earlier version of this paragraph described the identifier design the spec
+  went on to reject — stale in the same round that wrote it.
 - *Scope is clearly bounded* is stronger now that the tier-2 operating-system
   floor is declared with both its consequences, the default search posture is
   fixed, and the site-credential limitation is stated rather than implied.
