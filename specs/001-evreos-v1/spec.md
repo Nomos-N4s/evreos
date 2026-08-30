@@ -474,16 +474,20 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
   Evreos and complete a claim.
 - **SC-011**: Thirty-day retention is measured two ways and reported separately,
   never as one blended figure. **Signed-in retention** is at least 20%: the share
-  of members who first signed in during a given calendar week and who record at
-  least one Evreos-originated account request (FR-040) on any day from 24 to 30
-  after install. It is derived from server-side account activity, which is
+  of members whose first Evreos-originated sign-in falls in a given calendar week
+  and who record at least one further Evreos-originated account request (FR-040)
+  on any day from 24 to 30 after that first sign-in. The clock is the sign-in,
+  not the install: the service has no install date, FR-040 authorises no such
+  datum, and Principle VI closes the substitutes. It is derived from server-side account activity, which is
   transactional rather than diagnostic and needs no opt-in. **Signed-out
   retention** is reported alongside it over the same weekly cohorts, computed
-  from the FR-039 signal; it is a self-selected sample, MUST be labelled as such
-  and stated with its opt-in rate wherever it is reported, and carries no bar —
-  it is reported for direction. The 20% bar applies to the signed-in figure
-  only. Cohorts below 200 installs are reported with confidence intervals rather
-  than as a point figure.
+  from the FR-039a reports over weekly install cohorts, which are not the same
+  cohorts as the signed-in figure and MUST NOT be compared item to item; it is a
+  self-selected sample, MUST be labelled as such and stated with its opt-in rate
+  wherever it is reported, and carries no bar — it is reported for direction. The
+  20% bar applies to the signed-in figure only. A cohort of fewer than 200 — first
+  sign-ins for the signed-in figure, enrolment reports for the signed-out one — is
+  reported with confidence intervals rather than as a point figure.
 
 - **SC-012**: Active members average at least one cashback activation per month.
 
