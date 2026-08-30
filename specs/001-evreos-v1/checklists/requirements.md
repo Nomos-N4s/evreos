@@ -15,7 +15,9 @@
 
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
-- [x] Success criteria are measurable
+- [ ] Success criteria are measurable — four hardware-dependent criteria
+  (SC-002, SC-004, SC-005, SC-006) cannot be reported as met until Q-E9a names
+  the reference machines, and SC-013's reproducibility bar depends on the same
 - [x] Success criteria are technology-agnostic (no implementation details)
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
@@ -24,7 +26,9 @@
 
 ## Feature Readiness
 
-- [x] All functional requirements have clear acceptance criteria
+- [ ] All functional requirements have clear acceptance criteria — FR-003a,
+  FR-039a, FR-039b, FR-039c and FR-042 have neither a success criterion nor an
+  acceptance scenario
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [x] No implementation details leak into specification
@@ -62,10 +66,12 @@ VIII's brand seam had none either; SC-009 pointed at a section containing none o
 what it claimed, giving it an empty population; and "credential" carried two
 meanings that contradicted each other across FR-015a and FR-023.
 
-Of the open decisions, Q-E2, Q-E4 and Q-E9 are settled, Q-E5 is settled as a
-consequence of Q-E4, Q-E6 and Q-E8 are partly settled or narrowed, and Q-E9a,
-Q-E11a, Q-E12 and Q-E13 were opened by review. The remainder are recorded in
-Open Decisions with what specifically stays open.
+Of the open decisions, Q-E2, Q-E4, Q-E6 and Q-E9 are **partly** settled — each
+records what remains open, respectively the specific engine, the tier-2 keychain,
+the rest of the diagnostic set, and the SC-002 figure. Q-E5 is settled as a
+consequence of Q-E4 and Q-E8 is superseded by Q-E13. Q-E9a, Q-E11a, Q-E12, Q-E13
+and Q-E14 were opened by review. An earlier version of this line called the first
+group settled outright, which is the same error it was written to correct.
 
 ### Validation record
 
