@@ -112,16 +112,25 @@ content, which belongs to the engine.
 What this architecture cannot deliver. Stated here so it is not rediscovered as a
 surprise, and so no marketing claim outruns it.
 
-- **Some content-protected media is excluded. The scope is narrower than first
-  recorded, and the German public broadcasters are not in it.**
+- **Content protection is a scoping question, not a settled exclusion. The scope
+  is narrower than first recorded, and the German public broadcasters are not in
+  it at all.** No exclusion is described to anyone until risk 8 is retired. The
+  hand-off is built regardless, because it is cheap insurance.
 
   **Verified — ARD and ZDF Mediathek are not DRM-protected.** Streamlink's ARD
   plugin plays them with plain HLS and progressive HTTP and contains no DRM
   handling; yt-dlp's ARD and ZDF extractors contain none either, and yt-dlp
-  detects DRM generically from the manifest rather than per-extractor, so a
-  protected stream would surface regardless of extractor code; the ARD add-on in
-  Kodi's official repository declares no `inputstream.adaptive` dependency,
-  while the Joyn add-on does. ARD's restrictions are geo-blocking and FSK
+  additionally detects DRM generically from HLS, DASH and Smooth manifests
+  (`HlsFD._has_drm`, DASH `ContentProtection`, ISM `Protection`), so a protected
+  adaptive stream would surface even if the extractor said nothing about it —
+  which covers the adaptive path these extractors use, though not formats served
+  as direct URLs; and the ARD add-on in Kodi's official repository
+  (`plugin.video.ardmediathek_de`) declares no `inputstream.adaptive` dependency
+  at all, so it neither decrypts nor even demuxes adaptive streams. That last
+  point is indirect — `inputstream.adaptive` is a DASH/HLS/Smooth demuxer whose
+  DRM support is an added capability rather than its purpose — so it corroborates
+  the streamlink and yt-dlp evidence rather than standing alone. ARD's
+  restrictions are geo-blocking and FSK
   broadcast-time windows, not encryption. An earlier version of this record
   named these two as the paradigm DRM-dependent services; that was wrong, and
   it matters, because they are heavily used by this cohort.
