@@ -37,7 +37,7 @@ input, and the departure is deliberate:
 | Platform | Tier | Meaning |
 | --- | --- | --- |
 | Windows | 1 | Release criteria apply. WebView2 is evergreen Chromium, security-patched by Microsoft. |
-| macOS | 2 | Ships at a minimum OS version, **not yet declared** — deferred to clarify. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement that depends on it. |
+| macOS | 2 | Ships at a minimum OS version, **declared in clarify as macOS 13**. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement that depends on it — including the macOS-14 proxy route named below, which the floor excludes. |
 | Linux | Separate decision | Removed from "cross-platform". Its own budget row, its own go/no-go. |
 
 The tiering rests on a market assumption that is **not yet verified**: that the
@@ -187,7 +187,9 @@ surprise, and so no marketing claim outruns it.
   cap at 150,000 rules each, so multi-list splitting is required from day one.
 - **Hosting third-party Chrome extensions is not a promise Evreos can make.**
   WebView2 has genuine Chrome-extension hosting, but UI-less and sideload-only;
-  macOS gained `WKWebExtension` only in 15.4, excluding pre-2018 Macs; Linux has
+  macOS gained `WKWebExtension` only in 15.4, so it requires Sequoia, whose
+  hardware floor excludes Macs older than roughly 2018 to 2020 depending on the
+  model line; Linux has
   nothing and will not. Note the trap: `wry`'s Linux `with_extensions_path` shares
   a name with the Windows method but loads a shared object, not a `manifest.json`.
   **The cashback wallet is therefore built once, natively in the shell**, using
@@ -388,8 +390,9 @@ Declaring a question unanswerable is as much an overstatement as answering it
 without evidence.
 
 Corrected in the first amendment: the assertion that a `wry` fork was required on
-every platform, which was false on Windows and Linux; the description of navigation failure as an
-endless loading indicator, which is accurate only on macOS; the claim to be the
+every platform, which was false on Windows and Linux; the description of
+navigation failure as an endless loading indicator, which is accurate only on
+macOS; the claim to be the
 only maintained cross-platform native-webview abstraction including Linux, which
 several non-Rust projects refute; a process-pool sharing requirement naming an
 interface that is a documented no-op; a media exclusion argued from one
