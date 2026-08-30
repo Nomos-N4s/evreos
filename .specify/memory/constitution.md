@@ -10,8 +10,9 @@ Ratification 1.0.0 (2026-08-29):
 
 Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Classified MINOR rather than MAJOR deliberately. MAJOR is scoped to a principle being
-    removed or redefined; what changed here is the Development Workflow section, and no
-    Core Principle is touched. The section is tightened, not relaxed, so PATCH does not
+    removed or redefined in a backward-incompatible way, or to any removal from
+    Permanent Prohibitions; this amendment does neither. What changed is the Development
+    Workflow section, and no Core Principle is touched. The section is tightened, not relaxed, so PATCH does not
     fit either. The Versioning policy is extended below to name that case rather than
     leaving the classification to be inferred.
   - Modified sections: Development Workflow — the review bullet gains the review
@@ -60,10 +61,12 @@ Follow-up TODOs (status as of 1.1.0):
     `.github/workflows/commit-hygiene.yml`.
   - DONE — ADR-0001, the engine decision the Development Workflow section requires, is
     recorded at `docs/adr/0001-rendering-engine.md`.
-  - OPEN — nine merge commits on `main` are authored with the forge account's display
-    name rather than `xcoder-es <capintobe@gmail.com>`, and so do not satisfy Principle
-    I. They escape the check because it runs over `origin/<base>..HEAD`, which never
-    contains the merge commit being created. Remedy: set the account's display name.
+  - OPEN — nine merge commits on `main` are authored with the founder's GitHub account
+    display name, `Carlos Pinto`, rather than `xcoder-es <capintobe@gmail.com>`, and so
+    do not satisfy Principle I. The forge is their committer, which is permitted; the
+    author is the account's display name, which is not. They escape the check because it
+    runs over `origin/<base>..HEAD`, which never contains the merge commit being created.
+    Remedy: set that account's display name to `xcoder-es`.
   - OPEN — the merge gate above is only partly mechanical. A check can verify that a
     record exists, names the current head and merge base, and reports no confirmed
     finding; it cannot verify that the round was adversarial, that the findings list is
