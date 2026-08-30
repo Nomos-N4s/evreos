@@ -324,22 +324,32 @@ unchanged.
 
 **Diagnostics**
 
+Principle VI requires telemetry to be opt-in, aggregate AND EU-hosted — three
+conditions, not two. A payload keyed to a stable per-install identifier is
+pseudonymous rather than aggregate however well that identifier is bounded, so
+FR-039a computes retention on the device rather than shipping a key that would
+satisfy the fingerprinting prohibition while failing the aggregate requirement.
+
 - **FR-039**: The browser MUST offer an opt-in diagnostic signal, off until the
   member turns it on. It MUST NOT carry browsing history, URLs or search terms,
   and MUST be reportable to a member in plain language before they consent.
-- **FR-039a**: The signal MUST carry a randomly generated install identifier,
-  because 30-day retention is a cohort measure and cannot be computed from
-  counts that carry no per-install key. That identifier MUST NOT be derived from
-  any device or hardware characteristic, MUST be regenerated on reinstall, MUST
-  be erasable by the member from within the browser, and MUST be retained no
-  longer than 90 days. Beyond it and a coarse activity date, the signal carries
-  only aggregate counters.
+- **FR-039a**: The signal MUST support 30-day retention without carrying any
+  per-install identifier. Retention is a cohort measure, so the client MUST
+  evaluate its own retention locally and emit at most two reports per install:
+  an enrolment report on the first day diagnostics are enabled, carrying only
+  the install week; and a retention report on a day from 24 to 30 after install,
+  carrying only that same install week. Neither report may carry an identifier,
+  and the service MUST NOT be able to link them. Signed-out retention is the
+  ratio of retention reports to enrolment reports for an install week. No other
+  per-install state may be transmitted.
 - **FR-039b**: Crash reporting MUST be opt-in and off by default, MUST NOT
   include page contents, URLs or browsing history, and is subject to FR-039c.
 - **FR-039c**: The diagnostic signal, crash reports, and any computation over
   them MUST be received, processed and retained only on infrastructure hosted in
-  the European Union. No diagnostic or crash payload may be transmitted to or
-  stored on infrastructure outside it.
+  the European Union, and MUST be deleted no later than 40 days after receipt —
+  the shortest period that supports a 30-day measure over weekly cohorts. No
+  diagnostic or crash payload may be transmitted to or stored on infrastructure
+  outside the European Union.
 - **FR-040**: Signed-in retention MUST be derived from existing account and
   wallet activity that the service records as originating from an Evreos client,
   rather than from the diagnostic signal, so that members who decline
