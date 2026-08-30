@@ -37,6 +37,12 @@
   with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the PR is ready to
   merge. Record the outcome of each round on the PR or to the founder.
+- A pull request is NOT mergeable until a review round has been recorded green
+  — no confirmed findings — against its CURRENT head. A new push invalidates
+  the previous round: the head changed, so the diff that was reviewed no longer
+  exists. Green checks are not a substitute; the two run in parallel and the
+  merge will win. The founder may override, but the override is stated on the
+  pull request, never an accident of timing.
 
 ## Spec-driven development
 
