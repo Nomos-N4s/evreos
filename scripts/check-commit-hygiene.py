@@ -17,8 +17,7 @@ trailer. Each pattern that caught more phrasings also rejected more legitimate
 commits. Blocking a real commit is worse than missing prose no tool emits, so
 prose detection was removed.
 
-Free-prose attribution remains forbidden by CLAUDE.md and by Principle I of the
-constitution. It is enforced by review, not by this script, and this script does
+Free-prose attribution remains forbidden by Principle I of the constitution. It is enforced by review, not by this script, and this script does
 not pretend otherwise.
 
 CHECKED (deterministic, no false positives by construction):
@@ -34,7 +33,9 @@ import sys
 import unicodedata
 
 REQUIRED_AUTHOR = "xcoder-es <capintobe@gmail.com>"
-# A forge authors the merge commits it creates. That is infrastructure.
+# A forge is the committer of the merge commits it creates. That is
+# infrastructure. Note it is not the AUTHOR of them: that is the account's
+# display name, which must itself be the founder identity to satisfy Principle I.
 ALLOWED_COMMITTERS = {REQUIRED_AUTHOR, "GitHub <noreply@github.com>"}
 
 # Identities, tested ONLY against a git trailer's value, where "Claude
@@ -185,8 +186,8 @@ def main():
         for problem in problems:
             print(f"  - {problem}", file=sys.stderr)
         print(
-            "\nSee the Authorship rules in CLAUDE.md and Principle I of "
-            ".specify/memory/constitution.md.",
+            "\nSee Principle I of .specify/memory/constitution.md, and the "
+            "Authorship section of CLAUDE.md for what this script does and does not check.",
             file=sys.stderr,
         )
         return 1
