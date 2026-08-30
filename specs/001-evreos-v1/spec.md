@@ -509,15 +509,25 @@ latency — to live in one budget file and be enforced by a CI gate that fails t
 build on regression. No budget named there may be un-gated at any point on the
 release path.
 
-Every budget below is therefore gated in CI from M0 in two ways, and this is the
-only statement of the rule: **absolute** — the build fails if the measured figure
-exceeds the stated value; and **regression** — the build fails if the figure is
-worse than the previous run on the same pinned benchmark runner. For SC-001 both
-are blocking from M0. For the hardware-dependent four — SC-002, SC-004, SC-005,
-SC-006 — the regression gate is blocking from M0 and the absolute gate is
-advisory until Q-E9a names the reference machines AND the figure is ratified,
-so the cold-start spike's own pull request is never gated on the figure it exists
-to establish.
+Every budget below is therefore gated in CI from M0 in two ways. **Absolute** —
+the build fails if the measured figure exceeds the stated value. **Regression** —
+the build fails if the figure is worse than the current recorded baseline by more
+than the runner's stated noise band. A change may reset the baseline upward while
+the figure stays inside the ratified absolute value, recording the byte or
+millisecond cost FR-043 requires; a baseline may never be reset above that value.
+Without that, the effective bar becomes the best figure ever recorded and no
+feature may cost anything, which is not what Principle II says.
+
+For SC-001 both gates are blocking from M0. For the hardware-dependent four —
+SC-002, SC-004, SC-005, SC-006 — the regression gate is blocking from M0 and the
+absolute gate is advisory until Q-E9a names the reference machines and, for a
+provisional figure, the founder decision replacing it is recorded. A replaced
+figure is ratified from the moment that decision lands and is tighten-only
+thereafter. Where a spike exists to establish a figure, its own change is not
+gated on that figure.
+
+Other passages refer to this rule; where any of them disagrees with it, this
+paragraph governs.
 
 Ratified and provisional describe the *figure*, never whether the gate exists. A
 ratified figure may afterwards only be tightened. Relaxing one requires an
@@ -542,7 +552,7 @@ real regression, which is the same reason the absolute figures are held.
 - **SC-001** *(ratified)*: The download is 20 MB or less and the installed
   footprint 60 MB or less per platform, counting only the bytes Evreos ships and
   excluding any system-provided web runtime.
-- **SC-002** *(figure provisional; gate mandatory from M0)*: With the system web
+- **SC-002** *(figure provisional; regression gate mandatory from M0)*: With the system web
   runtime already present, an interactive window appears within 800 ms on a warm
   start and 2 s on first run, on each reference machine listed in Assumptions.
   Held open deliberately: a large share of this figure is the engine's own
@@ -731,15 +741,19 @@ resolved silently by this specification.
 - **Q-E7** Brand and trademark clearance, and standalone versus endorsed
   branding.
 - **Q-E8** *Superseded by Q-E13.*
-- **Q-E9** *Settled 2026-08-30*: SC-001, SC-004, SC-005 and SC-006 are ratified
-  as tighten-only CI gates. The SC-002 figure is held provisional pending the
+- **Q-E9** *Settled 2026-08-30, partly reopened*: SC-001, SC-005, SC-006 and
+  SC-004 on tier 1 are ratified as tighten-only figures; the gate structure is
+  defined in the Success Criteria preamble, not here. SC-004's tier-2 figure was
+  reopened by review after ADR-0001's caveat was carried into the spec, which is a
+  reversal of part of this answer and is recorded as such rather than silently
+  applied. The SC-002 figure is held provisional pending the
   cold-start spike; the gate itself exists from M0 regardless, because Principle
   II admits no un-gated budget.
-- **Q-E9a** Which exact machine models are the reference hardware. SC-002 says a
+- **Q-E9a** Which exact machine models are the reference hardware. The Success
+  Criteria preamble says a
   hardware-dependent figure is meaningless without them, which applies equally to
-  SC-004, SC-005 and SC-006. Those three are ratified and stay ratified; until
-  models are named, none of the four is reproducible by a third party, which
-  SC-013 requires.
+  SC-004, SC-005 and SC-006. Until models are named, none of the four is
+  reproducible by a third party, which SC-013 requires.
 - **Q-E10** Whether affiliate attribution survives tracking prevention on the
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
@@ -761,9 +775,10 @@ resolved silently by this specification.
   Blocking parity on tier 2 MUST be measured before the floor is treated as
   settled.
 - **Q-E13** Whether a partner-branded distribution ships in v1.
-- **Q-E16** Whether crash reporting ships in v1 at all, given that it cannot
-  satisfy Principle VI's aggregate condition and so needs a recorded exception
-  (FR-039d). Cutting it from v1 is the alternative.
+- **Q-E16** Whether crash reporting ships in v1 at all. FR-039e requires
+  signature-level aggregation with no individual retention; if that is
+  insufficient to diagnose crashes, the alternative is cutting crash reporting
+  from v1, because this specification grants no exception to Principle VI.
 - **Q-E15** What threshold signed-in 30-day retention must clear. The base
   criterion set 20% over everyone who installs; that population is unmeasurable
   (SC-011), and the measurable population — members who sign in — is a
