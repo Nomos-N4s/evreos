@@ -426,18 +426,18 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
   consent. This path is a designed experience and is deliberately not held to
   SC-002.
 - **SC-004** *(ratified)*: With ten tabs open,
-  unique set size attributable to Evreos processes, excluding the system web
-  runtime's own processes, stays at or below 150 MB, measured 60 s after the
-  tenth tab finishes loading on each named reference machine. The metric is
-  named because ADR-0001 records that the published ordering flips between USS
-  and PSS on the same machine, so "memory attributable to" is not one number.
-- **SC-005** *(ratified)*: When idle, mean
-  processor use over a 10-minute window stays below 0.5% of one core, with no
-  wake activity more frequent than once per minute, and background tabs are
-  suspended.
-- **SC-006** *(ratified)*: Switching tabs and
-  typing in the address field produce a visible response within 16 ms at the
-  display's native refresh rate, at the 95th percentile over 100 trials.
+  proportional set size attributable to Evreos processes, excluding the system
+  web runtime's own processes, stays at or below 150 MB, measured 60 s after the
+  tenth tab finishes loading on each named reference machine. USS and PSS give
+  different answers for the same state, so the metric has to be named; PSS is
+  used because it charges shared pages proportionally rather than discarding
+  them, which is the conservative reading of a shell-overhead budget.
+- **SC-005** *(ratified)*: When idle, processor use stays below 0.5% of one core
+  at every 1-second sample across a 10-minute window, with no periodic wake
+  activity, and background tabs are suspended.
+- **SC-006** *(ratified)*: Switching tabs and typing in the address field produce
+  a visible response within one frame at the display's native refresh rate, at
+  the 99th percentile over 100 trials and with no trial exceeding two frames.
 
 **Experience**
 
