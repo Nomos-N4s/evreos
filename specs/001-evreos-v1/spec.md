@@ -302,6 +302,13 @@ unchanged.
 **Accessibility and language**
 
 - **FR-034**: Every shell surface MUST meet WCAG 2.1 AA.
+- **FR-041**: Before download, the distribution page MUST state the minimum
+  operating-system version for each platform and the tier-2 site-credential
+  limitation of FR-015a. These are product surfaces, not marketing: they MUST
+  meet WCAG 2.1 AA as FR-034 requires and MUST be available in German, Greek and
+  English as FR-035 requires. The tier-2 installer MUST additionally refuse to
+  install below the floor with a plain-language reason, rather than failing at
+  first launch.
 - **FR-035**: Interface text MUST be available in German, Greek and English,
   keyed by language alone, with place never fused into the language value.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
@@ -431,6 +438,11 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
 - **SC-008**: Every shell surface passes WCAG 2.1 AA, is fully operable by
   keyboard, remains usable at 200% scaling, and accepts German dead-key and
   Greek text entry correctly.
+- **SC-009a**: The tier-2 build installs and launches on macOS 13.0, on the
+  current macOS release, and on every major version between them. On a machine
+  below the floor the pre-download statement required by FR-041 is present and
+  the installer refuses with a named reason; zero cases of the floor being
+  discovered only after installation.
 - **SC-009**: Each of the four navigation failures FR-015 enumerates — an
   unresolvable address, an untrusted or expired certificate, an intercepting
   network, and a request for authentication — is exercised on every supported
@@ -442,15 +454,19 @@ not reopened here — see Q-E9a for the naming that reproducibility still needs.
 
 - **SC-010**: At least 25% of people pitched at the pilot counter install
   Evreos and complete a claim.
-- **SC-011**: At least 20% of members who install are still using Evreos 30 days
-  later, measured two ways and reported separately, never as one blended figure:
-  signed-in retention derived from existing server-side account activity, which
-  is transactional rather than diagnostic and needs no opt-in; and signed-out
-  retention derived from the opt-in diagnostic signal in FR-039, which is a
-  self-selected sample and MUST be labelled as such wherever it is reported.
+- **SC-011**: Thirty-day retention is measured two ways and reported separately,
+  never as one blended figure. **Signed-in retention** is at least 20%: the share
+  of members who first signed in during a given calendar week and who record at
+  least one Evreos-originated account request (FR-040) on any day from 24 to 30
+  after install. It is derived from server-side account activity, which is
+  transactional rather than diagnostic and needs no opt-in. **Signed-out
+  retention** is reported alongside it over the same weekly cohorts, computed
+  from the FR-039 signal; it is a self-selected sample, MUST be labelled as such
+  and stated with its opt-in rate wherever it is reported, and carries no bar —
+  it is reported for direction. The 20% bar applies to the signed-in figure
+  only. Cohorts below 200 installs are reported with confidence intervals rather
+  than as a point figure.
 
-- **SC-015**: The tier-2 build installs and runs on macOS 13 and later. Machines
-  below that floor are told so before download, not after installation.
 - **SC-012**: Active members average at least one cashback activation per month.
 
 **Trust**
