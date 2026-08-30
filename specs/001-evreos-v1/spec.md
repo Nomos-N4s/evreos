@@ -23,9 +23,9 @@
   placement? (Q-E2) → A: A privacy-preserving engine, with no paid placement or
   revenue arrangement in v1. Members can change it freely.
 - Q: What happens when a macOS member needs a saved password, given platform
-  autofill is unavailable there? (Q-E4) → A: State the limitation before
+  autofill may be unavailable there? (Q-E4) → A: State the limitation before
   install, and offer to hand the site off to the hand-off browser when a password
-  field is encountered. No credential storage is built in v1.
+  field is encountered. No site-credential storage is built in v1.
 - Q: Should the placeholder performance budgets be ratified now, or replaced
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
   budgets now as tighten-only CI gates; hold the cold-start figure (SC-002)
@@ -159,10 +159,12 @@ unchanged.
   system web runtime, first run must be a designed experience with honest
   progress and a resumable download, not a silent stall. This is a separate
   path from the cold-start budget.
-- **A site depends on protected media.** Some streaming that requires content
-  protection may not play; which services are affected is unsettled and tracked
-  as Q-E11, so no exclusion is described to anyone until it is measured. Where
-  playback does fail, the member must be offered a clear hand-off to their
+- **A site depends on protected media.** On tier 2 the content-protection
+  module most streaming services require is unavailable, so such playback fails.
+  On tier 1, whether the platform-native system covers any service members use
+  is untested (Q-E11), so no tier-1 capability is claimed in either direction
+  until it is measured. Wherever playback does fail, FR-037 applies and the
+  member must be offered a clear hand-off to their
   hand-off browser rather than a failure they must diagnose.
 - **A site behaves differently across platforms.** The same page may render
   differently on tier 1 and tier 2, so a reported problem may not reproduce.
@@ -311,12 +313,15 @@ unchanged.
   in CI on every change. Principle VIII requires both; the spec previously
   carried neither.
 - **FR-041**: Before download, the distribution page MUST state the minimum
-  operating-system version for each platform and the tier-2 site-credential
-  limitation of FR-015a. These are product surfaces, not marketing: they MUST
-  meet WCAG 2.1 AA as FR-034 requires and MUST be available in German, Greek and
-  English as FR-035 requires. The tier-2 installer MUST additionally refuse to
-  install below the floor with a plain-language reason, rather than failing at
-  first launch.
+  operating-system version for each platform that declares one, and, for any
+  platform where the test FR-015a requires has found site-credential autofill
+  absent, that limitation for that platform. Until that test has run the page
+  MUST NOT assert either presence or absence. The distribution page is not a
+  shell surface and so falls outside FR-034, and is not interface text and so
+  falls outside FR-035; this requirement extends both obligations to it, so the
+  page MUST meet WCAG 2.1 AA and MUST be available in German, Greek and English.
+  The tier-2 installer MUST additionally refuse to install below the floor with a
+  plain-language reason, rather than failing at first launch.
 - **FR-035**: Interface text MUST be available in German, Greek and English,
   keyed by language alone, with place never fused into the language value.
 - **FR-036**: Text entry MUST be correct for German dead keys and Greek
@@ -514,7 +519,8 @@ a landing page:
   the tier-1 platform, without interface surfaces and by manual installation;
   restricted by operating-system version on tier 2; unavailable on the deferred
   platform. It cannot be offered consistently and so is not offered.
-- **Playback of content-protected streaming media.** Excluded from v1. The
+- **Playback of content-protected streaming media.** Excluded from v1 on tier 2,
+  and not claimed on tier 1 until Q-E11 is measured. The
   content-protection system most streaming services require is unavailable in
   every engine option considered, and is not obtainable by adopting a different
   engine strategy — it is a licensing wall rather than a technical one. Whether
@@ -602,7 +608,8 @@ resolved silently by this specification.
   mid-range x86 laptop and an M1-class portable. Exact models remain to be named
   (Q-E9a). Until they are, no hardware-dependent figure is reproducible.
 - **Import sources** are Chrome, Firefox and Edge, covering bookmarks and
-  history. Credentials are out of scope pending Q-E5.
+  history. Site credentials are out of scope; Q-E5 records that decision and
+  what reopens it.
 - **The pilot launches on existing web surfaces**, not on Evreos. Evreos's job
   for the pilot cohort is month-two retention, not day-one delivery.
 - **Partner-facing campaign administration ships disabled** (FR-029a), because
