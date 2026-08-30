@@ -213,21 +213,22 @@ of them requires a MAJOR amendment to this constitution:
   record that is edited after the fact invalidates every round on the pull request. That
   is what keeps a round which found something traceable to the fix that followed it.
 - A pull request is NOT mergeable until a review round has been recorded green — no
-  confirmed findings — against the exact diff that would merge, which is
-  `git diff <base>...<head>`, three dots, against the merge base. The record is a comment on
-  the pull request, as the bullet above requires, and states the head SHA and the base SHA
-  it covers, and every finding raised with its severity and its disposition — confirmed
-  and fixed by commit SHA, or dismissed with the reason. Naming both SHAs is
-  what lets a reader decide whether the round is still current; listing the findings is
-  what makes "green" checkable rather than asserted. A bare count is a second assertion,
-  not evidence: it lets two confirmed blockers be recorded as "0 confirmed" with nothing
-  a reader could check. A round is invalidated by a new push, and by base movement that
-  changes that three-dot diff or introduces a conflict; base movement that leaves it
-  byte-identical does not, because nothing about what would merge has changed. Green automated checks are
-  not a substitute: the two run in parallel and the merge will win. The founder may
-  override, but the override is stated on the pull request before the merge, and names
-  what it overrides and the confirmed findings it merges over. Stated afterwards it is
-  not a decision, only an account of an accident.
+  confirmed findings — against the exact diff that would merge, which is `git diff
+  <base>...<head>`, three dots, against the merge base. The record is a comment on the
+  pull request, as the bullet above requires, and states the head SHA and the base SHA it
+  covers, and every finding raised with its severity and its disposition — confirmed and
+  fixed by commit SHA, or dismissed with the reason. Naming both SHAs is what lets a
+  reader decide whether the round is still current; listing the findings is what makes
+  "green" checkable rather than asserted. A bare count is a second assertion, not
+  evidence: it lets two confirmed blockers be recorded as "0 confirmed" with nothing a
+  reader could check. A round is invalidated by a new push, and by base movement that
+  changes that three-dot diff or introduces a conflict; base movement that leaves the
+  diff identical does not, because nothing about what would merge has changed. Green
+  automated checks are not a substitute: the two run in parallel and the merge will win.
+  The founder
+  may override, but the override is stated on the pull request before the merge, and names
+  what it overrides and the confirmed findings it merges over. Stated afterwards it is not
+  a decision, only an account of an accident.
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
