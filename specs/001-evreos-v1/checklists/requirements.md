@@ -6,13 +6,15 @@
 
 ## Content Quality
 
-- [ ] No implementation details (languages, frameworks, APIs) — SC-004 names
-  platform memory counters — `phys_footprint` via `task_vm_info` on macOS and
-  Private Bytes (`PROCESS_MEMORY_COUNTERS_EX.PrivateUsage`) on Windows, with
-  Working Set — Private named only to exclude it — and FR-039b names a relay.
-  These are measurement and privacy mechanisms rather than
-  technology choices, but they are API and infrastructure names, and the item
-  cannot be marked complete while that question is open
+- [ ] No implementation details (languages, frameworks, APIs) — names are present
+  and load-bearing in four places: SC-004 names platform memory counters
+  (`phys_footprint` via `task_vm_info` on macOS, Private Bytes —
+  `PROCESS_MEMORY_COUNTERS_EX.PrivateUsage` — on Windows, Working Set — Private
+  named only to exclude it) and the Linux `smaps` construct it rules out;
+  SC-009a names macOS 13.0; FR-039b names a relay; and FR-044 names stable Rust.
+  Each is a measurement boundary, a privacy mechanism or a constitutional
+  mandate rather than a free technology choice, but they are API, platform and
+  language names, and the item cannot be ticked while that question is open
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed
@@ -21,12 +23,14 @@
 
 - [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
-- [ ] Success criteria are measurable — four hardware-dependent criteria
-  (SC-002, SC-004, SC-005, SC-006) cannot be reported as met until Q-E9a names
-  the reference machines, and SC-013's reproducibility bar depends on the same
+- [ ] Success criteria are measurable — the four criteria carrying
+  hardware-dependent figures (SC-002, SC-004, SC-005, SC-006) cannot be reported
+  as met until Q-E9a names the reference machines, and SC-013's reproducibility
+  bar rests on the same answer
 - [ ] Success criteria are technology-agnostic — SC-004 names platform memory
-  counters and SC-009a names macOS 13.0; both are load-bearing for measurement
-  and for the tier-2 floor respectively
+  counters and the Linux `smaps` construct it rules out, and SC-009a names macOS
+  13.0; both are load-bearing, for reproducible measurement and for the tier-2
+  floor respectively
 - [x] All acceptance scenarios are defined
 - [x] Edge cases are identified
 - [x] Scope is clearly bounded
@@ -34,121 +38,135 @@
 
 ## Feature Readiness
 
-- [ ] All functional requirements have clear acceptance criteria — FR-003,
-  FR-003a, FR-006, FR-007, FR-009, FR-010, FR-015a, FR-016a, FR-018a, FR-018b,
-  FR-019a, FR-021, FR-023, FR-029a, FR-031, FR-037, FR-039b, FR-039c, FR-039d,
-  FR-039e, FR-039f, FR-042 and FR-044 — 23 of the 58 — have neither. The test is
-  substantive rather than lexical: a requirement is covered when an acceptance
-  scenario asserts its behaviour or a success criterion measures it, whether or
-  not that scenario or criterion names it. Story 1's fourth scenario is FR-015's
-  acceptance criterion and never says so. FR-041 is the one partial case: SC-009a
-  covers its operating-system statement and its installer refusal, and nothing
-  covers its accessibility and language obligations.
+- [ ] All functional requirements have clear acceptance criteria — **the rule**: a
+  requirement is covered when an acceptance scenario cites it as what that
+  scenario accepts, or when a success criterion measures it. Every acceptance
+  scenario carries a trailing requirement citation — *(FR-015)* — so coverage is
+  computed from those citations and from the criteria, and not from wherever an
+  identifier happens to appear: FR-019a's reference to the FR-020 cache and
+  SC-005's enumeration of FR-014's update check are cross-references, not
+  coverage. The lists below are what the rule yields.
 
-  This list is therefore a reading of eighteen scenarios and fifteen criteria
-  against fifty-eight requirements, and it cannot be checked by a script. No
-  acceptance scenario names a requirement at all — the single identifier in that
-  whole section is FR-037, in an edge case — so identifier frequency answers a
-  different question: it over-reports FR-015 and, now that FR-019a cites FR-020
-  twice, under-reports FR-020. Four earlier versions of this list read as
-  exhaustive and were not; the last two named FR-014 and FR-039a, which success
-  criteria cite by identifier, and omitted most of what is above. The structural
-  fix, having each scenario cite what it accepts, is issue #29 rather than a
-  change made here
+  **Neither a scenario nor a criterion reaches** FR-003, FR-003a, FR-004, FR-006,
+  FR-007, FR-009, FR-010, FR-014, FR-015a, FR-018b, FR-019a, FR-019b, FR-021,
+  FR-023, FR-026a, FR-029a, FR-031, FR-036a, FR-037, FR-039b, FR-039c, FR-039d,
+  FR-039e, FR-039f, FR-042 or FR-044.
+
+  **Reached only in part**, each with what is missing:
+
+  - **FR-005**: SC-008 measures interface scaling to 200%; nothing exercises
+    find-in-page or page zoom.
+  - **FR-016a**: Story 2 scenario 5 asserts the opt-in mandate — a member who
+    never signs in has no money surface imposed. Discoverability and
+    dismissibility are unexercised, and Principle IV makes all three release
+    criteria.
+  - **FR-018a**: Story 2 scenario 6 asserts that an offer activates only on an
+    explicit action for that occasion. The rest of the injection rule — that no
+    per-app grant supplies the occasion, and that a cashback offer alters no
+    merchant page before the member acts — is unexercised.
+  - **FR-024**: the catalogue is opened in Story 2 scenario 2; nothing exercises
+    language and place as independent parameters within it.
+  - **FR-030**: Story 2 scenario 6 asserts that attribution is never attached
+    silently; nothing tests that attribution is never claimed for a purchase the
+    member's action did not lead to.
+  - **FR-033**: Story 2 scenario 1 exercises the deliberate scan; nothing tests
+    that attribution is never inferred from the installation.
+  - **FR-041**: SC-009a covers the pre-download operating-system statement and
+    the installer's refusal below the floor; nothing covers the accessibility
+    and language obligations this requirement extends to the distribution page.
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
-- [ ] No implementation details leak into specification — same question as the
-  item above, and unticked for the same reason
+- [ ] No implementation details leak into specification — the same question as
+  the first Content Quality item, and unticked for the same reason
 
 ## Notes
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`.
 
-### Re-validation after clarify and review, 2026-08-30
+### Clarifications and open decisions
 
-Six clarifications were integrated (see the spec's Clarifications section). An
-earlier version of this section said five and reported settled-decision counts
-that were wrong; it had been written before the sixth clarification landed, so
-it never assessed the FR-029 / FR-029a split at all. Corrected below.
+Six clarifications are integrated; the spec's Clarifications section records
+them.
 
-Two items improved materially rather than changing state:
+Nineteen open decisions stand. Four are **partly** settled, each recording what
+remains open: Q-E2 (the specific engine), Q-E4 (the tier-2 keychain), Q-E6 (the
+rest of the diagnostic set) and Q-E9 (the SC-002 figure, and SC-004's tier-2
+figure). Two are closed: Q-E5 as a consequence of Q-E4, and Q-E8 as superseded
+by Q-E13. The remaining thirteen are open in full — Q-E1, Q-E3, Q-E7, Q-E9a,
+Q-E10, Q-E11, Q-E11a, Q-E11b, Q-E12, Q-E13, Q-E14, Q-E15 and Q-E16. Q-E9a is a
+release prerequisite rather than a preference, because the Success Criteria
+preamble holds every absolute gate on a hardware-dependent figure advisory until
+the reference machines are named, and Principle II admits no un-gated budget.
 
-- *Requirements are testable and unambiguous* was previously passing on the
-  strength of wording. SC-011 was **untestable as written** — it required a
-  retention figure the privacy posture made unmeasurable. Splitting it into two
-  separately reported measurements (FR-039, FR-040) fixed the signed-in half.
-  The signed-out half stayed untestable until review, because a cohort
-  measure appeared to need a per-install key. FR-039a resolves it without one:
-  the client evaluates its own retention locally and emits unlinkable reports
-  carrying only a cohort week — an enrolment report, then either a retention or a
-  withdrawal report — and the measure is the ratio of retention reports to
-  enrolments net of withdrawals. Two earlier versions of this paragraph described
-  designs the spec had already moved past, each stale in the round that wrote it;
-  it is now checked against FR-039a whenever that requirement changes.
-- *Scope is clearly bounded* is stronger now that the tier-2 operating-system
-  floor is declared with both its consequences, the default search posture is
-  fixed, and the site-credential limitation is stated rather than implied.
+### Constitutional mandate coverage
 
-Adversarial review then found items that were **not** passing, contrary to the
-earlier claim that all still did. It also found ten constitutional mandates that
-no requirement had held, each since carried: Principle II's
-budget file and per-change cost (FR-043), Principle IV's discoverable, opt-in and
-no-injection mandates (FR-016a, FR-018a), Principle VI's *aggregate* condition
-(FR-039d, which counts crash reports under a symbol-keyed key rather than
-retaining a report — a retained exemplar would be the same per-install payload
-under another name — and FR-039e, which sets the disclosure floor), Principle
-VI's rule that browsing history stays on the machine (FR-007a, which mattered
-because FR-003 mandates a combined field and FR-003a routes it to a search
-provider), Principle III's engine seam and no-bundled-engine rule (FR-044),
-Principle VII's BCP-47 keying and language/place separation (FR-035), the
-Permanent Prohibition on advert injection, which FR-018a's consent rule did not
-reach (FR-018b), and Principle IX's requirement that the delivered surface itself
-be signed rather than only its manifest (FR-019a). Three further gaps are
-recorded in issue #28 rather than fixed here, because adding requirements
-reactively is what each round has been correcting. Fixed in this branch: Principle VI's EU-hosting
-mandate and crash reporting were absent; Principle II's requirement that every
-named budget be CI-gated was contradicted by an ungated cold start; Principle
-V's prohibition on client-built affiliate deeplinks had no requirement; Principle
-VIII's brand seam had none either; SC-009 pointed at a section containing none of
-what it claimed, giving it an empty population; and "credential" carried two
-meanings that contradicted each other across FR-015a and FR-023.
+Each mandate below is held by the requirement named, so that a build can be held
+to the requirement rather than to the principle's wording:
 
-Of the open decisions, Q-E2, Q-E4, Q-E6 and Q-E9 are **partly** settled — each
-records what remains open, respectively the specific engine, the tier-2 keychain,
-the rest of the diagnostic set, and the SC-002 figure. Q-E5 is settled as a
-consequence of Q-E4 and Q-E8 is superseded by Q-E13. Q-E9a, Q-E11a, Q-E12, Q-E13
-and Q-E14 were opened by review. An earlier version of this line called the first
-group settled outright, which is the same error it was written to correct.
+- **Principle II** — the single budget file and the per-change byte and
+  millisecond cost: FR-043. The gate structure itself is defined once, in the
+  Success Criteria preamble.
+- **Principle III** — the engine seam proved by a second implementation, stable
+  Rust with no nightly features on the release path, and no bundled engine in
+  any release: FR-044.
+- **Principle IV** — Apivo surfaces discoverable, opt-in and dismissible:
+  FR-016a. Nothing injected into a page without an explicit action for that
+  occasion: FR-018a.
+- **Principle V** — no client-built affiliate deeplink: FR-025. Ledger amounts
+  rendered rather than computed, and the cashback invariants left behind the
+  service: FR-026 and FR-026a.
+- **Principle VI** — browsing history stays on the machine: FR-007a. Opt-in
+  diagnostics: FR-039. The *aggregate* condition: FR-039d, which counts crash
+  reports under a symbol-keyed counter rather than retaining a report — a
+  retained exemplar would be the same per-install payload under another name —
+  and FR-039e, which sets the disclosure floor. Bounded crash-report content:
+  FR-039c. EU hosting of every payload and derivative: FR-039f. The
+  fingerprinting prohibition: FR-036a.
+- **Principle VII** — BCP-47 primary-subtag keying, and language and place as
+  separate values everywhere either appears: FR-035.
+- **Principle VIII** — the single brand configuration and the fixture brand built
+  in CI on every change: FR-042.
+- **Principle IX** — capabilities declared in a signed manifest and not widenable
+  from inside: FR-017. The per-app grant for anything page-adjacent: FR-018. The
+  delivered surface itself signed and verified before rendering: FR-019a. A
+  browser release carrying no app content: FR-019b.
+- **Principle X** — WCAG 2.1 AA on every shell surface: FR-034. Full keyboard
+  operation: FR-011. Scaling to 200%: FR-005. German dead-key and Greek text
+  entry: FR-036. The distribution page, which is neither a shell surface nor
+  interface text: FR-041.
+- **Permanent Prohibitions** — advert injection: FR-018b, which carries the
+  prohibition past FR-018a's consent rule because a Permanent Prohibition admits
+  no consent exception. Silent affiliate attribution: FR-030 and FR-033.
+  Server-side collection of browsing history: FR-007a.
+
+Gaps identified but not yet carried as requirements are recorded in issue #28.
 
 ### Validation record
 
-**No `[NEEDS CLARIFICATION]` markers are used.** The founder decisions are
-recorded in the Open Decisions section instead, because the master prompt routes
-them to `/speckit-clarify` and states they must be answered by the founder
-rather than resolved by a specification. The figures they govern were all
-placeholders originally; Success Criteria now marks each figure ratified or
-provisional explicitly, and the gate exists either way, because Principle II
+**No `[NEEDS CLARIFICATION]` markers are used.** Founder decisions are recorded
+in the spec's Open Decisions section instead, which routes them to
+`/speckit-clarify` and states they MUST NOT be resolved silently by the
+specification. Success Criteria marks each figure they govern ratified or
+provisional explicitly, and the CI gate exists either way, because Principle II
 admits no un-gated budget.
 
-**Implementation-detail review.** Engine, framework and language names were
-deliberately kept out. Four success criteria reference a "system-provided web
-runtime" as a measurement boundary rather than a technology choice: SC-001
-excludes its bytes, SC-002 assumes it present, SC-003 covers its absence, and
-SC-004 excludes its processes. Three further names entered during review and are
-load-bearing rather than incidental: SC-004 names `phys_footprint` via
-`task_vm_info` and Private Bytes (`PROCESS_MEMORY_COUNTERS_EX.PrivateUsage`), and
-names Working Set — Private only to exclude it, because the two platforms expose
-different quantities and an unnamed "memory" figure is not reproducible under
-SC-013; SC-009a names macOS 13.0 because the tier-2 floor is the criterion; and
-FR-039b names a relay because the unlinkability it requires cannot be met at the
-application layer alone. Without that boundary the
-figures are not measurable, since what is being budgeted is the part Evreos
-ships. The engine decision itself lives in ADR-0001, not here.
+**Implementation-detail review.** Framework and engine names are kept out, and
+the engine decision itself lives in ADR-0001 rather than here. Four success
+criteria reference a system-provided web runtime as a measurement boundary
+rather than as a technology choice: SC-001 excludes its bytes, SC-002 assumes it
+present, SC-003 covers its absence, and SC-004 excludes its processes. Without
+that boundary the figures are not measurable, since what is budgeted is the part
+Evreos ships. The names that do appear are load-bearing rather than incidental,
+and the first Content Quality item lists them: SC-004's counters and the `smaps`
+construct it rules out, because the two platforms expose different quantities
+and an unnamed "memory" figure is not reproducible under SC-013; SC-009a's macOS
+13.0, because the tier-2 floor is the criterion; FR-039b's relay, because the
+unlinkability it requires cannot be met at the application layer alone; and
+FR-044's stable Rust, which Principle III mandates by name.
 
 **Platform tiering** appears in its own section rather than as a requirement,
 because it bounds scope rather than describing behaviour.
 
 **Known gap, deliberate.** SC-010, SC-011 and SC-012 are business outcomes
-measured after release rather than at acceptance. They are retained because the master
-prompt names them as success criteria and because omitting them would hide the
-product's actual bar.
+measured after release rather than at acceptance. They are retained because they
+state the product's actual bar, and omitting them would hide it.
