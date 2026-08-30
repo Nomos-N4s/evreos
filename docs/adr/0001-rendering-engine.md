@@ -153,8 +153,14 @@ surprise, and so no marketing claim outruns it.
   `playready.recommendation` (SL3000) as producing a black screen while
   `playready.software` plays correctly (WebView2Feedback#4935, closed as
   completed). An open Widevine feature request opens with "Webview2 support
-  playready already" (WebView2Feedback#4828). Microsoft's own WebView2
-  documentation says nothing about content protection at all.
+  playready already" (WebView2Feedback#4828) — a requester's claim, not a vendor
+  statement. Microsoft's WebView2 documentation carries no statement of
+  content-protection support; PlayReady appears once, as image alt text in the
+  Fixed Version ACL steps. Two caveats on the positive datapoint: it comes from a
+  WinUI2/UWP host rather than the Win32 desktop shell this record is about, and a
+  separate open report says the fixed-version runtime does not support PlayReady
+  at all (WebView2Feedback#4632), which would tie PlayReady to the evergreen
+  distribution mode.
 
   **Unestablished — whether Widevine is usable in WebView2.** An open, unanswered
   feature request asks Microsoft to support it (WebView2Feedback#4828), which is
@@ -287,17 +293,23 @@ surprise, and so no marketing claim outruns it.
    engine can actually play. On Windows: whether the PlayReady software key
    system reachable in WebView2 covers the services members use, and at which
    security level — commercial streamers commonly gate higher resolutions behind
-   a hardware tier, and that tier is the one reported broken. On macOS, which
+   a hardware tier, and the one located report of that tier failing in WebView2
+   has since been closed, so whether it now works is unmeasured. On macOS, which
    ships as tier 2: whether a third-party `WKWebView` host gets FairPlay through
-   EME at all. That is unestablished and is the tier-2 equivalent of the tier-1
-   question; the record named a FairPlay service and then tracked nothing about
-   FairPlay. On Linux, if it proceeds: what EME WebKitGTK exposes in
-   distribution builds. The public broadcasters are already known to need none
-   of this. Test against the services that do — Joyn and the commercial
-   streamers — before the exclusion is treated as settled or described to
-   anyone. Note before concluding: any content-protection module is proprietary
-   bytes against the download budget (Principle II) and provisions against a
-   per-device identifier (Principle VI). Establishing that a module can be
+   EME at all. That is unestablished, and no service is currently identified as
+   FairPlay-dependent — the earlier RTL+ claim was withdrawn as uncitable — so
+   the spike must first establish which services this cohort uses that rely on
+   FairPlay. Also whether Widevine is usable in WebView2 at all, which the
+   capability floor now records as unestablished. On Linux, if it proceeds: what EME WebKitGTK exposes in
+   distribution builds. The public broadcasters are shown by convergent client
+   evidence to need none
+   of this on the adaptive path tested. Test against the services that do — Joyn
+   and the commercial streamers — before the exclusion is treated as settled or
+   described to anyone. Note before concluding: a key system already present in
+   the host runtime costs no download bytes, and only a module Evreos shipped
+   itself would count against Principle II's budget; but any content-protection
+   path provisions against a per-device identifier, which Principle VI
+   constrains. Establishing that a module can be
    loaded does not establish that it should be.
 9. **What governs macOS memory at ten tabs.** The process-pool requirement
    originally recorded here was withdrawn as a no-op, which left this
