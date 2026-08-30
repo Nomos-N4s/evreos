@@ -97,15 +97,16 @@
 ### Clarifications and open decisions
 
 Two clarification sessions are integrated, both dated 2026-08-30: six
-clarifications in the first, eleven in the second. The spec's Clarifications
+clarifications in the first, twelve in the second, eighteen in all. The spec's Clarifications
 section records both.
 
 Fifteen entries stand in Open Decisions, and none is open in full. Eleven are
 settled outright: Q-E1, Q-E2, Q-E3, Q-E6, Q-E7, Q-E9a, Q-E11a, Q-E13, Q-E14,
 Q-E15 and Q-E16. Two are settled with a residual recorded and explicitly
 post-v1: Q-E4 (the tier-2 keychain) and Q-E5 (importing site credentials, which
-reopens with Q-E4). Q-E9 is settled in part, two figures staying provisional
-pending measurement — SC-002's, and SC-004's on tier 2. Q-E8 is closed as
+reopens with Q-E4). Q-E9 is settled in part, three figures staying provisional
+pending measurement — SC-002's warm start and its cold start, which the spec
+counts and names separately, and SC-004's on tier 2. Q-E8 is closed as
 superseded by Q-E13.
 
 Four former entries are measurements rather than decisions and are carried in
@@ -194,8 +195,10 @@ names that do appear are load-bearing, and they appear in six places:
 
 Four success criteria reference a system-provided web runtime as a measurement
 boundary rather than as a technology choice: SC-001 excludes its bytes, SC-002
-assumes it present, SC-003 covers its absence, and SC-004 excludes its
-processes. Without that boundary the figures are not measurable, since what is
+assumes it present, SC-003 covers its absence, and SC-004 counts its processes,
+excluding only system daemons already running before Evreos started and shared
+with other applications — a boundary drawn at Evreos's own executable would be
+passed by moving work into a runtime process. Without that boundary the figures are not measurable, since what is
 budgeted is the part Evreos ships. SC-004's counters and the `smaps` construct
 it rules out are named because the two platforms expose different quantities and
 an unnamed "memory" figure is not reproducible under SC-013; SC-009a's macOS

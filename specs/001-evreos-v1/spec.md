@@ -30,7 +30,10 @@
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
   budgets now as tighten-only CI gates; hold SC-002's start-up figures — warm
   start and cold start alike — until the cold-start spike measures engine
-  initialisation on the reference machine for each tier.
+  initialisation on the reference machine for each tier. This answer ratified
+  the memory budget without distinguishing the tiers; SC-004's tier-2 entry was
+  afterwards held provisional on the evidence ADR-0001 records, and Q-E9 states
+  that narrowing. Where the two differ Q-E9 governs, as the later record.
 - Q: Is claim-code redemption in v1, or does it wait for the campaign backend?
   → A: They are two different flows. Member-facing claim-code redemption ships
   in v1. Partner-facing campaign administration is the flow blocked on the
@@ -1078,8 +1081,10 @@ identity, recorded in the budget file from M0 by model, operating-system
 version, memory configuration and a durable machine identifier. A fungible
 hosted machine is not one: neighbour noise on shared cloud machines moves memory
 and latency by more than a real regression does. Both measuring gates run on the
-runner for the entry's platform and block from M0, and every measured figure is
-reported against that runner and no other — a tier-1 figure against the tier-1
+runner for the entry's platform, on the terms set out below — the regression gate
+blocking from M0, the absolute gate on a hardware-dependent entry advisory until
+that tier's runner exists — and every measured figure is reported against that
+runner and no other — a tier-1 figure against the tier-1
 runner, a tier-2 figure against the tier-2 runner.
 
 The **reference machine** for a tier is the oldest configuration that tier's
@@ -1087,9 +1092,10 @@ declared operating-system floor admits, at 8 GB of memory, and it is that tier's
 pinned runner. The rule binds and the models follow from it, so a change of
 floor changes the machines without reopening the decision: today the rule yields
 an 8th-generation Intel i3/i5 laptop with 8 GB on tier 1, the oldest processor
-the tier-1 Windows floor admits, and a 2017 MacBook Pro with 8 GB on tier 2, the
-oldest actively cooled portable macOS 13 admits — Assumptions records why the
-fanless 2017 MacBook, which that floor also admits, cannot serve as a runner. Q-E9a records that decision, so a
+the tier-1 Windows floor admits, and a 2017 MacBook Pro with 8 GB on tier 2, the oldest
+actively cooled portable macOS 13 admits — Assumptions records why the fanless
+12-inch MacBook of the same year, which that floor also admits, cannot serve as a
+runner. Q-E9a records that decision, so a
 figure may be reported as *met on reference hardware*, or published under
 SC-013, against the pinned runner for its tier and against no other machine.
 Both gates are defined and enforced from M0. On a hardware-dependent entry the
@@ -1359,11 +1365,12 @@ budget Principle II names.
   mechanism is not a free property of FR-014 and must be specified where the
   channel is.
 
-  **Small cohorts.** The signed-out figure is governed by FR-039e, which gates a
-  week on its enrolment-report count reaching 50: a smaller cohort is withheld
-  whole, not published with an uncertainty band around it, and inside a
-  qualifying week any count below 50 — in practice the withdrawals — is published
-  as a band rather than exactly. The signed-in
+  **Small cohorts.** The signed-out figure is governed by FR-039e, which gates an
+  enrolment week on its enrolment-report count less its withdrawal-report count
+  reaching 50 — the population the rate is computed over, not the enrolments
+  alone. A week below that is withheld whole, not published with an uncertainty
+  band around it. Inside a qualifying week the counts are published on the terms
+  FR-039e sets. The signed-in
   figure is drawn from account activity rather than from a diagnostic counter, so
   FR-039e does not reach it; there, a cohort of fewer than 200 first sign-ins is
   published with its cohort size and labelled direction-only, and the 40% bar is
@@ -1546,15 +1553,6 @@ below, under the identifiers they were opened with.
   and is the only thing standing between those gates and blocking. The Success
   Criteria preamble states the rule; the Assumptions entry on reference hardware
   states what the budget file must record.
-- **Q-E10** Whether affiliate attribution survives tracking prevention on the
-  tier-2 platform. Recorded in ADR-0001 as unverified and as the only
-  identified risk that can invalidate the business rather than the
-  architecture.
-- **Q-E11** Whether PlayReady reaches the Win32 WebView2 host Evreos ships —
-  the one located positive report comes from a WinUI2/UWP host — and, if it
-  does, whether it covers any streaming service members actually use and at
-  which security level, since commercial streamers commonly gate higher
-  resolutions behind a hardware tier. ADR-0001 risk 8 carries the measurement.
 - **Q-E11a** *Settled 2026-08-30*: the existing service is not yet confirmed to
   hold campaign records and accept a redemption. FR-029 therefore ships present
   in the interface and disabled, with the honest explanation FR-029a's treatment
@@ -1609,7 +1607,7 @@ this specification still resolves.
   MUST be measured before the floor is treated as settled.
 
 Two further spikes carry no identifier of their own and are named where the
-figures they settle are: the cold-start spike SC-002's two entries wait on, and
+figures they settle are: the cold-start spike SC-002's four entries wait on, and
 the spike into what governs macOS memory at ten tabs that SC-004's tier-2 entry
 waits on (Q-E9).
 
@@ -1624,9 +1622,12 @@ waits on (Q-E9).
   declared operating-system floor admits, at 8 GB of memory, held as that tier's
   pinned benchmark runner of stable identity. On the floors this specification
   declares, that rule names an 8th-generation Intel i3/i5 laptop with 8 GB on
-  tier 1 — the oldest processor Windows 11 admits — and a 2017 MacBook Pro with
-  8 GB on tier 2. macOS 13 admits the 12-inch MacBook of 2017 as well, which is
-  older still; it is excluded because it is fanless, and a machine that throttles
+  tier 1, and a 2017 MacBook Pro with 8 GB on tier 2. The 8th generation is the
+  oldest processor generation Windows 11 admits as a class; its published list
+  also names two 2017 parts, the Core i7-7820HQ on selected devices and the Xeon
+  W-2100 series, neither of which is a laptop configuration this rule can procure
+  as a pinned runner. macOS 13 admits the 12-inch MacBook of 2017 as well,
+  introduced the same day and equally old; it is excluded because it is fanless, and a machine that throttles
   under sustained load cannot hold run-to-run variation inside the 5% tolerance
   cap a pinned runner has to satisfy. That exclusion is stated rather than left
   to the procurer, because "oldest admitted" and "usable as a runner" diverge
