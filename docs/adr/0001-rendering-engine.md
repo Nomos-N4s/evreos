@@ -112,17 +112,40 @@ content, which belongs to the engine.
 What this architecture cannot deliver. Stated here so it is not rediscovered as a
 surprise, and so no marketing claim outruns it.
 
-- **Content-protected media is excluded, on evidence that covers one system.**
-  **Widevine** — the content-protection module Netflix, Disney+, Prime Video and
-  Spotify's web player require — is not in open-source Chromium; Brave and
-  Vivaldi ship it under agreements with Google, which has refused open-source
-  projects. That is a licensing wall in **both** architectures, so a fork would
-  not have fixed it. **Unverified:** whether **PlayReady**, the system native to
-  Windows and used by Edge, is reachable from WebView2 and covers any service
-  members actually use — in particular the German public-broadcaster streams
-  (ARD and ZDF Mediathek) and RTL+. Whether PlayReady ships with the WebView2
-  runtime is *not* established here and must not be asserted. Until tested,
-  assume exclusion and provide the hand-off; see the risks below.
+- **Some content-protected media is excluded. The scope is narrower than first
+  recorded, and the German public broadcasters are not in it.**
+
+  **Verified — ARD and ZDF Mediathek are not DRM-protected.** Streamlink's ARD
+  plugin plays them with plain HLS and progressive HTTP and contains no DRM
+  handling; yt-dlp's ARD and ZDF extractors contain none either, and yt-dlp
+  detects DRM generically from the manifest rather than per-extractor, so a
+  protected stream would surface regardless of extractor code; the ARD add-on in
+  Kodi's official repository declares no `inputstream.adaptive` dependency,
+  while the Joyn add-on does. ARD's restrictions are geo-blocking and FSK
+  broadcast-time windows, not encryption. An earlier version of this record
+  named these two as the paradigm DRM-dependent services; that was wrong, and
+  it matters, because they are heavily used by this cohort.
+
+  **Verified — Joyn is Widevine-protected**: its browser playback request
+  declares `platform='browser'` and `protectionSystem='widevine'`. RTL+ shows
+  FairPlay asset names on Apple platforms, on weaker single-source evidence.
+
+  **Widevine itself** is not in open-source Chromium; Brave and Vivaldi ship it
+  under agreements with Google, which has refused open-source projects. That is
+  a licensing wall in **both** architectures, so a fork would not have fixed it.
+
+  **Not established, and not to be asserted either way:** whether WebView2 can
+  load a Widevine module, and whether it exposes PlayReady through the
+  platform's media stack. This is the decisive scoping question for the tier-1
+  platform and no source reachable during investigation answered it. Netflix's
+  own stated requirements were likewise unreachable. Until tested, assume
+  exclusion for the services shown to use DRM, and provide the hand-off; see the
+  risks below.
+
+  All of the above rests on convergent client evidence — independent players
+  that succeed without any DRM capability — rather than on broadcaster or vendor
+  statements, which were unreachable. That is strong for the negative claims and
+  is not a substitute for testing the positive ones.
 - **No single cross-platform content-blocking primitive.** `wry` exposes no
   `WKContentRuleList` or `WebKitUserContentFilterStore` binding; what exists is
   top-level navigation gating, a macOS-14+ proxy config behind a feature flag,
@@ -198,11 +221,12 @@ surprise, and so no marketing claim outruns it.
    public-broadcaster streaming. A cohort member whose bank login breaks does not
    file a bug; they uninstall and tell the shop.
 3. **The navigation-failure spike.** Add a load-failure event and a TLS hook on
-   both engines, by the route each actually requires: a wrapper over the exposed
-   native handles on Windows, where no fork is needed; a fork or upstream
-   contribution on macOS, where the navigation delegate must be replaced. The
-   macOS half is also the cheapest way to learn what maintaining that fork feels
-   like, and it is the only half that carries fork cost.
+   each engine, by the route that engine requires: a wrapper over the exposed
+   native handles on Windows and on Linux, where no fork is needed; a fork or
+   upstream contribution on macOS, where the navigation delegate must be
+   replaced. Only the macOS half carries fork cost, and it is the cheapest way
+   to learn what maintaining that fork feels like. Upstream the load-failure and
+   TLS hooks regardless of which route each platform takes.
 4. **Linux go/no-go** — ten live tabs on Wayland, and an AppImage on the scale.
    Note `wry`'s `build_as_child` tab model is X11-only, and Wayland is the default
    on current Ubuntu, Fedora and Plasma.
@@ -214,9 +238,12 @@ surprise, and so no marketing claim outruns it.
 7. **Accessibility on the tier-2 and deferred platforms.** The rationale is
    evidenced on Windows only. Drive each shell surface with the platform's own
    assistive technology before claiming WCAG 2.1 AA anywhere else.
-8. **Content protection on Windows.** Test whether PlayReady is reachable from
-   WebView2 and covers the German public-broadcaster streams and RTL+, before
-   the exclusion is treated as settled.
+8. **Content protection on the tier-1 platform.** Establish what WebView2 can
+   actually play: whether a Widevine module can be loaded, and whether PlayReady
+   is reachable through the platform media stack. The public broadcasters are
+   already known not to need either. Test against the services that do — Joyn,
+   RTL+, and the commercial streamers — before the exclusion is treated as
+   settled or described to anyone.
 9. **What governs macOS memory at ten tabs.** The process-pool requirement
    originally recorded here was withdrawn as a no-op, which left this
    untracked. Establish what actually shares state between webviews on that
@@ -225,6 +252,9 @@ surprise, and so no marketing claim outruns it.
     capability floor above and listed as unverified below; nothing has been run
     to confirm it. It bounds nothing in v1, since hosting third-party extensions
     is a non-goal, but the claim should not stand unmeasured while being used.
+11. **Passkey support on the tier-2 and deferred platforms.** The capability
+    floor calls it uncertain and nothing tracked it. German banking is moving
+    onto WebAuthn, so this bears directly on whether the cohort can sign in.
 
 ## Revisit triggers
 
@@ -249,10 +279,13 @@ funding; Thorium's maintenance load; the licensing position on the content
 protection module discussed above.
 
 **Unverified, and each appears in the risks to retire above** rather than as a
-finding: tracking prevention versus affiliate attribution; the cohort's platform
-mix, which the tiering assumes; accessibility guarantees on the tier-2 and
-deferred platforms; Windows-native content protection; and browser-extension
-behaviour on recent macOS in practice.
+finding: tracking prevention versus affiliate attribution (risk 1); the cohort's
+platform mix, which the tiering assumes (risk 6); accessibility guarantees on the
+tier-2 and deferred platforms (risk 7); what WebView2 can actually play under
+content protection (risk 8); what governs macOS memory at ten tabs (risk 9);
+browser-extension behaviour on recent macOS in practice (risk 10); and passkey
+support on the tier-2 and deferred platforms (risk 11), which the capability
+floor names and which nothing had tracked.
 
 **Size and memory figures** quoted in the rationale come from vendor
 documentation and published project statements rather than from measurement on
@@ -267,12 +300,21 @@ supporting claims. The decision is unchanged; the corrections concern accuracy.
 
 A second amendment followed a review of the first. Corrected then: a risk that
 still budgeted a fork on Windows, contradicting the accepted cost this same
-document had just corrected; an unsourced claim about how a content-protection
-system is packaged, stated as fact; a media exclusion that named no system or
-service and so could not be acted on or re-verified; and two unverified items the
-evidence section claimed were in the risks list when they were not, one of them
-created by withdrawing the process-pool requirement without putting anything in
-its place.
+document had just corrected, and which also omitted Linux while claiming to name
+the route each platform requires; an unsourced claim about how a
+content-protection system is packaged, stated as fact; a media exclusion that
+named no system or service and so could not be acted on or re-verified; and
+unverified items the evidence section claimed were in the risks list when they
+were not — browser-extension behaviour on recent macOS, passkey support, and
+what governs macOS memory at ten tabs, the last created by withdrawing the
+process-pool requirement without putting anything in its place.
+
+The media exclusion was then rewritten a third time, from investigation rather
+than from synthesis, after review found the second version's examples false. The
+substantive correction: ARD and ZDF Mediathek are **not** DRM-protected, and had
+been named as the paradigm services that fail. What WebView2 can play under
+content protection was left explicitly unestablished rather than guessed, which
+is what the two previous versions did wrong.
 
 Corrected in the first amendment: the assertion that a `wry` fork was required on
 every platform, which was false on Windows and Linux; the description of navigation failure as an
