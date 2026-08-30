@@ -867,11 +867,16 @@ resolved silently by this specification.
   applied. The SC-002 figure is held provisional pending the
   cold-start spike; the gate itself exists from M0 regardless, because Principle
   II admits no un-gated budget.
-- **Q-E9a** Which exact machine models are the reference hardware. The Success
-  Criteria preamble says a
-  hardware-dependent figure is meaningless without them, which applies equally to
-  SC-004, SC-005 and SC-006. Until models are named, none of the four is
-  reproducible by a third party, which SC-013 requires.
+- **Q-E9a** Which exact machine models are the reference hardware. This is not a
+  presentational question. The Success Criteria preamble holds every absolute
+  budget gate on a hardware-dependent figure — SC-002's, both of SC-004's,
+  SC-005's and SC-006's — advisory until the models are named, because a figure
+  measured on an unnamed machine is not reproducible by a third party, which
+  SC-013 requires. Since a budget whose absolute gate never blocks is un-gated,
+  and Principle II admits no un-gated budget, answering this is a release
+  prerequisite rather than a preference. An earlier version of this entry
+  attributed to the preamble a claim it does not make, that such a figure is
+  "meaningless", and named three criteria where four are affected.
 - **Q-E10** Whether affiliate attribution survives tracking prevention on the
   tier-2 platform. Recorded in ADR-0001 as unverified and as the only
   identified risk that can invalidate the business rather than the
