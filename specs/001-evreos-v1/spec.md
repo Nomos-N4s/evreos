@@ -433,25 +433,30 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   them MUST be received, processed and retained only on infrastructure hosted in
   the European Union. No diagnostic or crash payload may be transmitted to or
   stored on infrastructure outside it. Diagnostic reports are deleted within 24
-  hours under FR-039d; crash-report exemplars MUST be deleted no later than 36
-  days after receipt. Aggregate counters, signatures and ratios derived from
-  either carry no per-install content and are retained; the EU-hosting constraint
+  hours under FR-039d, and crash reports are discarded on receipt under FR-039e;
+  neither is retained individually at all. Aggregate counters, signatures and
+  ratios derived from either carry no per-install content and are retained; the EU-hosting constraint
   applies to those derivatives too, and without that sentence a deletion rule
   reaching "any computation over them" would delete the retention figure
   itself.
 - **FR-039d**: A diagnostic report MUST be added to its (report type, enrolment
-  week) counter and discarded within 24 hours of receipt; no diagnostic report
-  may be retained individually beyond that. Counters, not reports, are the
-  retained artefact — this is what Principle VI's *aggregate* condition requires
-  and what nothing else here carried. A counter below 50 MUST be published only
-  with a confidence interval, never as a point figure.
-- **FR-039e**: Crash reports MUST be aggregated by crash signature — a hash of
-  the symbolised stack, the release, and the reason code — retaining at most one
-  exemplar per signature per release and discarding every duplicate on receipt,
-  so that no per-install payload is retained. This specification grants no
-  exception to Principle VI: if a founder decision (Q-E16) concludes that
-  signature-level aggregation is insufficient, crash reporting does not ship in
-  v1 unless and until Principle VI is amended through its own procedure.
+  week) counter on receipt and discarded by the end of the following calendar
+  day; no diagnostic report may be retained individually. Counters, not reports,
+  are the retained artefact — this is what Principle VI's *aggregate* condition
+  requires and what nothing else here carried. A counter MUST NOT be published,
+  exported or used in a derived figure until it covers at least 50 reports; below
+  that it is held, or published only as an interval. That floor is a disclosure
+  control, not a formatting rule.
+- **FR-039e**: Crash reports MUST be aggregated into a per-(signature, release)
+  counter on receipt and discarded; the signature is a hash of the symbolised
+  stack, the release, and the reason code. No crash report may be retained
+  individually — an exemplar is a per-install payload, however well bounded, so
+  retaining one would keep the substance of the exception this requirement exists
+  to remove. The counter is what gives crash reporting its value, since a list of
+  distinct signatures without frequencies is not a crash rate. This specification
+  grants no exception to Principle VI: if signature-level counters are
+  insufficient to diagnose crashes, crash reporting does not ship in v1 (Q-E16)
+  unless and until Principle VI is amended through its own procedure.
 - **FR-040**: Signed-in retention MUST be derived from existing account and
   wallet activity that the service records as originating from an Evreos client,
   rather than from the diagnostic signal, so that members who decline
