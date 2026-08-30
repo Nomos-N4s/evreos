@@ -229,7 +229,13 @@ unchanged.
   search, history and bookmarks in one field, so a suggestion service receives
   keystrokes that include URLs the member is typing.
 - **FR-008**: Tracker and advert blocking MUST be active on first launch without
-  configuration, and MUST offer a visible per-site control.
+  configuration, and MUST offer a visible per-site control. Blocking MUST also
+  collapse the empty space a blocked element leaves, because a page that reserved
+  layout for an advert which never arrived reads as broken rather than as
+  protected, and the member's likely response to a page full of holes is to turn
+  blocking off. That collapsing modifies the page's rendering, which is why
+  FR-018a has to rule on whether it is injection; FR-018a's exemption cited it as
+  part of this requirement before this requirement carried it.
 - **FR-009**: Users MUST be able to view documents in a portable document format
   consistently across supported platforms.
 - **FR-010**: The browser MUST offer light and dark presentation and follow the
@@ -312,7 +318,8 @@ unchanged.
   test, not a claim that no interpretation is being made. The test is a
   characterisation, and all three parts must hold: the shell speaks on the
   member's behalf, carries no commercial interest, and places no third party's
-  content in the page. Content blocking under FR-008 meets it, as do find-in-page
+  content in the page. Content blocking under FR-008 meets it, including the
+  collapsing of blocked slots that requirement mandates, as do find-in-page
   under FR-005, error and failure states under FR-015, the site-credential
   hand-off offer under FR-015a, and the capability hand-off under FR-037. A later
   shell function meeting the test is equally exempt; a commercial one is not,
