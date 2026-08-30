@@ -295,12 +295,30 @@ unchanged.
 **Diagnostics**
 
 - **FR-039**: The browser MUST offer an opt-in diagnostic signal, off until the
-  member turns it on, carrying only aggregate usage sufficient to compute
-  signed-out retention. It MUST NOT carry browsing history, and MUST be
-  reportable to a member in plain language before they consent.
+  member turns it on. It MUST NOT carry browsing history, URLs or search terms,
+  and MUST be reportable to a member in plain language before they consent.
+- **FR-039a**: The signal MUST carry a randomly generated install identifier,
+  because 30-day retention is a cohort measure and cannot be computed from
+  counts that carry no per-install key. That identifier MUST NOT be derived from
+  any device or hardware characteristic, MUST be regenerated on reinstall, MUST
+  be erasable by the member from within the browser, and MUST be retained no
+  longer than 90 days. Beyond it and a coarse activity date, the signal carries
+  only aggregate counters.
+- **FR-039b**: Crash reporting MUST be opt-in and off by default, MUST NOT
+  include page contents, URLs or browsing history, and is subject to FR-039c.
+- **FR-039c**: The diagnostic signal, crash reports, and any computation over
+  them MUST be received, processed and retained only on infrastructure hosted in
+  the European Union. No diagnostic or crash payload may be transmitted to or
+  stored on infrastructure outside it.
 - **FR-040**: Signed-in retention MUST be derived from existing account and
-  wallet activity rather than from the diagnostic signal, so that members who
-  decline diagnostics are still counted in the figure that matters most.
+  wallet activity that the service records as originating from an Evreos client,
+  rather than from the diagnostic signal, so that members who decline
+  diagnostics are still counted in the figure that matters most. The origin
+  marker MUST be a client-type field on requests the member's own action
+  initiates; it MUST NOT be a device fingerprint. Without it, a member who
+  uninstalls Evreos and keeps using the existing web wallet produces the same
+  account activity as a retained member and would be counted as retained. The
+  retention computation MUST run on EU-hosted infrastructure.
 
 **Honesty**
 
