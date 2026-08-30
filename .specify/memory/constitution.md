@@ -219,30 +219,38 @@ of them requires a MAJOR amendment to this constitution:
 - After every push of commits to an open pull request, an adversarial review of the pull
   request's full current diff MUST run: independent reviewers instructed to refute the
   changes across correctness, security, internal consistency, and compliance with this
-  constitution and with the repository rules in `CLAUDE.md`, with findings verified
-  before they count. Confirmed findings are fixed and
-  pushed — which triggers a new review round — before the pull request is ready to merge.
-  The outcome of every round, green or not, MUST be recorded on the pull request as a new
-  comment, before the next push, and never by amending or deleting an earlier record; a
-  record that is edited after the fact invalidates every round on the pull request. That
-  is what keeps a round which found something traceable to the fix that followed it.
-- A pull request is NOT mergeable until a review round has been recorded green — no
-  confirmed findings — against the exact diff that would merge, which is `git diff
-  <base>...<head>`, three dots, against the merge base. The record is a comment on the
-  pull request, as the bullet above requires, and states the head SHA and the base SHA it
-  covers, and every finding raised with its severity and its disposition — confirmed and
-  fixed by commit SHA, or dismissed with the reason. Naming both SHAs is what lets a
-  reader decide whether the round is still current; listing the findings is what makes
-  "green" checkable rather than asserted. A bare count is a second assertion, not
-  evidence: it lets two confirmed blockers be recorded as "0 confirmed" with nothing a
-  reader could check. A round is invalidated by a new push, and by base movement that
-  changes that three-dot diff or introduces a conflict; base movement that leaves the
-  diff identical does not, because nothing about what would merge has changed. Green
-  automated checks are not a substitute: the two run in parallel and the merge will win.
-  The founder
-  may override, but the override is stated on the pull request before the merge, and names
-  what it overrides and the confirmed findings it merges over. Stated afterwards it is not
-  a decision, only an account of an accident.
+  constitution and with the repository rules in `CLAUDE.md`, with findings verified before
+  they count. Confirmed findings are fixed and pushed — which triggers a new review round
+  — before the pull request is ready to merge. The outcome of every round, green or not,
+  MUST be recorded on the pull request as a new comment, before the next push and in any
+  case before the pull request is merged or closed or an override is stated. A record MUST
+  NOT be amended or deleted; one edited or deleted after the fact is void, and the round
+  it recorded stops counting until a fresh record is posted. Correction is done by posting
+  a superseding record that quotes and corrects the original, never by editing it. That is
+  what keeps a round which found something traceable to the fix that followed it.
+- A pull request is NOT mergeable until the MOST RECENT review round on it has been
+  recorded green — no confirmed findings — against the exact diff that would merge, which
+  is `git diff <base>...<head>`, three dots, against the merge base. A later round
+  supersedes an earlier one: a red round invalidates any green record at the same head, so
+  a green record is never made durable by declining to run another round. The record is a
+  comment on the pull request, as the bullet above requires, and states the head SHA, the
+  base branch and the merge-base SHA it covers, and every finding raised in that round
+  with its severity and its disposition — confirmed, or dismissed with the reason. A green
+  round is one in which nothing was confirmed. A round that confirmed findings is answered
+  by the next round's record, which names the commits that fixed them; the earlier record
+  is never edited. Naming the SHAs is what lets a reader decide whether the round is still
+  current; listing the findings is what makes "green" checkable rather than asserted,
+  since a bare count lets two confirmed blockers be written up as "0 confirmed" with
+  nothing a reader could check. A finding may be dismissed only by someone other than the
+  author of the commits it concerns; a finding the author dismisses over the reviewer's
+  disagreement counts as confirmed. A round covers exactly one (merge base, head) pair on
+  one base branch, and is invalidated whenever the pull request's head SHA, base branch or
+  merge base differs from what the record names, or when the merge would conflict. Green
+  automated checks are not a substitute: they test what someone thought to automate, and
+  the review exists for what nobody did. The founder may override, but the override is
+  stated on the pull request before the merge, and names what it overrides and the
+  confirmed findings it merges over. Stated afterwards it is not a decision, only an
+  account of an accident.
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
