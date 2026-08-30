@@ -586,10 +586,17 @@ real regression, which is the same reason the absolute figures are held.
   run may be used for the per-change regression gate. A ten-tab leak over tens of
   minutes is the failure this budget exists to catch, on a cohort that leaves the
   browser open all day, so the window is not bounded at load time. The metric is
-  `phys_footprint` (from `task_vm_info`) on macOS and Working Set — Private on
-  Windows, summed over Evreos's own processes; these are different quantities, so
-  the 150 MB figure is stated per platform and figures MUST NOT be compared
-  across them. Proportional apportionment of shared pages is not used: it is a
+  `phys_footprint` (from `task_vm_info`) on macOS and Private Bytes — the
+  process's private commit charge, `PROCESS_MEMORY_COUNTERS_EX.PrivateUsage` — on
+  Windows, summed over Evreos's own processes. Both count private memory the
+  process has charged whether or not it is resident, so neither is reduced by the
+  operating system reclaiming idle pages; a resident-set counter such as Working
+  Set — Private would report the eight-hour leak this criterion exists to catch
+  as a reduction. Memory the shell places in sections shared between its own
+  processes MUST be counted once rather than dropped, or the budget is passed by
+  relocating bytes; the sampling script published under SC-013 states how. The
+  two counters are different quantities, so figures MUST NOT be compared across
+  platforms. Proportional apportionment of shared pages is not used: it is a
   Linux `smaps` construct, and the nearest Windows equivalent caps its share
   count at 7. The exact counters and the sampling script are published under
   SC-013. The tier-2 figure is provisional on the same terms as SC-002, because
@@ -598,21 +605,31 @@ real regression, which is the same reason the absolute figures are held.
   carried here.
 - **SC-005** *(ratified)*: When idle, processor use stays below 0.5% of one core
   at every 1-second sample across a window of at least 60 minutes, with no
-  periodic wake activity, and background tabs are suspended. The prohibition is
-  absolute: the idle path MUST contain no periodic timer of any period, verified
-  by design review and by instrumentation of scheduled work, because no finite
-  window can falsify a timer with a longer period. Scoping it to "any period
-  observable in that window" would make a 61-minute timer compliant by
-  construction. The 60-minute window is the acceptance test for the CPU figure,
-  not the definition of the wake prohibition.
+  periodic wake activity, and background tabs are suspended. Exactly two
+  scheduled wakes are permitted and MUST be enumerated in the budget file: the
+  update check FR-014 requires, and the daily retention evaluation FR-039a
+  requires. Each MUST be coalesced with the platform's own scheduler, MUST NOT
+  wake the machine from sleep, and MUST contribute no measurable sample to the
+  figure above. No other periodic timer of any period may exist on the idle path,
+  verified by design review and by instrumentation of scheduled work rather than
+  by observation, since no finite window can falsify a timer with a longer
+  period. Scoping the prohibition to "any period observable in that window" would
+  make a 61-minute timer compliant by construction; scoping it to nothing at all
+  would forbid the update check FR-014 mandates and the count SC-011 draws on.
+  The 60-minute window is the acceptance test for the CPU figure, not the
+  definition of the wake prohibition.
 - **SC-006** *(ratified)*: Switching tabs and typing in the address field produce
   a visible response within 16 ms, measured on a display driven at 60 Hz on each
   named reference machine, at the 99th percentile of at least 1000 trials per
   interaction, and no trial may exceed 16 ms at all — a single trial over 16 ms
   fails the gate, since the base criterion admitted none and dropping a frame
-  once every hundred interactions is perceptible on tab switching. Where an
-  outlier is attributable to the measurement environment rather than the shell,
-  the run is discarded and repeated rather than passed. The
+  once every hundred interactions is perceptible on tab switching. A run MUST be
+  discarded only for a recorded, externally observable cause the harness detects
+  — a competing process, thermal throttling, a failed instrumentation check —
+  never for an outlier judged environmental after the fact, which with unlimited
+  retries passes any hard maximum with probability one. Every discard and its
+  cause MUST be published under SC-013, and at most two discards per gate
+  invocation are permitted before the gate fails. The
   bar stays 16 ms where a machine's native refresh is higher: this is a
   human-perception budget, not a hardware-relative one, and a hardware-relative
   bar is not reproducible under SC-013 — on a 30 Hz panel one frame is 33 ms,
