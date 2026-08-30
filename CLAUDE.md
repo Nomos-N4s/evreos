@@ -16,12 +16,19 @@
     matches AI identities only — so it is a review obligation.
   - Before committing, verify `git config user.name` is `xcoder-es` and
     `git config user.email` is `capintobe@gmail.com`.
-  - Merge commits created by the forge record the forge as committer. The forge is
-    infrastructure rather than a third party, so it is the only committer permitted
-    besides the founder — exactly the set `ALLOWED_COMMITTERS` in
-    `scripts/check-commit-hygiene.py` already enforces on every pull request.
+  - Merge commits created by the forge record the forge as committer AND the
+    founder's forge display name as author. The forge is infrastructure rather
+    than a third party, so it is the only committer permitted besides the founder
+    — the set `ALLOWED_COMMITTERS` in `scripts/check-commit-hygiene.py`.
     Principle I constrains the author and is silent on the committer, so naming
     the permitted set here is one of those narrowings.
+  - The author half is not handled by that set, and it is not currently clean.
+    Nine merge commits on `main` are authored `Carlos Pinto`, the GitHub account's
+    display name, which is not `xcoder-es <capintobe@gmail.com>` and so does not
+    satisfy Principle I. They pass CI only because the check runs over
+    `origin/<base>..HEAD`, which never contains the merge commit being created.
+    The fix is to set the GitHub account's display name to `xcoder-es`; until
+    then, history does not meet the rule the check appears to enforce.
   - `scripts/check-commit-hygiene.py` checks, on every pull request: author and
     committer identity, AI identities inside git trailer values, a fixed list of
     literal generator-footer strings, Conventional Commits subjects, and issue
