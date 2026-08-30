@@ -261,8 +261,11 @@ surprise, and so no marketing claim outruns it.
    to learn what maintaining that fork feels like. Upstream the load-failure and
    TLS hooks regardless of which route each platform takes.
 4. **Linux go/no-go** — ten live tabs on Wayland, and an AppImage on the scale.
-   Note `wry`'s `build_as_child` tab model is X11-only, and Wayland is the default
-   on current Ubuntu, Fedora and Plasma.
+   Note `wry`'s `build_as_child` tab model is X11-only and Wayland is the default
+   on current Ubuntu, Fedora and Plasma; `wry` documents
+   `WebViewBuilderExtUnix::build_gtk` with `gtk::Fixed` as the route that works
+   on both, so the spike is to establish whether that path carries the tab model
+   at ten tabs, not whether a path exists.
 5. **Blocking parity** — compile EasyList, EasyPrivacy and German regional lists
    against the 150,000-rule ceiling, and measure parity on real German sites as a
    CI gate.
@@ -271,23 +274,40 @@ surprise, and so no marketing claim outruns it.
 7. **Accessibility on the tier-2 and deferred platforms.** The rationale is
    evidenced on Windows only. Drive each shell surface with the platform's own
    assistive technology before claiming WCAG 2.1 AA anywhere else.
-8. **Content protection on the tier-1 platform.** Establish what WebView2 can
-   actually play: whether a Widevine module can be loaded, and whether PlayReady
-   is reachable through the platform media stack. The public broadcasters are
-   already known not to need either. Test against the services that do — Joyn,
-   RTL+, and the commercial streamers — before the exclusion is treated as
-   settled or described to anyone.
+8. **Content protection on every platform that ships.** Establish what each
+   engine can actually play. On Windows: whether the PlayReady software key
+   system reachable in WebView2 covers the services members use, and at which
+   security level — commercial streamers commonly gate higher resolutions behind
+   a hardware tier, and that tier is the one reported broken. On macOS, which
+   ships as tier 2: whether a third-party `WKWebView` host gets FairPlay through
+   EME at all. That is unestablished and is the tier-2 equivalent of the tier-1
+   question; the record named a FairPlay service and then tracked nothing about
+   FairPlay. On Linux, if it proceeds: what EME WebKitGTK exposes in
+   distribution builds. The public broadcasters are already known to need none
+   of this. Test against the services that do — Joyn and the commercial
+   streamers — before the exclusion is treated as settled or described to
+   anyone. Note before concluding: any content-protection module is proprietary
+   bytes against the download budget (Principle II) and provisions against a
+   per-device identifier (Principle VI). Establishing that a module can be
+   loaded does not establish that it should be.
 9. **What governs macOS memory at ten tabs.** The process-pool requirement
    originally recorded here was withdrawn as a no-op, which left this
    untracked. Establish what actually shares state between webviews on that
    platform, or the shell-overhead budget has no mechanism behind it there.
 10. **Browser-extension behaviour on recent macOS in practice.** Cited in the
     capability floor above and listed as unverified below; nothing has been run
-    to confirm it. It bounds nothing in v1, since hosting third-party extensions
-    is a non-goal, but the claim should not stand unmeasured while being used.
-11. **Passkey support on the tier-2 and deferred platforms.** The capability
-    floor calls it uncertain and nothing tracked it. German banking is moving
-    onto WebAuthn, so this bears directly on whether the cohort can sign in.
+    to confirm it. Hosting third-party extensions is a v1 non-goal, but this
+    claim is the stated premise for building the cashback wallet natively in the
+    shell — "therefore" in that bullet rests on it — so it bounds the wallet's
+    architecture, which is the revenue mechanism. Measure it before that build
+    is treated as forced rather than chosen.
+11. **Passkey support on all three platforms, tier 1 included.** The capability
+    floor calls it uncertain everywhere — entitlement-gated on macOS, absent from
+    WebKitGTK release notes, and undocumented for WebView2 — and nothing tracked
+    any of it. Scoping this risk to tiers 2 and deferred left the most
+    consequential unknown untracked, since tier 1 is most of the market. German
+    banking is moving onto WebAuthn, so this bears directly on whether the cohort
+    can sign in. Test a real WebAuthn registration and assertion on each engine.
 
 ## Revisit triggers
 
