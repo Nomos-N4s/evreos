@@ -51,11 +51,16 @@ import subprocess
 import sys
 import unicodedata
 
+# The canonical founder identity, named in error messages and in CLAUDE.md.
 REQUIRED_AUTHOR = "xcoder-es <capintobe@gmail.com>"
-# A forge is the committer of the merge commits it creates. That is
-# infrastructure. Note it is not the AUTHOR of them: that is the account's
-# display name, which must itself be the founder identity to satisfy Principle I.
-ALLOWED_COMMITTERS = {REQUIRED_AUTHOR, "GitHub <noreply@github.com>"}
+# The founder writes under two display names on one address. The address is what
+# identifies them; the display name is presentation, and a forge stamps whichever
+# one the account carries onto the merge commits it creates. Both are the founder,
+# recorded as a founder decision on 2026-08-30. This is not a widening: an author
+# at any other address still fails, which is the property Principle I needs.
+FOUNDER_AUTHORS = {REQUIRED_AUTHOR, "Carlos Pinto <capintobe@gmail.com>"}
+# A forge is the committer of the merge commits it creates. That is infrastructure.
+ALLOWED_COMMITTERS = FOUNDER_AUTHORS | {"GitHub <noreply@github.com>"}
 
 # Identities, tested ONLY against a git trailer's value, where "Claude
 # <noreply@anthropic.com>" is unambiguous. Never tested against prose.
@@ -154,7 +159,7 @@ def check_commit(sha, problems):
     subject = message.splitlines()[0] if message.splitlines() else ""
     where = f"commit {sha[:8]} ({subject[:50]})"
 
-    if author != REQUIRED_AUTHOR:
+    if author not in FOUNDER_AUTHORS:
         problems.append(f"{where}: author is {author!r}, must be {REQUIRED_AUTHOR!r}")
     if committer not in ALLOWED_COMMITTERS:
         problems.append(f"{where}: committer is {committer!r}, must be {REQUIRED_AUTHOR!r}")
