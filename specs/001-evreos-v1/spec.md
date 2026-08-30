@@ -612,31 +612,39 @@ real regression, which is the same reason the absolute figures are held.
   carried here.
 - **SC-005** *(ratified)*: When idle, processor use stays below 0.5% of one core
   at every 1-second sample across a window of at least 60 minutes, with no
-  periodic wake activity, and background tabs are suspended. Exactly two
-  scheduled wakes are permitted and MUST be enumerated in the budget file: the
-  update check FR-014 requires, and the daily retention evaluation FR-039a
-  requires. Each MUST be coalesced with the platform's own scheduler, MUST NOT
-  wake the machine from sleep, and MUST contribute no measurable sample to the
-  figure above. No other periodic timer of any period may exist on the idle path,
-  verified by design review and by instrumentation of scheduled work rather than
-  by observation, since no finite window can falsify a timer with a longer
-  period. Scoping the prohibition to "any period observable in that window" would
-  make a 61-minute timer compliant by construction; scoping it to nothing at all
-  would forbid the update check FR-014 mandates and the count SC-011 draws on.
-  The 60-minute window is the acceptance test for the CPU figure, not the
-  definition of the wake prohibition.
+  periodic wake activity beyond the enumeration below, and background tabs are
+  suspended. Every scheduled wake on the idle path MUST be enumerated in the
+  budget file with its period and its justifying requirement; adding one is a
+  change to that file and states its cost under FR-043. At the time of writing
+  the enumeration is the update check under FR-014, the blocking-list refresh
+  FR-008 depends on, and — only where the member has enabled diagnostics — the
+  retention evaluation under FR-039a. None of the three is required to BE a
+  scheduled wake: FR-039a evaluates whenever the browser runs, so an
+  implementation with no timer for it enumerates none. Each wake that does exist
+  MUST be coalesced with the platform's own scheduler, MUST NOT wake the machine
+  from sleep, and MUST complete within 50 ms of processor time, so that no
+  1-second sample containing one exceeds the figure above. No periodic timer
+  outside the enumeration may exist on the idle path, verified by design review
+  and by instrumentation of scheduled work rather than by observation, since no
+  finite window can falsify a timer with a longer period. A closed enumeration
+  was tried and was wrong twice over: it forbade the blocking-list refresh FR-008
+  needs, and it required enumerating a wake for a feature that is off by
+  default.
 - **SC-006** *(ratified)*: Switching tabs and typing in the address field produce
   a visible response within 16 ms, measured on a display driven at 60 Hz on each
   named reference machine, at the 99th percentile of at least 1000 trials per
   interaction, and no trial may exceed 16 ms at all — a single trial over 16 ms
   fails the gate, since the base criterion admitted none and dropping a frame
-  once every hundred interactions is perceptible on tab switching. A run MUST be
-  discarded only for a recorded, externally observable cause the harness detects
-  — a competing process, thermal throttling, a failed instrumentation check —
-  never for an outlier judged environmental after the fact, which with unlimited
-  retries passes any hard maximum with probability one. Every discard and its
-  cause MUST be published under SC-013, and at most two discards per gate
-  invocation are permitted before the gate fails. The
+  once every hundred interactions is perceptible on tab switching. A whole gate
+  invocation — the full set of trials for one interaction — MUST be discarded and
+  re-run only for a recorded, externally observable cause the harness detects: a
+  competing process, thermal throttling, a failed instrumentation check.
+  Individual trials MUST NOT be discarded for any reason, since discarding the two
+  worst of a thousand is a 99.8th-percentile bar and reinstates the dropped frame
+  this criterion forbids. Never discard for an outlier judged environmental after
+  the fact, which with unlimited retries passes any hard maximum with probability
+  one. Every discard and its cause MUST be published under SC-013, and at most two
+  invocation-level discards per gate run are permitted before the gate fails. The
   bar stays 16 ms where a machine's native refresh is higher: this is a
   human-perception budget, not a hardware-relative one, and a hardware-relative
   bar is not reproducible under SC-013 — on a 30 Hz panel one frame is 33 ms,
