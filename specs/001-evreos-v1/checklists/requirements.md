@@ -34,18 +34,27 @@
 
 ## Feature Readiness
 
-- [ ] All functional requirements have clear acceptance criteria — FR-003a,
-  FR-007a, FR-014, FR-015a, FR-016a, FR-018a, FR-021, FR-023, FR-029a, FR-031, FR-039a,
-  FR-018b, FR-019a, FR-039b, FR-039c, FR-039d, FR-039e, FR-039f, FR-042, FR-043 and
-  FR-044 have
-  neither a
-  success criterion nor an acceptance scenario. This list is maintained with the
-  requirements: a requirement added without a criterion is added here. Two earlier
-  versions read as exhaustive and were not, and
-  FR-041's accessibility and language obligations for the distribution page are
-  covered by none (SC-009a covers only its operating-system statement and the
-  installer refusal). An earlier version of this list named five and read as
-  exhaustive
+- [ ] All functional requirements have clear acceptance criteria — FR-003,
+  FR-003a, FR-006, FR-007, FR-009, FR-010, FR-015a, FR-016a, FR-018a, FR-018b,
+  FR-019a, FR-021, FR-023, FR-029a, FR-031, FR-037, FR-039b, FR-039c, FR-039d,
+  FR-039e, FR-039f, FR-042 and FR-044 — 23 of the 58 — have neither. The test is
+  substantive rather than lexical: a requirement is covered when an acceptance
+  scenario asserts its behaviour or a success criterion measures it, whether or
+  not that scenario or criterion names it. Story 1's fourth scenario is FR-015's
+  acceptance criterion and never says so. FR-041 is the one partial case: SC-009a
+  covers its operating-system statement and its installer refusal, and nothing
+  covers its accessibility and language obligations.
+
+  This list is therefore a reading of eighteen scenarios and fifteen criteria
+  against fifty-eight requirements, and it cannot be checked by a script. No
+  acceptance scenario names a requirement at all — the single identifier in that
+  whole section is FR-037, in an edge case — so identifier frequency answers a
+  different question: it over-reports FR-015 and, now that FR-019a cites FR-020
+  twice, under-reports FR-020. Four earlier versions of this list read as
+  exhaustive and were not; the last two named FR-014 and FR-039a, which success
+  criteria cite by identifier, and omitted most of what is above. The structural
+  fix, having each scenario cite what it accepts, is issue #29 rather than a
+  change made here
 - [x] User scenarios cover primary flows
 - [x] Feature meets measurable outcomes defined in Success Criteria
 - [ ] No implementation details leak into specification — same question as the
@@ -80,18 +89,23 @@ Two items improved materially rather than changing state:
   floor is declared with both its consequences, the default search posture is
   fixed, and the site-credential limitation is stated rather than implied.
 
-Adversarial review across four rounds then found items that were **not** passing,
-contrary to the earlier claim that all still did. Rounds 3 and 4 additionally
-carried four constitutional mandates that no requirement had held: Principle II's
+Adversarial review then found items that were **not** passing, contrary to the
+earlier claim that all still did. It also found ten constitutional mandates that
+no requirement had held, each since carried: Principle II's
 budget file and per-change cost (FR-043), Principle IV's discoverable, opt-in and
 no-injection mandates (FR-016a, FR-018a), Principle VI's *aggregate* condition
 (FR-039d, which counts crash reports under a symbol-keyed key rather than
 retaining a report — a retained exemplar would be the same per-install payload
-under another name — and FR-039e, which sets the disclosure floor), Principle III's engine seam and no-bundled-engine rule (FR-044),
-and Principle VII's BCP-47 keying and language/place
-separation (FR-035). Three further gaps are recorded in issue #28 rather than
-fixed here, because adding requirements reactively is what each round has been
-correcting. Fixed in this branch: Principle VI's EU-hosting
+under another name — and FR-039e, which sets the disclosure floor), Principle
+VI's rule that browsing history stays on the machine (FR-007a, which mattered
+because FR-003 mandates a combined field and FR-003a routes it to a search
+provider), Principle III's engine seam and no-bundled-engine rule (FR-044),
+Principle VII's BCP-47 keying and language/place separation (FR-035), the
+Permanent Prohibition on advert injection, which FR-018a's consent rule did not
+reach (FR-018b), and Principle IX's requirement that the delivered surface itself
+be signed rather than only its manifest (FR-019a). Three further gaps are
+recorded in issue #28 rather than fixed here, because adding requirements
+reactively is what each round has been correcting. Fixed in this branch: Principle VI's EU-hosting
 mandate and crash reporting were absent; Principle II's requirement that every
 named budget be CI-gated was contradicted by an ungated cold start; Principle
 V's prohibition on client-built affiliate deeplinks had no requirement; Principle
