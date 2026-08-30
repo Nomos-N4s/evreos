@@ -37,7 +37,7 @@ input, and the departure is deliberate:
 | Platform | Tier | Meaning |
 | --- | --- | --- |
 | Windows | 1 | Release criteria apply. WebView2 is evergreen Chromium, security-patched by Microsoft. |
-| macOS | 2 | Ships at a minimum OS version. Clarify proposes **macOS 13**, which is not yet on `main` and which clarify itself leaves open (its Q-E12 asks whether blocking parity is achievable there without the macOS-14 proxy route, or whether the floor must move to 14). Treat 13 as provisional. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement depending on it — including the macOS-14 proxy route named below, which a floor of 13 prevents relying on as a baseline though it remains available above 14, and the `WKWebExtension` floor of 15.4, two major releases above the proposed floor of 13. |
+| macOS | 2 | Ships at a minimum OS version. Clarify proposes **macOS 13**, which is not yet on `main` and which clarify itself leaves open (its Q-E12 asks whether blocking parity is achievable there without the macOS-14 proxy route, or whether the floor must move to 14). Treat 13 as provisional. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement depending on it — including the macOS-14 proxy route named below, which a floor of 13 prevents relying on as a baseline though it remains available on macOS 14 and later, and the `WKWebExtension` floor of 15.4, two major releases above the proposed floor of 13. |
 | Linux | Separate decision | Removed from "cross-platform". Its own budget row, its own go/no-go. |
 
 The tiering rests on a market assumption that is **not yet verified**: that the
@@ -112,10 +112,10 @@ content, which belongs to the engine.
 What this architecture cannot deliver. Stated here so it is not rediscovered as a
 surprise, and so no marketing claim outruns it.
 
-- **Content protection is a scoping question, not a settled exclusion. The scope
-  is narrower than first recorded, and the German public broadcasters are not in
-  it at all.** No exclusion is described to anyone until risk 8 is retired. The
-  hand-off is built regardless, because it is cheap insurance.
+- **Content protection is a scoping question, not a settled exclusion. The German
+  public broadcasters are outside it on the paths independent clients use.** No
+  exclusion is described to anyone until risk 8 is retired. The hand-off is built
+  regardless, because it is cheap insurance.
 
   **Verified — ARD and ZDF Mediathek are not DRM-protected on the paths
   independent clients use.** Streamlink's `ard_mediathek` plugin plays ARD with
@@ -135,9 +135,8 @@ surprise, and so no marketing claim outruns it.
   DRM support is an added capability rather than its purpose — so it corroborates
   the streamlink and yt-dlp evidence rather than standing alone. ARD's
   restrictions are geo-blocking and FSK
-  broadcast-time windows, not encryption. An earlier version of this record
-  named these two as the paradigm DRM-dependent services; that was wrong, and
-  it matters, because they are heavily used by this cohort.
+  broadcast-time windows, not encryption. This matters because both broadcasters
+  are heavily used by this cohort.
 
   **Verified — Joyn uses DRM. Which system it serves is not established.** The
   unofficial Kodi add-on `Maven85/plugin.video.joyn` requests playback with the
@@ -148,17 +147,18 @@ surprise, and so no marketing claim outruns it.
   `com.microsoft.playready` branch at `plugin.py:889` is unreachable, and the
   add-on's "Force PlayReady DRM (Android only)" setting — gated on
   `System.Platform.Android` — cannot reach it either. This source establishes
-  that Joyn is DRM-protected and that a maintained third-party client obtains
-  playback by requesting Widevine; it does not itself demonstrate successful
-  decryption. Whether Joyn offers PlayReady to any client is not established here
+  that Joyn is DRM-protected and that a maintained third-party client requests
+  Widevine; because the add-on overwrites the server's own `drm` value, the source
+  shows what the client asks for rather than what Joyn answers, and does not
+  demonstrate decryption. Whether Joyn offers PlayReady to any client is not
+  established here
   — but the add-on's author evidently believed it does, since the Force PlayReady
   setting still takes effect at `libjoyn_video.py:133`, appending a Windows Edge
   user agent to the request, and the PlayReady branch is fully written including
   its SOAP licence-acquisition header. That is a third party's belief, not Joyn's
   statement, and the branch consuming it is dead: a lead for the spike, not a
   finding. RTL+ is **not
-  characterised here**: an earlier draft said it shows FairPlay asset names on
-  Apple platforms, citing no source, so the claim is withdrawn.
+  characterised here**: nothing located identifies its protection system.
 
   **Verified — PlayReady is reachable through EME at the software security level in
   a WinUI2/UWP WebView2 host. The Win32 case is untested; see risk 8.** A 2024
@@ -218,10 +218,16 @@ surprise, and so no marketing claim outruns it.
   insurance — and see risk 8.
 
   The negative claims rest on convergent client evidence: independent players
-  that succeed with no DRM capability at all. The positive ones rest on a
-  third-party add-on's request parameters and on vendor issue trackers, which
-  show what a service offers a particular client rather than what it requires of
-  every client. The negatives are strong; the positives are leads for the spike.
+  that succeed with no DRM capability at all. The positive claims come from three
+  different kinds of source, and each carries its own limit. The Joyn add-on's
+  request parameters show what one client asks a service for, not what that
+  service requires of every client. The WebView2Feedback reports show what one
+  runtime build did for one reporter, which is evidence about runtime capability
+  rather than about any service. The Widevine licensing position rests on
+  secondary reporting, filed as such in the evidence status below. The negatives
+  are strong. The first two kinds of positive are leads for the spike in risk 8;
+  the licensing position is not, because risk 8 records it as a commercial
+  question rather than a spike.
 - **No single cross-platform content-blocking primitive.** `wry` exposes no
   `WKContentRuleList` or `WebKitUserContentFilterStore` binding; what `wry` itself
   exposes is
@@ -233,10 +239,12 @@ surprise, and so no marketing claim outruns it.
   macOS 10.13 — so a missing binding is a cost, tracked as risk 11, not a ceiling.
 - **Hosting third-party Chrome extensions is not a promise Evreos can make.**
   WebView2 has genuine Chrome-extension hosting, but UI-less and sideload-only;
-  macOS gained `WKWebExtension` only in 15.4, so it requires Sequoia, whose
-  hardware floor runs from 2017 to 2020 for every model line that predates it —
-  iMac Pro 2017, MacBook Pro and Mac mini 2018, iMac and Mac Pro 2019, MacBook Air
-  2020 — with Mac Studio supported from its 2022 introduction; Linux has
+  macOS gained `WKWebExtension` only in 15.4, so it requires Sequoia — so at the
+  proposed tier-2 floor of macOS 13 the API is absent outright, not
+  version-limited (risk 10). Sequoia's hardware floor runs from 2017 to 2020 for
+  every model line that predates it — iMac Pro 2017, MacBook Pro and Mac mini
+  2018, iMac and Mac Pro 2019, MacBook Air 2020 — with Mac Studio supported from
+  its 2022 introduction; Linux has
   nothing and will not. Note the trap: `wry`'s Linux `with_extensions_path` shares
   a name with the Windows method but loads a shared object, not a `manifest.json`.
   **The cashback wallet is therefore built once, natively in the shell**, using
@@ -280,14 +288,14 @@ surprise, and so no marketing claim outruns it.
 - **Environment sharing must be an explicit requirement of the `Engine`
   trait, on Windows.** `wry` creates a fresh `CoreWebView2Environment` per
   webview unless one is passed in, and does not cache, so sharing must be
-  designed in rather than assumed. The macOS equivalent originally recorded here
-  — sharing a process pool — is withdrawn: that interface has been a documented
-  no-op for several OS versions and has no binding in `wry`. What actually
-  governs macOS memory at ten tabs is unestablished and belongs to the spikes.
+  designed in rather than assumed. Sharing a process pool is not the macOS
+  equivalent: that interface has been a documented no-op for several OS versions
+  and has no binding in `wry`. What actually governs macOS memory at ten tabs is
+  unestablished and belongs to the spikes.
 - **Benchmark honesty.** Page rendering belongs to the OS engine, so the public
   benchmark measures only what is ours: download and installed size, cold start,
-  shell overhead, idle behaviour, chrome latency. The "≥40% below Chrome at 10
-  tabs" target is withdrawn: on Windows the engine *is* Chromium, and the
+  shell overhead, idle behaviour, chrome latency. No "≥40% below Chrome at 10
+  tabs" target is set or published: on Windows the engine *is* Chromium, and the
   published ordering flips between USS and PSS on the same machine.
 
 ## Risks to retire, in priority order
@@ -332,10 +340,10 @@ surprise, and so no marketing claim outruns it.
    has since been closed, so whether it now works is unmeasured. On macOS, which
    ships as tier 2: whether a third-party `WKWebView` host gets FairPlay through
    EME at all. That is unestablished, and no service is currently identified as
-   FairPlay-dependent — the earlier RTL+ claim was withdrawn as uncitable — so
+   FairPlay-dependent, so
    the spike must first establish which services this cohort uses that rely on
    FairPlay. Also whether Widevine is usable in WebView2 at all, which the
-   capability floor now records as unestablished, and the mechanism itself:
+   capability floor records as unestablished, and the mechanism itself:
    whether an OS-webview host can supply or reach a key-system module, or is
    confined to what the host runtime already exposes; and under whose licence, if
    any, a module reached from an OS-webview host operates. The floor forbids
@@ -354,10 +362,10 @@ surprise, and so no marketing claim outruns it.
    provisioning, so Principle VI's privacy-by-default posture makes that a founder
    decision rather than a spike output. Establishing that a module can be
    loaded does not establish that it should be.
-9. **What governs macOS memory at ten tabs.** The process-pool requirement
-   originally recorded here was withdrawn as a no-op, which left this
-   untracked. Establish what actually shares state between webviews on that
-   platform, or the shell-overhead budget has no mechanism behind it there.
+9. **What governs macOS memory at ten tabs.** Sharing a process pool is a
+   documented no-op, so nothing yet accounts for this. Establish what actually
+   shares state between webviews on that platform, or the shell-overhead budget
+   has no mechanism behind it there.
 10. **Browser-extension behaviour on recent macOS in practice.** At the proposed
     tier-2 floor of macOS 13, `WKWebExtension` is absent rather than restricted —
     it arrives in 15.4 — so extension hosting on that platform is not a
@@ -372,17 +380,17 @@ surprise, and so no marketing claim outruns it.
     proxy route is unavailable. Compiled rule lists remain available — Apple
     documents `WKContentRuleList` as introduced in macOS 10.13, five major releases
     below the floor — but `wry` binds neither them nor `WebKitUserContentFilterStore`,
-    so at this floor parity depends on reaching the WebKit API through the raw
-    native handle, alongside top-level navigation gating. Measure parity, and the
-    cost of that binding, before the floor is fixed; clarify tracks the same
+    so at this floor parity depends on reaching the WebKit API outside `wry` —
+    through a native handle if one is exposed on this platform, otherwise a
+    binding or a fork; which route applies, and its cost, is part of what this
+    risk measures — alongside top-level navigation gating. Measure parity, and the
+    cost of that route, before the floor is fixed; clarify tracks the same
     question as its Q-E12, which is not yet on `main`. The capability floor's
-    sentence is scoped to what `wry` exposes, not to what the platform offers, and
-    reading it as the latter is what made an earlier version of this risk false.
+    sentence is scoped to what `wry` exposes, not to what the platform offers.
 12. **Passkey support on all three platforms, tier 1 included.** The capability
     floor calls it uncertain everywhere — entitlement-gated on macOS, absent from
-    WebKitGTK release notes, and undocumented for WebView2 — and nothing tracked
-    any of it. Scoping this risk to tiers 2 and deferred left the most
-    consequential unknown untracked, since tier 1 is most of the market. German
+    WebKitGTK release notes, and undocumented for WebView2. Tier 1 is in scope
+    here because it is most of the market. German
     banking is moving onto WebAuthn, so this bears directly on whether the cohort
     can sign in. Test a real WebAuthn registration and assertion on each engine.
 
@@ -401,6 +409,10 @@ The decision itself, not only its rejected alternatives, should be reopened if:
 
 ## Evidence status
 
+This section has four paragraphs. The first three carry the content-protection,
+extension-floor and blocking claims the corrections log maps; the fourth, on size
+and memory figures, carries none of them.
+
 **Verified against primary sources** — source code, official documentation,
 release notes and project statements: `wry`'s API surface and its per-platform
 navigation behaviour; WebKit's compiled-rule-list ceiling; Microsoft's documented
@@ -413,9 +425,12 @@ architecture adds a second, technical wall is unestablished and sits in risk 8.
 
 **Verified from third-party client evidence, not from the subject's own
 sources**: that ARD and ZDF Mediathek carry no DRM on the paths independent
-clients use — three for ARD (streamlink's `ard_mediathek` plugin, yt-dlp, the
-official Kodi ARD add-on), two for ZDF (streamlink's separate `zdf_mediathek`
-plugin, yt-dlp); that Joyn is DRM-protected and that a maintained third-party
+clients use — two direct sources for ARD (streamlink's `ard_mediathek` plugin,
+yt-dlp) and two for ZDF (streamlink's separate `zdf_mediathek` plugin, yt-dlp),
+with the ARD add-on in Kodi's official repository corroborating rather than
+standing alone, on the qualifications the capability floor records: the datapoint
+is indirect, and the add-on was last carried there on the `matrix` branch; that
+Joyn is DRM-protected and that a maintained third-party
 client requests Widevine, though that add-on overwrites the server's own `drm`
 value, so the source shows what the client asks for rather than what Joyn
 answers, and does not demonstrate decryption; and that PlayReady is reachable in
@@ -433,7 +448,7 @@ content protection, and what the other two engines expose (risk 8); what governs
 macOS memory at ten tabs (risk 9); browser-extension behaviour on recent macOS in
 practice (risk 10); tier-2 blocking parity at the proposed floor (risk 11); and
 passkey support on all three platforms (risk 12), which the capability floor
-names and which nothing had tracked.
+names.
 
 **Size and memory figures** quoted in the rationale come from vendor
 documentation and published project statements rather than from measurement on
@@ -443,101 +458,137 @@ spikes.
 
 ## Corrections
 
-This record was amended after an adversarial review confirmed defects in its
+This record was amended after adversarial review confirmed defects in its
 supporting claims. The decision is unchanged; the corrections concern accuracy.
+`main` carries only the first round below, so no merged version of this record
+has held the intervening text.
 
-Corrected in the first amendment: the assertion that a `wry` fork was required on
-every platform, which was false on Windows and Linux; the description of
-navigation failure as an endless loading indicator, which is accurate only on
-macOS; the claim to be the only maintained cross-platform native-webview
-abstraction including Linux, which
-several non-Rust projects refute; a process-pool sharing requirement naming an
-interface that is a documented no-op; a media exclusion argued from one
-content-protection system while another is native to the tier-1 platform; a
-stale tracker-issue state; the accessibility rationale, which was evidenced on
-one platform and asserted for three; and an unverified platform-share figure
-that was stated as fact while the evidence section called it unverified.
+**The unit here is a review round, not a commit.** One round is one adversarial
+review of this pull request's diff together with the corrections made in answer
+to it, and a round may land as several commits. Count rounds, not commits: a
+commit count is falsified by the next commit, which is what put a wrong number
+in earlier versions of this list.
 
-Six further amendments followed, all of them commits in this same change:
-`main` carries only the first amendment, so no merged version of this record has
-held the intervening text.
+**Where these claims live.** Content-protection, extension-floor and blocking
+claims live in thirteen places in this record:
 
-The second corrected a risk that still budgeted a fork on Windows, contradicting
-the accepted cost this same document had just corrected; an unsourced claim about
-how a content-protection system is packaged, stated as fact; a media exclusion
-that named no system or service and so could not be acted on or re-verified; and
-two unverified items the evidence section claimed were in the risks list when
-they were not — browser-extension behaviour on recent macOS, and what governs
-macOS memory at ten tabs, the latter created by withdrawing the process-pool
-requirement without putting anything in its place.
+1. the platform tiering row for macOS;
+2. the capability floor's content-protection bullet;
+3. the capability floor's content-blocking bullet;
+4. the capability floor's extensions bullet;
+5. risk 2, the German site matrix;
+6. risk 5, blocking parity;
+7. risk 8, content protection;
+8. risk 10, browser-extension behaviour on recent macOS;
+9. risk 11, tier-2 blocking parity;
+10. the evidence status's verified-against-primary-sources paragraph;
+11. the evidence status's verified-from-third-party-client-evidence paragraph;
+12. the evidence status's unverified paragraph;
+13. this log.
 
-The third rewrote the media exclusion from investigation rather than synthesis,
-correcting the second's examples: ARD and ZDF Mediathek are **not**
-DRM-protected, and had been named as the paradigm services that fail. It also
-corrected risk 3's omission of Linux, and added the passkey risk the evidence
-section had likewise claimed was tracked — both of which an earlier version of
-this log misattributed to the second amendment.
+The evidence status has four paragraphs, not three: the fourth, on size and
+memory figures, carries none of these claims and is not one of the thirteen.
+Read one further passage alongside them without adding it to the count: the
+accepted cost on navigation failure is the only place in this record stating
+where `wry` exposes raw native handles, and risk 11's macOS route turns on it.
 
-The fourth version corrected the third. It had recorded what WebView2 can play
-as unestablished and unanswerable — "no source reachable during investigation
-answered it" — when reachable sources answer it: PlayReady is reachable through
-EME at the software security level and Widevine is not an officially supported
-key system. It had also read its own cited source selectively, treating an
-add-on's hardcoded request parameter as Joyn's only protection system when the
-same add-on handles PlayReady too, and had kept an uncitable claim about RTL+.
-Declaring a question unanswerable is as much an overstatement as answering it
-without evidence. It also corrected the extensions bullet's Sequoia hardware floor,
-and recorded
-the macOS floor in the tiering row.
+**The propagation rule.** A correction to any of the thirteen is not finished
+until all thirteen have been re-read. Verify the list against the document
+rather than trusting it, and recompute the count whenever a section is added,
+split or removed.
 
-The fifth corrected the fourth, which had repeated the third's error one level
-deeper: it read a second hardcoded add-on literal as a fact about Joyn, claiming
-the add-on branches on a value the service returns when the add-on overwrites
-that value unconditionally. It had also labelled "Widevine is not an officially
-supported WebView2 key system" as verified while resting on an unanswered
-feature request, and cited a report backwards — that report shows Widevine
-loading and working intermittently. And it had asserted that hosting an OS
-webview adds an architectural wall on top of the commercial one, and that a
-Widevine agreement would therefore be unactionable here — stated without a
-source, in a section where every other positive claim carries one.
+**The recurring failure.** Round after round, the confirmed defect has the same
+shape: a sentence written from synthesis of what this record already said,
+instead of from the source or the cited passage re-read. A claim corrected in one
+location and left standing in another is that same shortcut applied to this
+document as its own source.
 
-The sixth propagated the fifth's corrections to the places the fifth did not
-reach, and corrected two claims that were false rather than stale. It moved the
-Widevine licensing position out of the primary-source bucket, where it had been
-filed with no source, into secondary reporting. It added risk 8's Win32 caveat and
-a task for the mechanism the floor routes there. It retracted, in the evidence
-status, the Joyn reading the fifth had already withdrawn in the floor. It corrected
-risk 11,
-which said top-level navigation gating was the only blocking route this record
-identifies on macOS 13: Apple documents `WKContentRuleList` as introduced in macOS
-10.13, and the floor's sentence is scoped to what `wry` binds, not to what the
-platform offers. It corrected the streamlink citation, which named the ARD plugin
-for both broadcasters when ZDF has a separate one. And it reframed the Widevine
-question: the report shows a module reachable by an embedder holding no agreement
-of its own, because WebView2 is Edge and Microsoft holds Edge's agreement, so the
-open question is licence inheritance rather than existence.
+**Rounds.** All rounds below landed on 2026-08-30, against a record first written
+on 2026-08-29. Each entry says what the round corrected. It does not assign the
+defect to an earlier round: those assignments are what kept being wrong.
 
-The seventh corrected the sixth, which had half-landed three of its own fixes: it
-filed the licensing position under secondary reporting without removing it from
-the primary-source list, so one sentence pair said both; it credited itself in this
-log with the architectural-wall withdrawal the fifth had made; and it left "closed
-as completed" standing in the capability floor after softening the same claim in
-risk 8 and recording in the round-three note that the closure reason could not be
-reproduced. It also introduced two false statements while fixing citations — that
-streamlink plays ZDF with progressive HTTP, which that plugin does not offer, and
-that macOS 10.13 is ten major releases below 13, which is five — and asserted
-without a source that the WebView2 Runtime carries Edge's Widevine licence.
-
-The recurring failure across the first six is the same: writing from synthesis
-without re-reading the source, in whichever direction the synthesis leans. The
-structural cause was misdiagnosed twice — first as five locations, then as
-eleven. Content-protection, extension-floor and blocking claims live in
-**thirteen**: the tiering row; all three capability-floor bullets (content
-protection, content blocking, extensions); risks 2, 5, 8, 10 and 11; all three
-evidence-status paragraphs; and this log. The sixth amendment propagated to the
-five it had named and missed the content-blocking bullet, where its own scoping
-error survived; the seventh named eleven and missed the extensions bullet and
-risk 10, both of which it had just edited. An amendment to any of them is not
-finished until all thirteen have been re-read — and this count has now been wrong
-twice, so verify it rather than trusting it.
-
+1. The assertion that a `wry` fork was required on every platform, which is false
+   on Windows and Linux; the description of navigation failure as an endless
+   loading indicator, which is accurate only on macOS; the claim to be the only
+   maintained cross-platform native-webview abstraction including Linux, which
+   several non-Rust projects refute; a process-pool sharing requirement naming an
+   interface that is a documented no-op; a media exclusion argued from one
+   content-protection system while another is native to the tier-1 platform; a
+   stale tracker-issue state; the accessibility rationale, evidenced on one
+   platform and asserted for three; and an unverified platform-share figure
+   stated as fact while the evidence section called it unverified.
+2. A risk that still budgeted a fork on Windows, contradicting the accepted cost
+   in the same document; an unsourced claim about how a content-protection system
+   is packaged, stated as fact; a media exclusion naming no system and no
+   service, which could therefore be neither acted on nor re-verified; and two
+   unverified items the evidence section listed as tracked in the risks when they
+   were not — browser-extension behaviour on recent macOS, and what governs macOS
+   memory at ten tabs.
+3. The media exclusion, rewritten from investigation rather than synthesis: ARD
+   and ZDF Mediathek carry no DRM on the paths independent clients use, on the
+   adaptive path these extractors cover, and had been named as the paradigm
+   DRM-dependent services. Also risk 3's omission of Linux, and the passkey risk
+   the evidence section listed as tracked while nothing tracked it.
+4. What WebView2 can play, recorded as unestablished and unanswerable when
+   reachable sources answer it; a cited add-on read selectively, treating a
+   hardcoded request parameter as the service's only protection system when the
+   same add-on carries a PlayReady branch; an uncitable claim about RTL+; the
+   extensions bullet's Sequoia hardware floor; and the proposed macOS floor,
+   recorded in the tiering row. Declaring a question unanswerable is as much an
+   overstatement as answering it without evidence.
+5. A second hardcoded add-on literal read as a fact about Joyn, claiming the
+   add-on branches on a value the service returns when the add-on overwrites that
+   value unconditionally; "Widevine is not an officially supported WebView2 key
+   system", labelled verified while resting on an unanswered feature request; a
+   report cited backwards, when it shows Widevine loading and working
+   intermittently; and the unsourced assertion that hosting an OS webview adds an
+   architectural wall on top of the commercial one, making a Widevine agreement
+   unactionable here.
+6. The Widevine licensing position, moved out of the primary-source bucket, where
+   it sat with no source, into secondary reporting. Risk 8's Win32 caveat, and a
+   task for the mechanism the capability floor routes there. The Joyn reading in
+   the evidence status, retracted to match the capability floor. Risk 11, which
+   said top-level navigation gating was the only blocking route this record
+   identifies on macOS 13: Apple documents `WKContentRuleList` as introduced in
+   macOS 10.13, and the floor's sentence is scoped to what `wry` binds, not to
+   what the platform offers. The streamlink citation, which named the ARD plugin
+   for both broadcasters when ZDF has a separate one. This round also recast the
+   Widevine licensing question as one of licence inheritance from Edge; that
+   recasting is **withdrawn** — see round 8.
+7. The licensing position, removed from the primary-source list, which had
+   carried it while the same paragraph filed it under secondary reporting. "Closed
+   as completed" in the capability floor's #4935 citation, softened to match risk
+   8. Two citation errors: streamlink does not play ZDF over progressive HTTP,
+   and macOS 10.13 is five major releases below 13, not ten. The unsourced
+   assertion that the WebView2 Runtime carries Edge's Widevine licence. The
+   `WKWebExtension` floor of 15.4, recorded against the proposed floor in the
+   tiering row and in risk 10.
+8. The PlayReady datapoint, recorded with its runtime channel and version
+   (WebView2Feedback#4935, Stable, 130.0.2849.80) and with the fact that its
+   closure reason could not be retrieved; and the reasoning that treated #4632
+   and #2021 as a symmetric pair when the two sit on different distribution
+   modes. The remaining claim that the intermittent-success report's embedder was
+   not a Widevine licensee, withdrawn: nothing located establishes whether it held
+   an agreement. The Runtime's status as a separate redistributable, attributed to
+   Microsoft's documentation. The Sequoia hardware floor, restated per model line
+   with Mac Studio supported from its 2022 introduction. The location map,
+   rebuilt to the thirteen listed above.
+9. This log's unit, changed from a commit to a review round, and its round-by-round
+   narration of which round got what wrong, replaced by the location map, the
+   propagation rule and this list; round 8, which had recorded nothing for itself.
+   The evidence status's four paragraphs, named, with the three that carry the
+   claims identified. The broadcaster finding in this log, scoped to the paths
+   independent clients use as the capability floor scopes it. The Joyn sentence in
+   the capability floor, which had a client obtaining playback and not
+   demonstrating decryption at once; the source shows what the client asks for,
+   not what Joyn answers. The ARD source count in the evidence status, which
+   carried the Kodi datapoint as a third direct source without its indirectness or
+   its staleness. The content-protection evidence taxonomy, which omitted secondary
+   reporting, described the WebView2 reports as service-offering evidence when they
+   are runtime-capability evidence, and routed the licensing question to the spike
+   risk 8 says it is not. The proxy route's availability, made to read "macOS 14
+   and later" in the tiering row, matching the floor's "macOS-14+". The extensions
+   bullet, which stated the 15.4 requirement and then argued from Sequoia's
+   hardware floor without recording that the API is absent at the proposed floor.
+   Risk 11's macOS route, which asserted a raw native handle where the accepted
+   cost on navigation failure confines raw handles to Windows and Linux.
