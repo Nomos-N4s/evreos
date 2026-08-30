@@ -30,6 +30,10 @@
   after measurement? (Q-E9) → A: Ratify size, memory, idle and interaction
   budgets now as tighten-only CI gates; hold cold start (SC-002) until spike S3
   measures engine initialisation on the reference hardware.
+- Q: Is claim-code redemption in v1, or does it wait for the campaign backend?
+  → A: They are two different flows. Member-facing claim-code redemption ships
+  in v1. Partner-facing campaign administration is the flow blocked on the
+  backend decision, and only that one ships disabled.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -258,7 +262,12 @@ unchanged.
   pending.
 - **FR-028**: Users MUST be able to request a withdrawal and follow its status
   to a terminal state.
-- **FR-029**: The claim-a-campaign flow MUST be present in the interface and
+- **FR-029**: Member-facing claim-code redemption — scanning or entering a code,
+  binding the member to an existing campaign, and showing the resulting entry in
+  the wallet — MUST work in v1. It is a distinct flow from FR-029a and is not
+  blocked by it.
+- **FR-029a**: Partner-facing campaign administration, by which a partner
+  business creates or funds a campaign, MUST be present in the interface and
   disabled until its backing service exists, with an honest explanation rather
   than a broken control.
 - **FR-030**: Attribution MUST never be attached without an explicit user action
@@ -462,8 +471,10 @@ resolved silently by this specification.
   history. Credentials are out of scope pending Q-E5.
 - **The pilot launches on existing web surfaces**, not on Evreos. Evreos's job
   for the pilot cohort is month-two retention, not day-one delivery.
-- **The claim-a-campaign flow ships disabled**, because its backing service is a
-  decision not yet taken outside this repository.
+- **Partner-facing campaign administration ships disabled** (FR-029a), because
+  its backing service is a decision not yet taken outside this repository.
+  Member-facing claim-code redemption (FR-029) is unaffected and ships in v1;
+  the two were previously conflated under one name.
 - **Money state originates entirely from the existing service.** This
   specification adds no money logic and assumes the ledger's vocabulary of
   pending, confirmed, declined and reversed.
