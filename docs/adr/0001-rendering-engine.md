@@ -37,7 +37,7 @@ input, and the departure is deliberate:
 | Platform | Tier | Meaning |
 | --- | --- | --- |
 | Windows | 1 | Release criteria apply. WebView2 is evergreen Chromium, security-patched by Microsoft. |
-| macOS | 2 | Ships at a minimum OS version, **declared in clarify as macOS 13**. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement that depends on it — including the macOS-14 proxy route named below, which the floor excludes. |
+| macOS | 2 | Ships at a minimum OS version. Clarify proposes **macOS 13**, which is not yet on `main` and which clarify itself leaves open (its Q-E12 asks whether blocking parity is achievable there without the macOS-14 proxy route, or whether the floor must move to 14). Treat 13 as provisional. WKWebView is frozen to the user's OS, so this number sets the engine floor and every capability statement depending on it — including the macOS-14 proxy route named below, which a floor of 13 prevents relying on as a baseline though it remains available above 14. |
 | Linux | Separate decision | Removed from "cross-platform". Its own budget row, its own go/no-go. |
 
 The tiering rests on a market assumption that is **not yet verified**: that the
@@ -125,7 +125,8 @@ surprise, and so no marketing claim outruns it.
   adaptive stream would surface even if the extractor said nothing about it —
   which covers the adaptive path these extractors use, though not formats served
   as direct URLs; and the ARD add-on in Kodi's official repository
-  (`plugin.video.ardmediathek_de`) declares no `inputstream.adaptive` dependency
+  (`plugin.video.ardmediathek_de`, last carried there on the `matrix` branch)
+  declares no `inputstream.adaptive` dependency
   at all, so it neither decrypts nor even demuxes adaptive streams. That last
   point is indirect — `inputstream.adaptive` is a DASH/HLS/Smooth demuxer whose
   DRM support is an added capability rather than its purpose — so it corroborates
@@ -201,8 +202,8 @@ surprise, and so no marketing claim outruns it.
 - **Hosting third-party Chrome extensions is not a promise Evreos can make.**
   WebView2 has genuine Chrome-extension hosting, but UI-less and sideload-only;
   macOS gained `WKWebExtension` only in 15.4, so it requires Sequoia, whose
-  hardware floor excludes Macs older than roughly 2018 to 2020 depending on the
-  model line; Linux has
+  hardware floor runs from 2017 to 2020 depending on the model line — iMac Pro
+  2017, MacBook Pro and Mac mini 2018, iMac and Mac Pro 2019, MacBook Air 2020; Linux has
   nothing and will not. Note the trap: `wry`'s Linux `with_extensions_path` shares
   a name with the Windows method but loads a shared object, not a `manifest.json`.
   **The cashback wallet is therefore built once, natively in the shell**, using
@@ -322,7 +323,11 @@ surprise, and so no marketing claim outruns it.
     shell — "therefore" in that bullet rests on it — so it bounds the wallet's
     architecture, which is the revenue mechanism. Measure it before that build
     is treated as forced rather than chosen.
-11. **Passkey support on all three platforms, tier 1 included.** The capability
+11. **Tier-2 blocking parity at the declared floor.** On macOS 13 the macOS-14
+    proxy route is unavailable, leaving top-level navigation gating as the only
+    route this record identifies. Measure parity before the floor is fixed; the
+    v1 spec tracks the same question as its Q-E12.
+12. **Passkey support on all three platforms, tier 1 included.** The capability
     floor calls it uncertain everywhere — entitlement-gated on macOS, absent from
     WebKitGTK release notes, and undocumented for WebView2 — and nothing tracked
     any of it. Scoping this risk to tiers 2 and deferred left the most
@@ -367,8 +372,9 @@ platform mix, which the tiering assumes (risk 6); accessibility guarantees on th
 tier-2 and deferred platforms (risk 7); what WebView2 can actually play under
 content protection, and what the other two engines expose (risk 8); what governs
 macOS memory at ten tabs (risk 9); browser-extension behaviour on recent macOS in
-practice (risk 10); and passkey support on all three platforms (risk 11), which
-the capability floor names and which nothing had tracked.
+practice (risk 10); tier-2 blocking parity at the declared floor (risk 11); and
+passkey support on all three platforms (risk 12), which the capability floor
+names and which nothing had tracked.
 
 **Size and memory figures** quoted in the rationale come from vendor
 documentation and published project statements rather than from measurement on
