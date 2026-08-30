@@ -1,13 +1,12 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 → 1.1.0 (ratified at 1.0.0; amendment log below)
-Modified principles: none (scaffold replaced; no prior principles existed)
-Added sections:
-  - Core Principles I–X
-  - Permanent Prohibitions
-  - Development Workflow
-  - Governance
-Removed sections: none (all template placeholders resolved)
+Version change: 1.0.0 → 1.1.0
+
+Ratification 1.0.0 (2026-08-29):
+  Modified principles: none (scaffold replaced; no prior principles existed)
+  Added sections: Core Principles I–X, Permanent Prohibitions, Development Workflow,
+    Governance
+  Removed sections: none (all template placeholders resolved)
 
 Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - Classified MINOR rather than MAJOR deliberately. MAJOR is scoped to a principle being
@@ -16,7 +15,8 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
     fit either. The Versioning policy is extended below to name that case rather than
     leaving the classification to be inferred.
   - Modified sections: Development Workflow — the review bullet gains the review
-    dimensions and the recording form; the merge gate is new.
+    dimensions and the recording form; the merge gate is new; the ADR-0001 bullet moves
+    to the past tense. Governance — the Versioning policy gains the tightening case.
   - Removed: the "or to the founder" destination for a round's outcome.
   - Development Workflow gains a merge gate: a pull request is not mergeable until a
     review round is recorded green against the exact diff that would merge, with the
@@ -33,7 +33,8 @@ Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
   - The override must be stated before the merge, not merely stated. The repository rules
     file said "never an accident of timing"; deferring to this document dropped the phrase,
     and without it a merge over confirmed blockers could be regularised by a comment
-    posted afterwards — the failure recorded in the issue this amendment closes.
+    posted afterwards. The issue this amendment closes records the adjacent failure:
+    two pull requests merged with no round recorded and no override stated at all.
   - The review dimensions — correctness, security, internal consistency, rules
     compliance — move here from the repository rules file, which was the only place that
     stated them. Deferring to this document would otherwise have deleted them. The fourth
@@ -56,6 +57,12 @@ Follow-up TODOs (status as of 1.1.0):
     `.github/workflows/commit-hygiene.yml`.
   - DONE — ADR-0001, the engine decision the Development Workflow section requires, is
     recorded at `docs/adr/0001-rendering-engine.md`.
+  - OPEN — nine merge commits on `main` are authored with the forge account's display
+    name rather than `xcoder-es <capintobe@gmail.com>`, and so do not satisfy Principle
+    I. They escape the check because it runs over `origin/<base>..HEAD`, which never
+    contains the merge commit being created. Remedy: set the account's display name.
+  - OPEN — the merge gate above is fully mechanical and is not gated in CI, which the
+    preamble requires of a measurable rule. Tracked as issue #27.
   - OPEN — the budget file and CI gates required by Principle II are not yet present.
     They are ratified here as a requirement, not described as current state, and land
     with milestone M0.
