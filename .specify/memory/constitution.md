@@ -8,6 +8,18 @@ Added sections:
   - Development Workflow
   - Governance
 Removed sections: none (all template placeholders resolved)
+
+Amendment 1.0.0 → 1.1.0 (2026-08-30), MINOR — guidance materially expanded:
+  - Development Workflow gains a merge gate: a pull request is not mergeable until a
+    review round is recorded green against the exact diff that would merge, with the
+    record on the pull request naming head and base SHAs and the finding counts.
+  - The previous wording allowed a round's outcome to be recorded "to the founder",
+    which made the gate unverifiable by anyone reading the pull request. That option is
+    withdrawn for the gate.
+  - Reason for amending here rather than in the repository rules file: this document
+    supersedes that one, so a stricter rule placed there was void wherever the two
+    disagreed. Workflow rules now live here; the rules file defers to this document
+    rather than restating it.
 Templates requiring updates:
   - .specify/templates/plan-template.md ✅ reads the constitution at runtime; no change needed
   - .specify/templates/spec-template.md ✅ no change needed
@@ -184,7 +196,15 @@ of them requires a MAJOR amendment to this constitution:
   request's full current diff MUST run: independent reviewers instructed to refute the
   changes, with findings verified before they count. Confirmed findings are fixed and
   pushed — which triggers a new review round — before the pull request is ready to merge.
-  The outcome of each round is recorded on the pull request or to the founder.
+- A pull request is NOT mergeable until a review round has been recorded green — no
+  confirmed findings — against the exact diff that would merge. The record lives on the
+  pull request, in its body or a comment, and states the head SHA and the base SHA it
+  covers, how many findings were raised, and how many were confirmed. Naming both SHAs is
+  what lets a reader decide whether the round is still current; naming the counts is what
+  makes "green" checkable rather than asserted. A round is invalidated by a new push and
+  by the base moving, because either changes what would merge. Green automated checks are
+  not a substitute: the two run in parallel and the merge will win. The founder may
+  override, but the override is stated on the pull request and names what it overrides.
 - Feature work follows the Spec Kit flow: constitution → specify → plan → tasks →
   implement, with clarify, checklist and analyze as optional quality gates.
 - Architectural decisions MUST be recorded as ADRs in this repository. The engine
@@ -213,4 +233,4 @@ release blockers, as is any client-side money logic prohibited by Principle V.
 Complexity that appears to conflict with Principle II or Principle III MUST be justified in
 the pull request that introduces it, or removed.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-08-29
+**Version**: 1.1.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-08-30
