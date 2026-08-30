@@ -243,11 +243,26 @@ unchanged.
 
 **Super-app platform**
 
-- **FR-016**: A home surface MUST present the installed first-party apps.
-- **FR-016a**: Apivo surfaces MUST be dismissible, as Principle IV requires: a
-  member MUST be able to remove any first-party app from the home surface and to
-  hide the home surface entirely, and the choice MUST persist across restarts and
-  updates. An app update or a browser release MUST NOT reverse a dismissal.
+- **FR-016**: Where the member has not hidden it under FR-016a, a home surface
+  MUST present the installed first-party apps.
+- **FR-016a**: Apivo surfaces MUST be discoverable, opt-in and dismissible, as
+  Principle IV requires — all three, of which the spec previously carried none.
+  *Discoverable*: a member who has never opened an Apivo surface MUST be able to
+  find the home surface from the browser's own menus. *Opt-in*: no Apivo surface
+  may appear in the browsing experience — new-tab page, chrome, or page content —
+  until the member opens it for the first time; a fresh profile presents a
+  browser and nothing else. *Dismissible*: a member MUST be able to remove any
+  first-party app from the home surface, to hide the home surface entirely, and
+  to dismiss the wallet and claim surfaces, and each choice MUST persist across
+  restarts and updates. An app update or a browser release MUST NOT reverse a
+  dismissal.
+- **FR-018a**: Nothing may be injected into a web page without an explicit member
+  action for that occasion, as Principle IV requires. A per-app grant under
+  FR-018 authorises an app to respond to such an action; it does not authorise
+  injection in its absence. In particular a cashback offer MUST NOT alter,
+  overlay or annotate a merchant's page until the member acts on that page on
+  that visit. FR-018 carries Principle IX's standing per-app grant, which is a
+  weaker thing and does not reach this.
 - **FR-017**: Each app MUST declare its capabilities in a signed, versioned
   manifest, and MUST NOT be able to widen them from inside.
 - **FR-018**: Any capability that touches page content MUST additionally require
@@ -344,22 +359,56 @@ satisfy the fingerprinting prohibition while failing the aggregate requirement.
   member turns it on. It MUST NOT carry browsing history, URLs or search terms,
   and MUST be reportable to a member in plain language before they consent.
 - **FR-039a**: The signal MUST support 30-day retention without carrying any
-  per-install identifier. Retention is a cohort measure, so the client MUST
-  evaluate its own retention locally and emit at most two reports per install:
-  an enrolment report on the first day diagnostics are enabled, carrying only
-  the install week; and a retention report on a day from 24 to 30 after install,
-  carrying only that same install week. Neither report may carry an identifier,
-  and the service MUST NOT be able to link them. Signed-out retention is the
-  ratio of retention reports to enrolment reports for an install week. No other
-  per-install state may be transmitted.
-- **FR-039b**: Crash reporting MUST be opt-in and off by default, MUST NOT
-  include page contents, URLs or browsing history, and is subject to FR-039c.
+  per-install identifier. The client MUST evaluate its own retention locally and
+  emit at most two reports per install: an **enrolment report** on the first day
+  diagnostics are enabled, carrying only the enrolment week; and a **retention
+  report** on the first day the browser runs in the window 24 to 30 days after
+  that enrolment, carrying only the same enrolment week. Both reports are keyed
+  to enrolment, not to install: keying them to different events makes the ratio
+  meaningless, since an install that enables diagnostics on day 26 would emit
+  both at once and count as fully retained, while one that enables on day 40
+  could never enter the numerator. An install that first enables diagnostics
+  more than 24 days after install MUST emit neither report. Neither report may
+  carry an identifier. The receiving service MUST NOT retain the source network
+  address, transport metadata, or a receipt timestamp finer than the day, and
+  reports MUST reach it through a relay that strips the source address — without
+  that, two reports from one residential address in a small cohort are linkable
+  and the identifier-free property is defeated at the network layer. Signed-out
+  retention is the ratio of retention reports to enrolment reports for an
+  enrolment week, and is a 24-to-30-day retention rate for opted-in installs,
+  not for installs. The diagnostic signal MUST carry no per-install state beyond
+  these two reports; crash reports are governed separately by FR-039b, and any
+  addition under Q-E6 requires this requirement to be amended.
+- **FR-039b**: Crash reporting MUST be opt-in, off by default, and separately
+  consented from FR-039's diagnostic signal, which Principle VI treats as a
+  distinct thing. A crash report MUST be limited to a stack trace with symbol
+  names, the browser and operating-system version, and a crash-reason code. Full
+  process memory MUST NOT be captured or transmitted, because it necessarily
+  contains URLs and page content — forbidding those in a memory image is not
+  implementable, so the capture is bounded instead. A crash report MUST NOT
+  carry any per-install identifier and MUST NOT be transmitted in the same
+  session as an FR-039a report, or the two together defeat FR-039a's
+  unlinkability. Before consent the member MUST be shown in plain language
+  exactly what a crash report contains. FR-039c governs its hosting and
+  retention.
 - **FR-039c**: The diagnostic signal, crash reports, and any computation over
   them MUST be received, processed and retained only on infrastructure hosted in
-  the European Union, and MUST be deleted no later than 40 days after receipt —
-  the shortest period that supports a 30-day measure over weekly cohorts. No
-  diagnostic or crash payload may be transmitted to or stored on infrastructure
-  outside the European Union.
+  the European Union. No diagnostic or crash payload may be transmitted to or
+  stored on infrastructure outside it. The reports themselves MUST be deleted no
+  later than 36 days after receipt: within one cohort week the earliest enrolment
+  report arrives six days before the latest of that cohort, whose retention
+  report follows up to 30 days later, so 36 is the arithmetic bound. Aggregate
+  counts and ratios derived from the reports carry no per-install content and are
+  retained; the EU-hosting constraint applies to those derivatives too, and
+  without this sentence the 36-day rule would delete the retention figure itself.
+- **FR-039d**: Diagnostic payloads MUST be folded into a count over a group of at
+  least 50 installs on receipt and MUST NOT be retained individually, which is
+  what Principle VI's *aggregate* condition requires and what nothing else here
+  carries. Crash reports cannot be aggregated without losing their diagnostic
+  value; they are retained individually under FR-039c as a stated exception,
+  bounded by Principle VI's opt-in and EU-hosting conditions and by FR-039b's
+  content limits. That exception is a founder decision (Q-E16), not one this
+  specification makes.
 - **FR-040**: Signed-in retention MUST be derived from existing account and
   wallet activity that the service records as originating from an Evreos client,
   rather than from the diagnostic signal, so that members who decline
@@ -625,6 +674,9 @@ resolved silently by this specification.
   Blocking parity on tier 2 MUST be measured before the floor is treated as
   settled.
 - **Q-E13** Whether a partner-branded distribution ships in v1.
+- **Q-E16** Whether crash reporting ships in v1 at all, given that it cannot
+  satisfy Principle VI's aggregate condition and so needs a recorded exception
+  (FR-039d). Cutting it from v1 is the alternative.
 - **Q-E15** What threshold signed-in 30-day retention must clear. The base
   criterion set 20% over everyone who installs; that population is unmeasurable
   (SC-011), and the measurable population — members who sign in — is a
