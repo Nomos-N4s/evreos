@@ -1,0 +1,28 @@
+# Workspace root. Principle III: stable Rust, no nightly features on the
+# release path. The rust-version floor is checked in so a toolchain that
+# cannot build the release path fails at resolve time rather than at link time.
+[workspace]
+resolver = "3"
+members = [
+    "crates/evreos-engine",
+    "crates/evreos-engine-headless",
+    "crates/evreos-shell",
+]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.85"
+license = "NONE"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+# SC-001 budgets the bytes Evreos ships. These are the settings that move that
+# number most, so they are release-path policy rather than preference.
+opt-level = "z"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = "symbols"

@@ -1,0 +1,83 @@
+# The budget file Principle II requires: "Hard budgets ... MUST live in one
+# budget file in this repository and MUST be enforced by CI gates that fail the
+# build on regression." FR-043 names this file; the Success Criteria preamble
+# defines the gates and is the only place that states them.
+#
+# An ENTRY is one number, for one criterion, on one platform, under one stated
+# measurement condition. Every entry carries its figure, its status, its
+# baseline, its declared tolerance, and the runner it is measured on.
+#
+# STATUS is `ratified` (set by a recorded founder decision, tighten-only
+# thereafter) or `provisional` (standing until such a decision replaces it). It
+# describes the figure alone and never whether a gate exists.
+#
+# Adding an entry is an amendment to the specification, made in the change that
+# states the figure.
+
+[meta]
+milestone = "M0"
+spec = "specs/001-evreos-v1/spec.md"
+
+# Q-E9a, settled 2026-08-30: the reference machine for each tier is the oldest
+# configuration that tier's declared operating-system floor admits, at 8 GB of
+# memory, held as that tier's pinned benchmark runner of stable identity. The
+# rule binds and the models follow from it.
+#
+# Neither runner is procured yet. Until each is, its `identity` stays empty and
+# the budget-file gate fails on it, which is what bounds the advisory period on
+# the absolute gates rather than leaving it to good intentions.
+
+[runners.tier1]
+platform = "windows"
+os_floor = "Windows 11"
+model = "8th-generation Intel i3/i5 laptop, 8 GB"
+identity = ""   # durable machine identifier — set when procured
+
+[runners.tier2]
+platform = "macos"
+os_floor = "macOS 13"
+model = "MacBook Pro (2017), 8 GB"
+identity = ""   # durable machine identifier — set when procured
+
+# --- SC-001: size. Measured from build output and from the disk delta after
+# first run completes. Not hardware-dependent, so both gates block from M0.
+
+[[entry]]
+criterion = "SC-001"
+name = "download size"
+platform = "windows"
+figure_mb = 20
+status = "ratified"
+condition = "the installer artefact CI publishes"
+baseline_mb = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-001"
+name = "installed footprint"
+platform = "windows"
+figure_mb = 60
+status = "ratified"
+condition = "disk delta after first run completes, excluding member data"
+baseline_mb = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-001"
+name = "download size"
+platform = "macos"
+figure_mb = 20
+status = "ratified"
+condition = "the installer artefact CI publishes"
+baseline_mb = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-001"
+name = "installed footprint"
+platform = "macos"
+figure_mb = 60
+status = "ratified"
+condition = "disk delta after first run completes, excluding member data"
+baseline_mb = 0.0
+tolerance_pct = 0.0
