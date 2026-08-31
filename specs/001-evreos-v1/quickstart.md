@@ -1,31 +1,33 @@
 # Quickstart: Evreos v1 — the runnable validation guide
 
-**Feature**: `001-evreos-v1` · **Phase**: 1 (design) · **Source of truth**: `specs/001-evreos-v1/spec.md`, `.specify/memory/constitution.md`, `docs/adr/0001-rendering-engine.md`
+**Feature**: `001-evreos-v1` · **Phase**: 1 (design) · **Source of truth**:
+`specs/001-evreos-v1/spec.md`, `.specify/memory/constitution.md`,
+`docs/adr/0001-rendering-engine.md`
 
 This document is how the feature is proved, not how it is built. It carries no
-implementation bodies. Part A is what runs today against code that exists; Part B
-is every scenario the plan owes, each with its prerequisites, its command and the
-outcome that counts as a pass; Part C is the platform matrix, which is the honest
-answer to "can I check this here?".
+implementation bodies. Part A is what runs today against code that exists; Part
+B is every scenario the plan owes, each with its prerequisites, its command and
+the outcome that counts as a pass; Part C is the platform matrix, which is the
+honest answer to "can I check this here?".
 
 ## How to read this document
 
 - Every scenario states **Prerequisite → Command → Pass**. A scenario with no
-  pass condition a machine can evaluate is not a scenario; it is a wish, and it
-  is recorded in *Gaps* instead.
+pass condition a machine can evaluate is not a scenario; it is a wish, and it is
+recorded in *Gaps* instead.
 - Where a requirement forces something, the requirement is named at it. Where
-  this document proposes a mechanism the specification does not require, it is
-  marked **[design]**. Where the design needs something no requirement supplies,
-  it is marked **[gap]** and repeated in *Gaps* at the end. Nothing here is
-  presented as required unless a requirement is named for it.
+this document proposes a mechanism the specification does not require, it is
+marked **[design]**. Where the design needs something no requirement supplies,
+it is marked **[gap]** and repeated in *Gaps* at the end. Nothing here is
+presented as required unless a requirement is named for it.
 - Platform tags: **[any]** runs on any developer machine including Linux;
-  **[tier 1]** needs a Windows 11 machine; **[tier 2]** needs a macOS 13+
-  machine; **[tier 1 runner]** / **[tier 2 runner]** need *the pinned benchmark
-  runner for that tier* and no other machine, because the Success Criteria
-  preamble reports every measured figure against the runner for its platform and
-  against no other; **[CI]** runs in GitHub Actions.
+**[tier 1]** needs a Windows 11 machine; **[tier 2]** needs a macOS 13+ machine;
+**[tier 1 runner]** / **[tier 2 runner]** need *the pinned benchmark runner for
+that tier* and no other machine, because the Success Criteria preamble reports
+every measured figure against the runner for its platform and against no other;
+**[CI]** runs in GitHub Actions.
 - A command marked *(does not exist yet)* is the shape the plan owes, named so
-  that the change which lands it has a target. It is not claimed to run today.
+that the change which lands it has a target. It is not claimed to run today.
 
 ---
 
@@ -33,33 +35,35 @@ answer to "can I check this here?".
 
 ## A0. Where the code is, and what it needs
 
-`main` carries the specification, the constitution and ADR-0001. It carries no
-Rust workspace and no budget gate. Two branches carry the code:
+`main` carries all of it. Both branches that produced this code are merged into
+`main` — `feat/engine-seam` (pull request #34) and `feat/budget-gate` (pull
+request #37) — so alongside the specification, the constitution and ADR-0001,
+`main` carries the `Engine` trait, the headless second implementation, the
+shell, the FR-015 navigation-failure tests, `budgets.toml`,
+`scripts/check-budgets.py`, that script's own tests, and
+`.github/workflows/build.yml`. Confirmed by `git ls-tree origin/main` and `git
+log origin/main`.
 
-| Branch | Carries |
-| --- | --- |
-| `feat/engine-seam` | The `Engine` trait, the headless second implementation, the shell, and the FR-015 navigation-failure tests |
-| `feat/budget-gate` | All of the above (it descends from `feat/engine-seam`), plus `budgets.toml`, `scripts/check-budgets.py`, that script's own tests, and `.github/workflows/build.yml` |
-
-`feat/budget-gate` is therefore the branch to check out to run everything in
-Part A:
+There is therefore no branch to check out, and no branch to check out *to*: the
+two feature branches still exist but carry nothing `main` does not. Everything
+in Part A runs from a checkout of `main`:
 
 ```
-git checkout feat/budget-gate
+git checkout main
 ```
 
-**Toolchain.** Stable Rust, edition 2024, `rust-version = "1.85"` declared in the
-workspace manifest — Principle III and FR-044 forbid nightly features on the
+**Toolchain.** Stable Rust, edition 2024, `rust-version = "1.85"` declared in
+the workspace manifest — Principle III and FR-044 forbid nightly features on the
 release path, and the floor is checked in so a toolchain that cannot build the
 release path fails at resolve time. Python 3.11 or later for the budget gate
 (`tomllib`).
 
 **Network.** None required. `Cargo.lock` resolves to three packages, all local
-path dependencies, and the workspace pulls no third-party crate at all. That is a
-property worth keeping deliberately: the first change that adds a real dependency
-tree is also the first change that meets SC-001's 20 MB download entry with
-something other than our own code, and A6 explains why today's measured number
-does not yet test that.
+path dependencies, and the workspace pulls no third-party crate at all. That is
+a property worth keeping deliberately: the first change that adds a real
+dependency tree is also the first change that meets SC-001's 20 MB download
+entry with something other than our own code, and A6 explains why today's
+measured number does not yet test that.
 
 ## A1. Build
 
@@ -69,9 +73,9 @@ does not yet test that.
 cargo build --release
 ```
 
-**Pass**: builds clean. `cargo fmt --all --check` and
-`cargo clippy --all-targets --all-features -- -D warnings` both pass; CI runs
-both before it runs anything else, so a failure here fails the build.
+**Pass**: builds clean. `cargo fmt --all --check` and `cargo clippy
+--all-targets --all-features -- -D warnings` both pass; CI runs both before it
+runs anything else, so a failure here fails the build.
 
 ## A2. The navigation-failure tests
 
@@ -98,21 +102,46 @@ What those six actually establish, stated narrowly because SC-009 asks for more
 than they give:
 
 - each of FR-015's four causes — unresolvable, certificate, intercepted,
-  authentication-required — is a distinct value producing a distinct message that
-  names the address;
+authentication-required — is a distinct value producing a distinct message that
+names the address;
 - a failed load is not a successful empty page, which FR-015 names verbatim as a
-  defect;
+defect;
 - a failed load does not replace the page the member was on;
 - an address nobody scripted fails visibly rather than succeeding emptily;
-- the shell is shown the address that loaded rather than the one requested;
-- every address the shell asked for is observable to a test, which is what an
-  assertion about FR-007a's boundary needs.
+- a loaded page carries an address the shell reads off the page rather than
+echoing what was typed. **What that test does not establish is redirects.**
+`the_shell_sees_the_address_that_loaded_not_the_one_requested` scripts
+`https://site.invalid/` and asserts that the returned page's address is
+`https://site.invalid/`: requested and loaded are the same string, so no
+redirect is exercised and nothing about redirects is proved. The property is
+real and is stated as a requirement of the contract — `Page::address`'s doc
+comment in `crates/evreos-engine/src/lib.rs` reads "the address that actually
+loaded, which may differ from the requested one after a redirect" — but the test
+does not yet prove it. A redirect case is a test worth adding, and adding it
+needs a headless engine that can script a response whose address differs from
+the request, which `HeadlessEngine::load` cannot do today: it builds the `Page`
+from the requested address;
+- every address the *engine* was asked to load is observable to a test, through
+`HeadlessEngine::loads()`. That is a record of what the shell asked the engine
+for, and not a record of what left the machine: it observes an engine that opens
+no socket. FR-007a's boundary is outbound traffic, and B10 states the only
+instrument for it — a capture on real hardware, because WebView2 and WKWebView
+open their own sockets and no in-process recorder sees them. This test is a
+precondition for an assertion about that boundary, not the assertion.
 
-What they do **not** establish: anything about a real platform. They run against
-the headless engine, so they prove the shell's half of FR-015 on a machine with
-no system webview. SC-009 requires the four causes exercised "on every supported
-platform"; that exercise is B4 and needs a real backend on a real machine of each
-tier.
+What they do **not** establish: anything about a real platform, and nothing
+about the shell's own code. The file sits under `crates/evreos-shell/tests/`,
+but it imports `evreos_engine` and `evreos_engine_headless` and nothing else, so
+it drives the headless engine directly. What it exercises is the seam's contract
+— `LoadError`'s closed set of four causes and its `Display` — and the headless
+implementation of that contract, on a machine with no system webview. The
+shell's own handling is `navigate()` in `crates/evreos-shell/src/main.rs`; it
+lives in a binary crate, so an integration test cannot import it, no test calls
+it, and A3's `cargo run` is the only thing that exercises it today. Giving the
+shell's half a test means first moving `navigate()` into a library target, and
+that is a change the plan owes. SC-009 separately requires the four causes
+exercised "on every supported platform"; that exercise is B4 and needs a real
+backend on a real machine of each tier.
 
 ## A3. Run the shell against the headless engine
 
@@ -144,8 +173,10 @@ FR-044, which requires the headless implementation kept working from M0).
 python3 scripts/test_check_budgets.py
 ```
 
-**Pass**: `20/20 passed`, exit 0. The gate is CI's authority to fail a build, so
-its own behaviour is tested rather than assumed.
+**Pass**: `24/24 passed`, exit 0. The gate is CI's authority to fail a build, so
+its own behaviour is tested rather than assumed. The four cases beyond the
+twenty this document first recorded are the ones covering the unmeasured-entry
+block A5 describes.
 
 ## A5. The budget gate, and the deliberate failure
 
@@ -160,48 +191,70 @@ python3 scripts/check-budgets.py
 ```
 
 **Pass condition today is a failure, and the failure is the point.** Expect exit
-1 and:
+1 and these lines. The `FAIL` lines go to stderr and the rest to stdout, so the
+order you see depends on how you capture them; this is the order a terminal
+shows:
 
 ```
   FAIL     [budget file] runner tier1 (8th-generation Intel i3/i5 laptop, 8 GB) has no durable identity; until it is procured and pinned no hardware-dependent figure is reproducible
   FAIL     [budget file] runner tier2 (MacBook Pro (2017), 8 GB) has no durable identity; until it is procured and pinned no hardware-dependent figure is reproducible
   unmeasured on this machine: 2 entries
-    - SC-001 installed footprint (windows)
-    - SC-001 installed footprint (macos)
+    - SC-001 installed footprint (windows)  (no measurement produced)
+    - SC-001 installed footprint (macos)  (no measurement produced)
+  FAIL     [budget file] SC-001 installed footprint (windows): no measurement was produced; an unmeasured entry is not a pass
+  FAIL     [budget file] SC-001 installed footprint (macos): no measurement was produced; an unmeasured entry is not a pass
   measured: download size 0.297 MB
 
 Budget gates FAILED: budget file
 ```
 
-Read it as three separate statements.
+Four `FAIL` lines, not two. Read them as three separate statements.
 
 1. **The two runner failures are correct and are meant to be there.** Q-E9a
-   settled the rule and the models; procurement is what remains, and the
-   Assumptions entry on reference hardware records that pinning the two machines
-   "is what remains before a hardware-dependent absolute gate blocks the build".
-   The budget-file gate fails on a missing runner identity precisely so that the
-   advisory period on the absolute gates is bounded by a gate rather than by good
-   intentions. These two lines go away when the machines are procured and their
-   durable identifiers are written into `budgets.toml`, and not before.
-2. **"unmeasured" is not "passed."** The script says so in its own docstring and
-   it is worth repeating here: an entry it cannot measure honestly on the machine
-   it is running on is reported as unmeasured, and an unmeasured entry is not a
-   pass.
-3. **The measured number is this machine's release binary, not a budget figure.**
-   0.297 MB is the size of a Linux ELF built from a workspace with no
-   dependencies. See A6.
+settled the rule and the models; procurement is what remains, and the
+Assumptions entry on reference hardware records that pinning the two machines
+"is what remains before a hardware-dependent absolute gate blocks the build".
+The budget-file gate fails on a missing runner identity precisely so that the
+advisory period on the absolute gates is bounded by a gate rather than by good
+intentions. These two lines go away when the machines are procured and their
+durable identifiers are written into `budgets.toml`, and not before.
+2. **"unmeasured" is not "passed," and the gate now blocks on it rather than
+only saying so.** An entry the script cannot measure honestly on the machine it
+is running on is reported as unmeasured and fails the budget-file gate. The one
+exception is a hardware-dependent entry on a tier with no pinned runner — there
+is no machine to measure it on, and the runner condition above already reports
+that — which is why SC-002, SC-004, SC-005 and SC-006 do not appear here at all:
+they are not in `budgets.toml` yet (A6). SC-001's two installed-footprint
+entries are declared, are not hardware-dependent, and have no measurement, so
+they block. They will keep blocking until an installer exists to produce the
+disk delta they are measured from.
+3. **The measured number is this machine's release binary, not a budget
+   figure.**
+0.297 MB is the size of a Linux ELF built from a workspace with no dependencies.
+See A6.
 
-Then the blocking mode, which is what CI's merge-blocking step runs:
+Then the blocking mode, which is what CI's merge-blocking step runs. It carries
+two flags, not one:
 
 ```
-python3 scripts/check-budgets.py --allow-unpinned-runners
+python3 scripts/check-budgets.py --allow-unpinned-runners --allow-unmeasured
 ```
 
-**Pass**: exit 0, with the two runner failures demoted to `advisory`. That flag
-is in `.github/workflows/build.yml` today, and removing it is a release
-prerequisite rather than a preference: it is the only thing suppressing the
-budget-file gate's runner condition, and it is satisfied by procuring and
-pinning the two machines Q-E9a names.
+**Pass**: exit 0 and `Budget gates passed.`, with the two runner failures
+demoted to `advisory` and the two installed-footprint entries annotated
+`(deferred by --allow-unmeasured)`. Run with `--allow-unpinned-runners` alone
+the script still exits 1: that flag suppresses only the runner condition, and
+the two unmeasured entries fail regardless.
+
+Both flags are in `.github/workflows/build.yml` today, and removing each is a
+release prerequisite rather than a preference, with a named thing that satisfies
+it. `--allow-unpinned-runners` is the only thing suppressing the budget-file
+gate's runner condition, and it is satisfied by procuring and pinning the two
+machines Q-E9a names. `--allow-unmeasured` is the only thing suppressing the
+budget-file gate's unmeasured condition, and it is satisfied by building the
+harness that produces each figure — today that is SC-001's installed footprint,
+which is the disk delta after first run completes and so needs an installer that
+does not exist yet.
 
 The workflow runs the full report at `continue-on-error: true` and the blocking
 mode as a gate, so both outputs appear on every pull request and only the second
@@ -214,38 +267,38 @@ are recorded here because a validation guide that presents a green gate as a
 green product is the failure Principle II exists to prevent.
 
 - **One Linux binary is compared against both platform entries.**
-  `measure_download_size()` reads `target/release/evreos-shell` and the
-  measurement is keyed on `(criterion, name)` with no platform, so the single
-  number is checked against the `windows` and the `macos` download-size entries
-  alike. Neither entry's stated condition — "the installer artefact CI publishes"
-  — is met by it, and Linux is the deferred platform. Until an installer is built
-  per platform, SC-001's download entries are not being tested by this number
-  whatever verdict it prints.
+`measure_download_size()` reads `target/release/evreos-shell` and the
+measurement is keyed on `(criterion, name)` with no platform, so the single
+number is checked against the `windows` and the `macos` download-size entries
+alike. Neither entry's stated condition — "the installer artefact CI publishes"
+— is met by it, and Linux is the deferred platform. Until an installer is built
+per platform, SC-001's download entries are not being tested by this number
+whatever verdict it prints.
 - **Fourteen of the eighteen entries are absent, and the gate does not fail on
-  their absence.** The Success Criteria preamble closes the list at nine entries
-  per platform — SC-001's two, SC-002's two, SC-004's one, SC-005's two and
-  SC-006's two — and requires the budget-file gate to fail "when an entry a
-  criterion below states is missing from the budget file". `budgets.toml` carries
-  SC-001's four. `check_budget_file` iterates over the entries that are declared
-  and never compares them against the closed list, so the missing fourteen are
-  not reported. That is a required gate behaviour that is not yet implemented,
-  not a gap in the specification.
+their absence.** The Success Criteria preamble closes the list at nine entries
+per platform — SC-001's two, SC-002's two, SC-004's one, SC-005's two and
+SC-006's two — and requires the budget-file gate to fail "when an entry a
+criterion below states is missing from the budget file". `budgets.toml` carries
+SC-001's four. `check_budget_file` iterates over the entries that are declared
+and never compares them against the closed list, so the missing fourteen are not
+reported. That is a required gate behaviour that is not yet implemented, not a
+gap in the specification.
 - **The regression half is inert.** Every SC-001 entry records
-  `baseline_mb = 0.0`, and the comparison is guarded on `baseline > 0`, so no
-  entry currently has a regression gate that can fire. The commit that first
-  measures an entry honestly must also write its baseline, or the gate stays
-  inert indefinitely.
+`baseline_mb = 0.0`, and the comparison is guarded on `baseline > 0`, so no
+entry currently has a regression gate that can fire. The commit that first
+measures an entry honestly must also write its baseline, or the gate stays inert
+indefinitely.
 - **The schema has no unit, no founder-decision field, no cross-check margin, no
-  wake enumeration and no spike-exemption field.** `figure_mb`/`baseline_mb` is
-  the whole schema, but SC-002 and SC-006 are milliseconds and SC-005 is a
-  percentage of one core plus two processor-time bounds. The preamble separately
-  requires the budget-file gate to fail when an entry recorded `ratified` names
-  no founder decision (all four SC-001 entries are ratified and name none), when
-  a declared cross-check margin on SC-004 exceeds its limit, and when SC-005's
-  wake enumeration is absent or a wake in it lacks a period, a processor-time
-  bound or a justifying requirement. It also requires the release job to refuse
-  an artefact built from a commit whose budget file records an unretired spike
-  exemption. None of those five is implemented.
+wake enumeration and no spike-exemption field.** `figure_mb`/`baseline_mb` is
+the whole schema, but SC-002 and SC-006 are milliseconds and SC-005 is a
+percentage of one core plus two processor-time bounds. The preamble separately
+requires the budget-file gate to fail when an entry recorded `ratified` names no
+founder decision (all four SC-001 entries are ratified and name none), when a
+declared cross-check margin on SC-004 exceeds its limit, and when SC-005's wake
+enumeration is absent or a wake in it lacks a period, a processor-time bound or
+a justifying requirement. It also requires the release job to refuse an artefact
+built from a commit whose budget file records an unretired spike exemption. None
+of those five is implemented.
 
 Landing the schema before the first real measurement is therefore an ordering
 constraint on the plan, not tidying: an incomplete budget file is a gate that
@@ -260,29 +313,29 @@ from a script, so it can prove that the seam holds and that the shell's own
 handling is correct. It cannot prove anything about the web.
 
 Specifically, none of the following can be checked here, and no result obtained
-here may be reported for them: FR-001 tabs and session restore, FR-002 background
-suspension, FR-004 downloads, FR-005 find-in-page and zoom, FR-006 permission
-prompts, FR-007 private windows, FR-008 blocking and its per-site control,
-FR-009 document viewing, FR-012 import, FR-013 default-browser registration,
-FR-015's four causes *as the platform reports them*, every app and money surface,
-and every one of SC-002, SC-004, SC-005, SC-006, SC-007, SC-008, SC-009,
-SC-009a and SC-014.
+here may be reported for them: FR-001 tabs and session restore, FR-002
+background suspension, FR-004 downloads, FR-005 find-in-page and zoom, FR-006
+permission prompts, FR-007 private windows, FR-008 blocking and its per-site
+control, FR-009 document viewing, FR-012 import, FR-013 default-browser
+registration, FR-015's four causes *as the platform reports them*, every app and
+money surface, and every one of SC-002, SC-004, SC-005, SC-006, SC-007, SC-008,
+SC-009, SC-009a and SC-014.
 
 Two further limits that catch people out:
 
 - A Windows 11 or macOS 13 **developer** machine is enough to *exercise* a
-  scenario and not enough to *report a figure*. The Success Criteria preamble
-  binds every measured figure to that tier's pinned runner and to no other
-  machine, so a fast laptop producing a green number produces nothing that may be
-  recorded, published under SC-013, or used to reset a baseline.
+scenario and not enough to *report a figure*. The Success Criteria preamble
+binds every measured figure to that tier's pinned runner and to no other
+machine, so a fast laptop producing a green number produces nothing that may be
+recorded, published under SC-013, or used to reset a baseline.
 - Neither shipping tier's backend exists yet. Phase 0 research established that
-  the merged `Engine` trait's synchronous `load` cannot be implemented over
-  either shipping backend without a nested message loop SC-006 forbids, that it
-  cannot represent navigation the shell did not initiate, that it cannot express
-  an in-flight load SC-009 requires to be testable, and that it has no
-  construction seam where the shared platform context SC-004 depends on can live.
-  The trait changes before the first backend is written, so scenarios in Part B
-  that name a backend are gated on that change landing first.
+the merged `Engine` trait's synchronous `load` cannot be implemented over either
+shipping backend without a nested message loop SC-006 forbids, that it cannot
+represent navigation the shell did not initiate, that it cannot express an
+in-flight load SC-009 requires to be testable, and that it has no construction
+seam where the shared platform context SC-004 depends on can live. The trait
+changes before the first backend is written, so scenarios in Part B that name a
+backend are gated on that change landing first.
 
 ---
 
@@ -294,21 +347,21 @@ dependencies, not the requirement numbers.
 
 ## B1. User Story 1 — browse privately on an ordinary machine
 
-**Requirement**: Story 1's independent test, verbatim from the spec — "Install on
-the reference hardware, complete a full session — search, ten tabs, bookmark,
+**Requirement**: Story 1's independent test, verbatim from the spec — "Install
+on the reference hardware, complete a full session — search, ten tabs, bookmark,
 download, print, find-in-page, close and reopen — entirely signed out, and
 confirm every ratified budget in Success Criteria holds, recording the measured
 cold-start and warm-start times against the two provisional figures SC-002
 states."
 
 **Platform**: [tier 1 runner], then [tier 2 runner]. The reference hardware is
-named by the test itself, so a session on any other machine is a rehearsal rather
-than the test.
+named by the test itself, so a session on any other machine is a rehearsal
+rather than the test.
 
 **Prerequisites**: the tier's pinned runner procured and its identity in
 `budgets.toml`; the system-webview backend for that tier; the chrome (ADR-0001
-spike S4's output) — a session with tabs, an address field and a download list is
-a session with chrome; FR-008 blocking active on first launch without
+spike S4's output) — a session with tabs, an address field and a download list
+is a session with chrome; FR-008 blocking active on first launch without
 configuration; the budget schema of A6.
 
 **Command** *(does not exist yet)*:
@@ -320,29 +373,30 @@ scripts/session-acceptance.py --tier 1 --signed-out --record runs/<commit>/story
 **Pass**, and each clause is separately falsifiable:
 
 - the full session completes signed out, and nothing at any point asks for an
-  account (FR-022, and Story 2's fifth acceptance scenario, which is the same
-  property asserted from the other side);
+account (FR-022, and Story 2's fifth acceptance scenario, which is the same
+property asserted from the other side);
 - tracker blocking is active from first launch with no configuration (FR-008),
-  and its per-site control is reachable *at the moment of failure* rather than
-  only from settings — the spec's own edge case makes discoverability at the
-  point of breakage the test, because this cohort abandons rather than hunts;
-- every **ratified** entry holds: SC-001's four, SC-004 on tier 1, SC-005, SC-006
-  (Q-E9);
+and its per-site control is reachable *at the moment of failure* rather than
+only from settings — the spec's own edge case makes discoverability at the point
+of breakage the test, because this cohort abandons rather than hunts;
+- every **ratified** entry holds: SC-001's four, SC-004 on tier 1, SC-005,
+  SC-006
+(Q-E9);
 - cold start and warm start are **recorded against**, not gated on, SC-002's two
-  provisional figures — all four SC-002 entries are provisional pending the
-  cold-start spike (B12), and the spec says the shell architecture is expected to
-  be shaped by what that spike finds;
+provisional figures — all four SC-002 entries are provisional pending the
+cold-start spike (B12), and the spec says the shell architecture is expected to
+be shaped by what that spike finds;
 - the session restores on close and reopen (FR-001).
 
 Story 1's six acceptance scenarios map to B1 (scenarios 1, 3), B7 (2), B4 (4),
 and to two of its own:
 
 - **Per-site control persists** (scenario 5, FR-008): turn blocking off for one
-  site, restart, and find it still off for that site and on everywhere else.
+site, restart, and find it still off for that site and on everywhere else.
 - **Import** (scenario 6, FR-012): with an existing Chrome, Firefox or Edge
-  profile on the machine, import and find bookmarks and history present. FR-007a
-  expressly permits this as local computation; what it forbids is any of it
-  leaving the machine, which B10 checks.
+profile on the machine, import and find bookmarks and history present. FR-007a
+expressly permits this as local computation; what it forbids is any of it
+leaving the machine, which B10 checks.
 
 ## B2. User Story 2 — claim and follow cashback
 
@@ -367,37 +421,38 @@ scripts/money-acceptance.py --fixture-service <url> --tier 1
 
 **Pass**:
 
-- a scanned claim code opens the claim flow directly after installation, with the
-  member navigating nowhere (FR-032, Story 2 scenario 1);
+- a scanned claim code opens the claim flow directly after installation, with
+  the
+member navigating nowhere (FR-032, Story 2 scenario 1);
 - opening an offer routes through a click-out URL the service issued for that
-  occasion, the member is told plainly that tracking is taking place, and the
-  navigated address is byte-identical to the URL the service returned — the
-  client constructs, templates and modifies nothing (FR-025, Principle V);
+occasion, the member is told plainly that tracking is taking place, and the
+navigated address is byte-identical to the URL the service returned — the client
+constructs, templates and modifies nothing (FR-025, Principle V);
 - the wallet shows pending, confirmed, declined and reversed exactly as the
-  fixture ledger reports them, with the payable amount where the service reports
-  one, and computes, estimates, aggregates and omits nothing (FR-026);
+fixture ledger reports them, with the payable amount where the service reports
+one, and computes, estimates, aggregates and omits nothing (FR-026);
 - a pending amount carries a plain-language explanation of why it is pending
-  (FR-027);
+(FR-027);
 - a withdrawal request is recorded and followable to a terminal state (FR-028),
-  and a submission whose response is lost produces an explicit unknown state
-  rather than a retry or an inferred outcome (FR-026a);
+and a submission whose response is lost produces an explicit unknown state
+rather than a retry or an inferred outcome (FR-026a);
 - with the fixture service unreachable, the wallet presents a stale state
-  carrying the time it was last received, never a current balance, and on
-  reconnection the service's value replaces the cached one outright with no
-  reconcile, merge or diff (FR-026a, and the spec's edge case on the ledger and
-  the client disagreeing);
+carrying the time it was last received, never a current balance, and on
+reconnection the service's value replaces the cached one outright with no
+reconcile, merge or diff (FR-026a, and the spec's edge case on the ledger and
+the client disagreeing);
 - a claim code that is already redeemed, expired, or belongs to another member
-  produces three distinct plain-language outcomes and no generic error (edge
-  cases);
+produces three distinct plain-language outcomes and no generic error (edge
+cases);
 - no offer alters, overlays or annotates a merchant's page at any point
-  (FR-018a, FR-018b) — the offer surface is in the browser's own chrome, and
-  interaction with page content authorises nothing.
+(FR-018a, FR-018b) — the offer surface is in the browser's own chrome, and
+interaction with page content authorises nothing.
 
 **Blocked**: FR-029 claim-code redemption ships present and **disabled** until
 the existing service is confirmed to hold campaign records and accept a
 redemption (Q-E11a). So the redemption half of this scenario runs against the
-fixture service only, and **SC-010 is not measurable and must not be scheduled as
-an acceptance gate** until Q-E11a resolves — the spec says so directly.
+fixture service only, and **SC-010 is not measurable and must not be scheduled
+as an acceptance gate** until Q-E11a resolves — the spec says so directly.
 
 The disabled state itself is testable now, and its test is the one FR-029a
 writes: on a build with no backing service, find the control present and
@@ -427,17 +482,17 @@ scripts/app-acceptance.py --publisher-fixture <dir> --tier 1
 **Pass**:
 
 - a published surface change reaches the member on next open, with no browser
-  release (FR-019, Story 3 scenario 3);
+release (FR-019, Story 3 scenario 3);
 - the app's declared capabilities are unchanged by that update, and an app
-  attempting a capability beyond its manifest is refused — an app can never widen
-  its capabilities from inside (FR-017, scenario 4);
+attempting a capability beyond its manifest is refused — an app can never widen
+its capabilities from inside (FR-017, scenario 4);
 - a page-adjacent capability asks for a per-app grant on first use (FR-018,
-  scenario 5), and a capability the shipped catalogue does not classify is never
-  granted (FR-018's last sentence);
+scenario 5), and a capability the shipped catalogue does not classify is never
+granted (FR-018's last sentence);
 - with no network, opening an app presents a cached surface or a stated offline
-  state, never a blank screen (FR-020, scenario 6);
+state, never a blank screen (FR-020, scenario 6);
 - epiloYES presents as an app with its own surface rather than a browser tab
-  (FR-016, scenario 1);
+(FR-016, scenario 1);
 - language and place change independently of one another (FR-035, scenario 2).
 
 Four verification properties are separately testable against the headless engine
@@ -467,13 +522,21 @@ so a green run on one tier is half the criterion.
 yet)*:
 
 ```
-cargo test --all                                  # today, the shell's half
+cargo test --all                                  # today, the seam's half
 scripts/navigation-failures.py --tier 1           # the platform's half
 ```
 
 **Pass**: each of the four causes produces an error state naming the cause and
 offering a next step, in the member's language; zero failures presented as
 successful blank pages; zero loading indicators that do not resolve within 30 s.
+
+`cargo test --all` reaches none of that today, and it is not the shell's half:
+it establishes that the four causes are four distinct values whose four distinct
+messages name the address, and nothing more. `LoadError`'s `Display` strings
+offer no next step, and `crates/evreos-engine/src/lib.rs` documents them as
+"deliberately not the member-facing copy, which is localised" under FR-035. The
+next step and the language are the shell's, and A2 records that the shell's own
+handling has no test at all.
 
 Per cause, with what actually produces it on each tier:
 
@@ -536,14 +599,15 @@ being discovered only after installation.
 ## B6. SC-008 — the accessibility pass
 
 **Requirement**: FR-034 (WCAG 2.1 AA on every shell surface), FR-011, FR-005,
-FR-036, SC-008, Principle X. Principle X makes a failure a release blocker rather
-than polish, and Governance names Principle X violations release blockers.
+FR-036, SC-008, Principle X. Principle X makes a failure a release blocker
+rather than polish, and Governance names Principle X violations release
+blockers.
 
 **Platform**: [tier 1] and [tier 2]. ADR-0001's accessibility rationale is
-evidenced on Windows only and covers **page content, not the shell's own chrome**
-— the tab strip, address field and app surfaces carry their own obligation, and
-what renders them is spike S4's output. So this pass is owed on both tiers and
-cannot be inherited from the engine on either.
+evidenced on Windows only and covers **page content, not the shell's own
+chrome** — the tab strip, address field and app surfaces carry their own
+obligation, and what renders them is spike S4's output. So this pass is owed on
+both tiers and cannot be inherited from the engine on either.
 
 **Prerequisites**: the chrome exists (S4 decided). Every candidate chrome
 renderer is disqualified by SC-006 before it reaches this scenario, so B9's
@@ -558,29 +622,30 @@ scripts/a11y-acceptance.py --tier 1 --surfaces all --report runs/<commit>/a11y/
 **Pass**, all four clauses of SC-008 on every shell surface:
 
 1. **WCAG 2.1 AA.** Automated check plus a manual pass; the automated half is
-   necessary and not sufficient. **[gap]** — the specification states WCAG 2.1 AA
-   for shell surfaces and supplies no mapping for non-web software, and several
-   of its success criteria (page titled, bypass blocks, multiple ways, consistent
-   navigation, consistent identification, language of parts) have no coherent
-   reading for a tab strip. A written interpretation must be committed before
-   this scenario has a pass condition; see *Gaps*.
-2. **Full keyboard operation.** Every action reachable by pointer is reachable by
-   keyboard (FR-011), including getting *out* of a focus trap in page content —
-   the chrome/content boundary is where this class of interface commonly fails,
-   and the spec's edge case names it. Focus order and reading order remain
-   coherent across that boundary in both directions.
+necessary and not sufficient. **[gap]** — the specification states WCAG 2.1 AA
+for shell surfaces and supplies no mapping for non-web software, and several of
+its success criteria (page titled, bypass blocks, multiple ways, consistent
+navigation, consistent identification, language of parts) have no coherent
+reading for a tab strip. A written interpretation must be committed before this
+scenario has a pass condition; see *Gaps*.
+2. **Full keyboard operation.** Every action reachable by pointer is reachable
+   by
+keyboard (FR-011), including getting *out* of a focus trap in page content — the
+chrome/content boundary is where this class of interface commonly fails, and the
+spec's edge case names it. Focus order and reading order remain coherent across
+that boundary in both directions.
 3. **200% scaling.** Every surface remains usable, legible and unclipped
-   (FR-005). Chrome layout scale and the engine's rasterization scale are set
-   together or the two disagree at 200% and content scales twice or not at all;
-   page zoom is a third, separate value.
+(FR-005). Chrome layout scale and the engine's rasterization scale are set
+together or the two disagree at 200% and content scales twice or not at all;
+page zoom is a third, separate value.
 4. **German dead-key and Greek text entry** (FR-036), in the FR-003 combined
-   field, the find-in-page field, and every chrome text input. This is the
-   shell's, not the engine's: the address field is the most-used text input in
-   the product and it is ours.
+field, the find-in-page field, and every chrome text input. This is the shell's,
+not the engine's: the address field is the most-used text input in the product
+and it is ours.
 
-Driven with each platform's own assistive technology — Narrator and NVDA on
-tier 1, VoiceOver on tier 2 — which is what ADR-0001 risk 7 requires before WCAG
-2.1 AA is claimed anywhere but on tier-1 page content.
+Driven with each platform's own assistive technology — Narrator and NVDA on tier
+1, VoiceOver on tier 2 — which is what ADR-0001 risk 7 requires before WCAG 2.1
+AA is claimed anywhere but on tier-1 page content.
 
 > **Open**: does an accessibility tree published by the chrome compose coherently
 > with an embedded WebView2 or WKWebView's own tree — one reading order, one
@@ -595,9 +660,9 @@ tier 1, VoiceOver on tier 2 — which is what ADR-0001 risk 7 requires before WC
 is neither a shell surface under FR-034 nor interface text under FR-035, and
 FR-041 carries both obligations to it and states how they are verified: an
 automated WCAG 2.1 AA check, a keyboard-only pass over the whole download path,
-and a rendering of each of `de`, `el` and `en` showing no untranslated string and
-no fused language-and-place value — in the text, in the download links, and in
-their parameters. Verified on the **published** page before each release that
+and a rendering of each of `de`, `el` and `en` showing no untranslated string
+and no fused language-and-place value — in the text, in the download links, and
+in their parameters. Verified on the **published** page before each release that
 page advertises, published with the release, and a failure blocks that release.
 
 ## B7. Story 1 scenario 2 — background suspension and the idle figure
@@ -646,9 +711,9 @@ here rather than discovered later:
 
 SC-005's second half is not a measurement at all and must not be scheduled as
 one: "no periodic timer outside the enumeration may exist on the idle path,
-verified by design review and by instrumentation of scheduled work rather than by
-observation, since no finite window can falsify a timer with a longer period."
-The check is therefore at build time against the wake enumeration in
+verified by design review and by instrumentation of scheduled work rather than
+by observation, since no finite window can falsify a timer with a longer
+period." The check is therefore at build time against the wake enumeration in
 `budgets.toml`, plus a design review — a soak can corroborate it and can never
 discharge it. **[design]** the specific enforcement mechanism.
 
@@ -660,8 +725,8 @@ ADR-0001 records that what governs macOS memory at ten tabs is unestablished.
 **Platform**: [tier 1 runner], [tier 2 runner]. Nowhere else.
 
 **Prerequisites**: the runner; the backend; the host/factory seam above `Engine`
-that owns the shared platform context — without it ten tabs mint ten contexts and
-this entry is lost before product code exists; the ten-page corpus.
+that owns the shared platform context — without it ten tabs mint ten contexts
+and this entry is lost before product code exists; the ten-page corpus.
 
 **Command** *(does not exist yet)*:
 
@@ -679,8 +744,8 @@ macOS, summed over every process Evreos launches or causes to be launched —
 never a resident-set counter, which SC-004 rejects by name because it would
 report the eight-hour leak this criterion exists to catch as a reduction. Memory
 the shell places in sections shared between its own processes is counted once
-rather than dropped. The two counters are different quantities, so the two tiers'
-figures are never compared with each other.
+rather than dropped. The two counters are different quantities, so the two
+tiers' figures are never compared with each other.
 
 **Release rule, stated because it is easy to lose**: the full 8-hour soak MUST
 pass on the exact commit a release artefact is built from, before that artefact
@@ -711,26 +776,26 @@ scripts/latency.py --tier 1 --interaction tab-switch --trials 1000
 scripts/latency.py --tier 1 --interaction address-keystroke --trials 1000
 ```
 
-**Pass**: a visible response within 16 ms at the 99th percentile of at least 1000
-trials per interaction, **and no trial over 16 ms at all** — a single trial over
-16 ms fails the gate.
+**Pass**: a visible response within 16 ms at the 99th percentile of at least
+1000 trials per interaction, **and no trial over 16 ms at all** — a single trial
+over 16 ms fails the gate.
 
 Three rules the harness must implement rather than the operator remember:
 
 - **Individual trials are never discarded**, for any reason. Discarding the two
-  worst of a thousand is a 99.8th-percentile bar and reinstates the dropped frame
-  this criterion forbids.
+worst of a thousand is a 99.8th-percentile bar and reinstates the dropped frame
+this criterion forbids.
 - **A whole invocation** may be discarded only for a recorded, externally
-  observable cause the harness detects — a competing process, thermal
-  throttling, a failed instrumentation check — never for an outlier judged
-  environmental after the fact.
+observable cause the harness detects — a competing process, thermal throttling,
+a failed instrumentation check — never for an outlier judged environmental after
+the fact.
 - **The discard budget is two per head commit, counted cumulatively across every
-  run of the gate on that commit.** Re-running does not reset it; the third
-  discard fails the gate; only a new head commit carries a new budget. A harness
-  that knows only about its own invocation grants two discards per run, which is
-  unlimited retries with extra steps. The ledger is therefore durable state
-  indexed by head commit SHA, read before the gate decides, and every discard is
-  published under SC-013 with its cause and its commit.
+run of the gate on that commit.** Re-running does not reset it; the third
+discard fails the gate; only a new head commit carries a new budget. A harness
+that knows only about its own invocation grants two discards per run, which is
+unlimited retries with extra steps. The ledger is therefore durable state
+indexed by head commit SHA, read before the gate decides, and every discard is
+published under SC-013 with its cause and its commit.
 
 The bar stays 16 ms where a machine's native refresh is higher: it is a
 human-perception budget, not a hardware-relative one.
@@ -739,20 +804,20 @@ human-perception budget, not a hardware-relative one.
 not fixed by any requirement, and FR-003 combines search, history and bookmarks
 so the response time is a function of how much local data there is. A figure
 measured on a fresh profile and one measured on a year-old profile are different
-quantities under the same entry, which SC-013's third party cannot reproduce. See
-*Gaps*.
+quantities under the same entry, which SC-013's third party cannot reproduce.
+See *Gaps*.
 
 ## B10. SC-014 and FR-007a — the traffic capture
 
 **Requirement**: SC-014, FR-007a's conformance paragraph, Principle VI, and the
-Permanent Prohibition on server-side collection of browsing history. Two distinct
-obligations, and they are not the same test.
+Permanent Prohibition on server-side collection of browsing history. Two
+distinct obligations, and they are not the same test.
 
 **FR-007a's conformance test** is committed to this repository and run in CI. It
 exercises first launch, typing in the FR-003 field **without submitting**, a
-submitted search, navigation to a site with subresources, a private window, and a
-hand-off; it fails on any outbound request from Evreos that no entry in FR-007a's
-closed list accounts for.
+submitted search, navigation to a site with subresources, a private window, and
+a hand-off; it fails on any outbound request from Evreos that no entry in
+FR-007a's closed list accounts for.
 
 **SC-014's capture** is a scripted session on a fresh profile — first run, a
 search, ten navigations across sites, a download, a private window, then close
@@ -775,8 +840,8 @@ scripts/traffic-analysis.py runs/<commit>/capture/ --report runs/<commit>/analys
 ```
 
 **Pass**: every URL-bearing payload in the capture is one FR-007a permits —
-inherent in a function the member invoked on that occasion, carrying no more than
-that function needs — and each is listed in the published analysis with the
+inherent in a function the member invoked on that occasion, carrying no more
+than that function needs — and each is listed in the published analysis with the
 invoking function named. Any URL-bearing payload the analysis does not list, and
 any diagnostic report at all on a profile where diagnostics were never enabled,
 fails the criterion.
@@ -786,18 +851,18 @@ research as live from the first Windows build and both failing silently
 otherwise:
 
 - **The tier-1 runtime's reputation service is off**, and stays off. FR-007a's
-  final paragraph makes a runtime feature that sends visited addresses on its own
-  Evreos's transmission and requires it turned off; a reputation service is the
-  case that paragraph names by example. The setting is per-webview, takes effect
-  only on the next navigation, and resets to enabled for every webview sharing a
-  user data folder when a new one is created — so "kept off" is a per-webview
-  invariant asserted in the capture, never a one-time call at startup.
+final paragraph makes a runtime feature that sends visited addresses on its own
+Evreos's transmission and requires it turned off; a reputation service is the
+case that paragraph names by example. The setting is per-webview, takes effect
+only on the next navigation, and resets to enabled for every webview sharing a
+user data folder when a new one is created — so "kept off" is a per-webview
+invariant asserted in the capture, never a one-time call at startup.
 - **The tier-1 runtime's own crash reporting sends nothing to its vendor.** A
-  renderer minidump contains page memory, hence URLs and page content; no entry
-  in FR-007a's list accounts for it, FR-039 requires diagnostics off until the
-  member turns them on, and FR-039c bans capturing page memory at all. The
-  vendor's custom-crash-reporting option is what suppresses it, and any dumps it
-  produces locally are deleted unread rather than parsed.
+renderer minidump contains page memory, hence URLs and page content; no entry in
+FR-007a's list accounts for it, FR-039 requires diagnostics off until the member
+turns them on, and FR-039c bans capturing page memory at all. The vendor's
+custom-crash-reporting option is what suppresses it, and any dumps it produces
+locally are deleted unread rather than parsed.
 
 Two open questions attach:
 
@@ -818,11 +883,11 @@ Two open questions attach:
 > analysis cannot see and must be named as such.
 
 **[gap]** — SC-014's criterion reads on "every URL-bearing payload", and a
-conforming build emits at least the FR-014 update check in that scripted session,
-which is a payload bearing a URL and which FR-007a permits because it carries
-none of the four governed things. Read literally, SC-014 fails a build for doing
-something FR-007a allows. Which reading governs is a founder decision. See
-*Gaps*.
+conforming build emits at least the FR-014 update check in that scripted
+session, which is a payload bearing a URL and which FR-007a permits because it
+carries none of the four governed things. Read literally, SC-014 fails a build
+for doing something FR-007a allows. Which reading governs is a founder decision.
+See *Gaps*.
 
 ## B11. Budget measurements, entry by entry
 
@@ -853,8 +918,8 @@ or the regression half of that entry's gate stays inert (A6).
 **Spike exemption.** A change whose purpose is to establish a figure that does
 not yet exist is exempt from that one entry's absolute gate and from nothing
 else. It never lifts the regression gate and never lifts the budget-file gate.
-The exemption is recorded on that entry naming the pull request and the figure it
-measures, and a build produced while an exemption is unretired must not be
+The exemption is recorded on that entry naming the pull request and the figure
+it measures, and a build produced while an exemption is unretired must not be
 released or tagged. The exemption is available only to a change that ships no
 behaviour, and code reachable in a shipped binary is behaviour whatever flag
 guards it — so a spike behind a disabled feature flag is not exempt.
@@ -862,8 +927,8 @@ guards it — so a spike behind a disabled feature flag is not exempt.
 ## B12. The spikes
 
 These are measurements. Each one's command produces a number or a recorded
-observation; none of them may be answered by choosing, and this document predicts
-no result for any of them.
+observation; none of them may be answered by choosing, and this document
+predicts no result for any of them.
 
 | Spike | Question | Platform | Blocks |
 | --- | --- | --- | --- |
@@ -889,10 +954,11 @@ Two spikes should be scheduled together rather than separately, because they
 share one dependency: app-surface network confinement on tier 2 and Q-E12's
 blocking parity both reach WebKit's compiled rule lists through the same route.
 
-Q-E10's method also has a second run nobody would think to schedule: run it twice
-on each tier, with the shipped blocking configuration enabled and disabled, since
-the lists Evreos ships under FR-008 may themselves break the click-out redirect
-chain the cashback flow depends on. Whether they do is unverified.
+Q-E10's method also has a second run nobody would think to schedule: run it
+twice on each tier, with the shipped blocking configuration enabled and
+disabled, since the lists Evreos ships under FR-008 may themselves break the
+click-out redirect chain the cashback flow depends on. Whether they do is
+unverified.
 
 ## B13. Checks that run on ordinary CI and need no runner at all
 
@@ -906,7 +972,7 @@ scenarios short.
 | No region subtag in any catalogue key or filename, and no request field fusing language and place | FR-035, Principle VII | a catalogue and request-builder scan |
 | No app surface, cached copy, or manifest in a release artefact | FR-019b | a release-artefact scan in the idiom of `scripts/check-budgets.py`; **necessary because signature verification cannot enforce this** — a pre-cached surface would carry a valid signature and satisfy FR-019a, which is why FR-019b exists separately |
 | Post-install, offline, every app presents FR-020's stated offline state rather than content | FR-019b, FR-020 | install, assert the surface cache is absent or empty before any network activity, then launch offline |
-| No workspace crate but the platform-FFI one lifts `unsafe_code = "forbid"` | **[design]** — nothing in the constitution or the spec forbids `unsafe`; Principle III constrains nightly features, not unsafety | a manifest scan. This is a repository policy decision, and the pull request that makes it should say so |
+| No workspace crate but the platform-FFI one lifts `unsafe_code = "forbid"` | **[design]** — nothing in the constitution or the spec forbids `unsafe`; Principle III constrains nightly features, not unsafety | a manifest scan. The policy itself is already on `main` and does not need deciding again: the workspace root sets `unsafe_code = "forbid"` under `[workspace.lints.rust]`, and all three crates repeat `#![forbid(unsafe_code)]` in their own source. What does not exist is the check that no crate lifts it, and the carve-out the platform-FFI crate will need — the pull request that writes that carve-out is the one that should say so |
 | The two `Engine` implementations mean the same thing | **[gap]** — FR-044 requires the headless implementation kept working, not that both implementations agree | a conformance battery both implementations run |
 | Filter-list conversion drops no more rules than the committed baseline, per failure reason | FR-008, ADR-0001 risk 5 | runs on any platform, so it does not wait on the tier-2 runner |
 | Compiled rule lists stay under the 150,000 **emitted JSON rule** ceiling, per list, and every partition carries the full exception set | FR-008 | the ceiling is checked on the emitted artefact, not on source rules; a size-based split silently disables exception rules and the sites that breaks are the bank and government sites the spec names as abandonment triggers |
@@ -914,8 +980,8 @@ scenarios short.
 ## B14. FR-015a — the site-credential autofill test
 
 **Requirement**: FR-015a. This is a **release blocker per tier**, not a
-deferrable question, and it is worth pulling out of the list because its shape is
-unusual.
+deferrable question, and it is worth pulling out of the list because its shape
+is unusual.
 
 **Platform**: [tier 1] and [tier 2], each at its floor.
 
@@ -925,8 +991,8 @@ unusual.
 presence or absence — is committed to this repository and owned by the founder.
 A tier MUST NOT be released until its result is committed. FR-041 forbids the
 distribution page asserting either presence or absence until the result exists,
-so an untaken test leaves the member without the statement FR-041 requires before
-installing.
+so an untaken test leaves the member without the statement FR-041 requires
+before installing.
 
 Where autofill is absent, the behaviour to test is: the limitation stated
 **before** installation, and an offer to open the site in the hand-off browser
@@ -959,12 +1025,12 @@ evidence that the reference machine passes.
 
 **Procurement is on the critical path for validation, not only for the gates.**
 SC-002, SC-004, SC-005 and SC-006 all wait on it; so does the chrome decision,
-because S4's candidates are discriminated by SC-006 on the tier-1 runner; so does
-the SC-005 idle floor, whose answer may be a specification amendment. Buy a cold
-spare of identical configuration per tier and write the swap procedure down: the
-budget file records a durable machine identifier, so swapping in a different
-machine changes that identifier and, honestly applied, restarts every baseline
-series on that tier.
+because S4's candidates are discriminated by SC-006 on the tier-1 runner; so
+does the SC-005 idle floor, whose answer may be a specification amendment. Buy a
+cold spare of identical configuration per tier and write the swap procedure
+down: the budget file records a durable machine identifier, so swapping in a
+different machine changes that identifier and, honestly applied, restarts every
+baseline series on that tier.
 
 One configuration note that belongs to whoever wires the runners up: the
 hardware-dependent jobs need self-hosted runners, and this repository is public.
@@ -978,75 +1044,75 @@ stays on hosted runners.
 Each of these is something a scenario above needs and no requirement supplies.
 None is smuggled in as though it were required. Each names what would settle it.
 
-1. **"An interactive window appears" is undefined.** SC-002 states the figure and
-   never defines the endpoint; no definition was located in the specification, the
-   constitution or ADR-0001. An undefined endpoint cannot be reproduced by a third
-   party, so SC-013 fails on SC-002 however carefully the milliseconds are
-   measured. *Settled by*: a founder reading recorded in the specification. One
-   candidate worth costing: bind it to SC-006's instrument — the first presented
-   frame at which an injected address-field keystroke is accepted and produces a
-   visible response — so the two criteria share one definition and cannot drift
-   apart.
+1. **"An interactive window appears" is undefined.** SC-002 states the figure
+   and
+never defines the endpoint; no definition was located in the specification, the
+constitution or ADR-0001. An undefined endpoint cannot be reproduced by a third
+party, so SC-013 fails on SC-002 however carefully the milliseconds are
+measured. *Settled by*: a founder reading recorded in the specification. One
+candidate worth costing: bind it to SC-006's instrument — the first presented
+frame at which an injected address-field keystroke is accepted and produces a
+visible response — so the two criteria share one definition and cannot drift
+apart.
 2. **SC-013's reproduction band is the per-entry tolerance, which the preamble
-   requires to be justified by run-to-run variation on one machine.** SC-013
-   applies it across machines of a reference *class*. These are different
-   quantities and the second is normally larger. *Settled by*: measuring the same
-   commit on two or three further machines of each reference class and comparing
-   the spread against the declared tolerances. If the spread is larger, one of the
-   two rules needs an amendment — and it cannot be fixed by widening the
-   tolerance, which would breach the preamble's own justification rule and its 5%
-   cap.
+requires to be justified by run-to-run variation on one machine.** SC-013
+applies it across machines of a reference *class*. These are different
+quantities and the second is normally larger. *Settled by*: measuring the same
+commit on two or three further machines of each reference class and comparing
+the spread against the declared tolerances. If the spread is larger, one of the
+two rules needs an amendment — and it cannot be fixed by widening the tolerance,
+which would breach the preamble's own justification rule and its 5% cap.
 3. **SC-014's "every URL-bearing payload" versus FR-007a's history-bearing
-   scope.** A conforming build emits the FR-014 update check in SC-014's scripted
-   session; it bears a URL and carries none of the four things FR-007a governs.
-   *Settled by*: a founder decision landing as a spec amendment — either restating
-   SC-014's criterion in terms of history-bearing payloads, or adding a committed
-   closed list of permitted non-history destinations the analysis reads. Not an
-   implementer's call: it changes what the criterion means. Suppressing the update
-   check during the capture is not available, because it makes the capture a
-   measurement of a build nobody ships.
+scope.** A conforming build emits the FR-014 update check in SC-014's scripted
+session; it bears a URL and carries none of the four things FR-007a governs.
+*Settled by*: a founder decision landing as a spec amendment — either restating
+SC-014's criterion in terms of history-bearing payloads, or adding a committed
+closed list of permitted non-history destinations the analysis reads. Not an
+implementer's call: it changes what the criterion means. Suppressing the update
+check during the capture is not available, because it makes the capture a
+measurement of a build nobody ships.
 4. **WCAG 2.1 AA has no stated mapping for non-web software.** FR-034 applies it
-   to every shell surface; several of its success criteria have no coherent
-   reading for a tab strip, and a reviewer with no written mapping will either
-   wave them through or block arbitrarily. *Settled by*: a written interpretation
-   committed to this repository before B6 has a pass condition. Note that FR-041's
-   distribution page is a web page, so plain WCAG 2.1 AA applies there and the two
-   tests are different tests.
+to every shell surface; several of its success criteria have no coherent reading
+for a tab strip, and a reviewer with no written mapping will either wave them
+through or block arbitrarily. *Settled by*: a written interpretation committed
+to this repository before B6 has a pass condition. Note that FR-041's
+distribution page is a web page, so plain WCAG 2.1 AA applies there and the two
+tests are different tests.
 5. **Nothing requires the two `Engine` implementations to mean the same thing.**
-   FR-044 requires the headless implementation kept working; the current tests
-   exercise the headless engine alone. As it stands the second implementation
-   proves the seam *compiles* twice, not that it *means* the same thing twice.
-   *Settled by*: a conformance battery both implementations run, which is a plan
-   decision costed under FR-043, not a requirement.
+FR-044 requires the headless implementation kept working; the current tests
+exercise the headless engine alone. As it stands the second implementation
+proves the seam *compiles* twice, not that it *means* the same thing twice.
+*Settled by*: a conformance battery both implementations run, which is a plan
+decision costed under FR-043, not a requirement.
 6. **The ten pages of the SC-004 corpus are not named.** SC-004 states the count
-   and the boundary; nothing names the pages, and SC-013's reproducibility needs
-   them pinned and content-addressed. *Settled by*: a recorded founder decision
-   naming them — the cohort's daily surfaces rather than a synthetic benchmark,
-   archived on a recorded date, including at least one first-party app surface,
-   since FR-016/FR-019 apps render inside the shell and their memory is Evreos's
-   memory under SC-004's boundary.
+and the boundary; nothing names the pages, and SC-013's reproducibility needs
+them pinned and content-addressed. *Settled by*: a recorded founder decision
+naming them — the cohort's daily surfaces rather than a synthetic benchmark,
+archived on a recorded date, including at least one first-party app surface,
+since FR-016/FR-019 apps render inside the shell and their memory is Evreos's
+memory under SC-004's boundary.
 7. **The local profile for SC-006's address-field entry is not fixed.** FR-003
-   combines search, history and bookmarks, so keystroke response is a function of
-   local data volume, and neither SC-006's stated conditions nor `budgets.toml`
-   names one. *Settled by*: a generated profile of published size and shape,
-   recorded as that entry's measurement condition, with a larger corpus run as a
-   non-blocking scaling check. A live member-shaped profile is not available: it
-   would contain browsing history, which FR-007a governs and which cannot be
-   published under SC-013.
+combines search, history and bookmarks, so keystroke response is a function of
+local data volume, and neither SC-006's stated conditions nor `budgets.toml`
+names one. *Settled by*: a generated profile of published size and shape,
+recorded as that entry's measurement condition, with a larger corpus run as a
+non-blocking scaling check. A live member-shaped profile is not available: it
+would contain browsing history, which FR-007a governs and which cannot be
+published under SC-013.
 8. **SC-002's cold-start condition does not fix the machine's own cache state.**
-   Every clause of "no cached profile state on the machine" is about Evreos's
-   state; none is about the operating system's file cache, prefetch database or
-   standby list — and start-up time is exactly the quantity that difference moves,
-   plausibly by more than the ≤5% tolerance. *Settled by*: paired cold-start
-   trials, rebooted versus not, on one commit; the answer decides whether the
-   entry's condition must mandate a reboot for SC-013 to hold.
+Every clause of "no cached profile state on the machine" is about Evreos's
+state; none is about the operating system's file cache, prefetch database or
+standby list — and start-up time is exactly the quantity that difference moves,
+plausibly by more than the ≤5% tolerance. *Settled by*: paired cold-start
+trials, rebooted versus not, on one commit; the answer decides whether the
+entry's condition must mandate a reboot for SC-013 to hold.
 9. **The budget file schema has no unit field.** SC-002 and SC-006 are
-   milliseconds and SC-005 is a percentage plus two processor-time bounds, against
-   a `figure_mb`/`baseline_mb` schema. The preamble requires each entry to carry
-   its figure and its measurement condition and names no unit. *Settled by*: a
-   schema change landed with the fourteen missing entries, before any measurement
-   lands — encoding milliseconds in a field named `_mb` makes the tolerance
-   arithmetic silently wrong across units.
+milliseconds and SC-005 is a percentage plus two processor-time bounds, against
+a `figure_mb`/`baseline_mb` schema. The preamble requires each entry to carry
+its figure and its measurement condition and names no unit. *Settled by*: a
+schema change landed with the fourteen missing entries, before any measurement
+lands — encoding milliseconds in a field named `_mb` makes the tolerance
+arithmetic silently wrong across units.
 10. **The diagnostic signal cannot be validated at all until a relay contract
     exists.** FR-039b: "Where no operator is named or no such contract is in
     force, the diagnostic signal MUST NOT be offered and no report may be
@@ -1062,11 +1128,11 @@ None is smuggled in as though it were required. Each names what would settle it.
 ## What this document is not
 
 It is not a tutorial, and it carries no implementation. It is also not a list of
-things that will pass. Several scenarios above are written so that they can fail,
-and two of them — SC-005's idle floor against a ratified tighten-only figure, and
-FR-006's permission prompts at the tier-2 floor, where the platform's public
-geolocation permission delegate is annotated far above macOS 13 and no
-notification delegate is declared at all — have outcomes whose remedy is an
-amendment to the specification rather than a change to the code. Learning that
-early costs an afternoon on a runner. Learning it after the harness is built
-costs the harness's assumptions too.
+things that will pass. Several scenarios above are written so that they can
+fail, and two of them — SC-005's idle floor against a ratified tighten-only
+figure, and FR-006's permission prompts at the tier-2 floor, where the
+platform's public geolocation permission delegate is annotated far above macOS
+13 and no notification delegate is declared at all — have outcomes whose remedy
+is an amendment to the specification rather than a change to the code. Learning
+that early costs an afternoon on a runner. Learning it after the harness is
+built costs the harness's assumptions too.
