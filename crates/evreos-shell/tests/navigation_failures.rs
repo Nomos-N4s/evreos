@@ -50,7 +50,11 @@ fn each_of_the_four_causes_is_distinguishable() {
     for (address, error) in cases {
         let mut engine = engine_failing_with(address, error.clone());
         let result = engine.load(&Request::new(address));
-        assert_eq!(result, Err(error.clone()), "{address} did not fail as scripted");
+        assert_eq!(
+            result,
+            Err(error.clone()),
+            "{address} did not fail as scripted"
+        );
 
         let described = result.unwrap_err().to_string();
         assert!(
@@ -65,7 +69,11 @@ fn each_of_the_four_causes_is_distinguishable() {
     let mut distinct = seen.clone();
     distinct.sort();
     distinct.dedup();
-    assert_eq!(distinct.len(), 4, "two causes produced the same message: {seen:?}");
+    assert_eq!(
+        distinct.len(),
+        4,
+        "two causes produced the same message: {seen:?}"
+    );
 }
 
 #[test]
@@ -79,7 +87,11 @@ fn a_failed_load_is_never_a_successful_empty_page() {
         },
     );
 
-    assert!(engine.load(&Request::new("https://unresolvable.invalid/")).is_err());
+    assert!(
+        engine
+            .load(&Request::new("https://unresolvable.invalid/"))
+            .is_err()
+    );
     assert!(
         engine.current().is_none(),
         "a failed load must not become the current page"
@@ -97,7 +109,9 @@ fn a_failure_does_not_replace_the_page_the_member_was_on() {
             },
         );
 
-    engine.load(&Request::new("https://good.invalid/")).expect("scripted page");
+    engine
+        .load(&Request::new("https://good.invalid/"))
+        .expect("scripted page");
     assert_eq!(engine.current().map(|p| p.title()), Some("Good"));
 
     assert!(engine.load(&Request::new("https://bad.invalid/")).is_err());
@@ -123,7 +137,9 @@ fn the_shell_sees_the_address_that_loaded_not_the_one_requested() {
     // An address bar that shows the request while displaying the response is
     // how a browser lies about where the member is.
     let mut engine = HeadlessEngine::new().with_page("https://site.invalid/", "Site");
-    let page = engine.load(&Request::new("https://site.invalid/")).expect("scripted");
+    let page = engine
+        .load(&Request::new("https://site.invalid/"))
+        .expect("scripted");
     assert_eq!(page.address(), "https://site.invalid/");
 }
 
