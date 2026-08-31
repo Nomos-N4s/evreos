@@ -147,5 +147,36 @@ b = budget_file()
 absolute, regression, unmeasured = budgets.run_gates(b, {})
 check("an unmeasured entry is reported, not silently passed", len(unmeasured) == 1)
 
+# --- unmeasured entries ------------------------------------------------------
+# The docstring promises "an unmeasured entry is not a pass". These cover the
+# case where getting it wrong is silently permissive.
+
+b = budget_file()
+absolute, regression, unmeasured = budgets.run_gates(b, {})
+check("a non-hardware entry with no measurement is marked BLOCKING",
+      unmeasured == [("SC-001 download size (windows)", "BLOCKING")])
+
+b = budget_file(
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    runner={"identity": ""},
+)
+absolute, regression, unmeasured = budgets.run_gates(b, {})
+check("an unmeasured hardware entry with no pinned runner is not blocking",
+      unmeasured and unmeasured[0][1] != "BLOCKING")
+
+b = budget_file(
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    runner={"identity": "pinned-1"},
+)
+absolute, regression, unmeasured = budgets.run_gates(b, {})
+check("an unmeasured hardware entry WITH a pinned runner is blocking",
+      unmeasured and unmeasured[0][1] == "BLOCKING")
+
+b = budget_file()
+absolute, regression, unmeasured = budgets.run_gates(
+    b, {("SC-001", "download size"): 1.0}
+)
+check("a measured entry is not reported unmeasured", unmeasured == [])
+
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

@@ -162,7 +162,18 @@ def run_gates(budgets, measurements):
         label = entry_label(entry)
         measured = measurements.get((entry["criterion"], entry["name"]))
         if measured is None:
-            unmeasured.append(label)
+            # An unmeasured entry is not a pass. The one honest exception is a
+            # hardware-dependent entry whose tier has no pinned runner: there is
+            # no machine to measure it on, which the budget-file gate already
+            # reports. Anything else unmeasured means a measurement that should
+            # exist does not, and a gate that passes it is a gate that certifies
+            # a number nobody produced.
+            hardware = entry["criterion"] in HARDWARE_DEPENDENT
+            tier = tier_of.get(entry["platform"])
+            if hardware and not pinned.get(tier, False):
+                unmeasured.append((label, "no pinned runner for this tier"))
+            else:
+                unmeasured.append((label, "BLOCKING"))
             continue
 
         figure = entry["figure_mb"]
@@ -196,6 +207,12 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--budgets", default=str(REPO / "budgets.toml"))
     parser.add_argument(
+        "--allow-unmeasured",
+        action="store_true",
+        help="do not fail on an entry whose measurement does not exist yet; for "
+        "use before the harness that produces it is built",
+    )
+    parser.add_argument(
         "--allow-unpinned-runners",
         action="store_true",
         help="do not fail the budget-file gate on a runner with no identity; "
@@ -226,10 +243,26 @@ def main():
         for message in gate.blocking:
             print(f"  FAIL     [{gate.name}] {message}", file=sys.stderr)
 
+    blocking_unmeasured = [label for label, why in unmeasured if why == "BLOCKING"]
     if unmeasured:
         print(f"  unmeasured on this machine: {len(unmeasured)} entries")
-        for label in unmeasured:
-            print(f"    - {label}")
+        for label, why in unmeasured:
+            if why != "BLOCKING":
+                note = f"  ({why})"
+            elif args.allow_unmeasured:
+                note = "  (deferred by --allow-unmeasured)"
+            else:
+                note = "  (no measurement produced)"
+            print(f"    - {label}{note}")
+
+    if blocking_unmeasured and not args.allow_unmeasured:
+        for label in blocking_unmeasured:
+            print(
+                f"  FAIL     [budget file] {label}: no measurement was produced; "
+                "an unmeasured entry is not a pass",
+                file=sys.stderr,
+            )
+        file_gate.blocking.extend(blocking_unmeasured)
 
     if download is not None:
         print(f"  measured: download size {download:.3f} MB")
