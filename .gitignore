@@ -9,3 +9,6 @@ __pycache__/
 # OS cruft
 .DS_Store
 Thumbs.db
+
+# Rust build output
+/target

@@ -1,0 +1,13 @@
+[package]
+name = "evreos-engine-headless"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+evreos-engine = { path = "../evreos-engine" }
+
+[lints]
+workspace = true
