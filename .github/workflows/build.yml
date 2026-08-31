@@ -1,0 +1,61 @@
+name: Build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build, test and budgets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        # Principle III: stable Rust, no nightly features on the release path.
+        # The toolchain is named here rather than left to the runner image so a
+        # runner update cannot silently change what the release path builds on.
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy,rustfmt
+          rustup default stable
+          rustc --version
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      - name: Lint
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Test
+        run: cargo test --all
+
+      - name: The budget gate's own tests
+        run: python3 scripts/test_check_budgets.py
+
+      - name: Build the release artefact
+        # SC-001 counts the bytes Evreos ships, so the figure the budget gate
+        # reads has to come from a release build, not a debug one.
+        run: cargo build --release
+
+      - name: Budgets, full report
+        # Every gate, including the budget-file gate's requirement that each
+        # tier's runner carry a durable identity. Informational until the
+        # reference machines Q-E9a names are procured.
+        continue-on-error: true
+        run: python3 scripts/check-budgets.py
+
+      - name: Budgets, blocking
+        # Everything except the unpinned-runner condition blocks from M0: a
+        # missing entry, a baseline above its stated figure, a tolerance above
+        # the cap, an absolute breach on a non-hardware entry, and any
+        # regression beyond an entry's declared tolerance.
+        #
+        # The deferred condition is stated rather than hidden. Removing this
+        # flag is a release prerequisite, not a preference: it is what bounds
+        # the advisory period on the hardware-dependent absolute gates, and it
+        # is satisfied by procuring and pinning the two machines Q-E9a names.
+        run: python3 scripts/check-budgets.py --allow-unpinned-runners
