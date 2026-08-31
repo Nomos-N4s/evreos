@@ -91,7 +91,10 @@ impl fmt::Display for LoadError {
                 write!(f, "{address} could not be found")
             }
             Self::Certificate { address, detail } => {
-                write!(f, "the identity of {address} could not be verified: {detail}")
+                write!(
+                    f,
+                    "the identity of {address} could not be verified: {detail}"
+                )
             }
             Self::Intercepted { address } => {
                 write!(f, "something answered in place of {address}")
