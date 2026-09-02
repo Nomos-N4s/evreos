@@ -105,6 +105,8 @@ FOUNDER_EMAIL = "capintobe@gmail.com"
 # opposite now cite.
 FOUNDER_AUTHORS = {REQUIRED_AUTHOR, f"Carlos Pinto <{FOUNDER_EMAIL}>"}
 # A forge is the committer of the merge commits it creates. That is infrastructure.
+# The founder half is whatever FOUNDER_AUTHORS holds, so decisions/0002 reaches
+# this set too and is cited here for the same reason it is cited there.
 ALLOWED_COMMITTERS = FOUNDER_AUTHORS | {"GitHub <noreply@github.com>"}
 
 # Identities, tested ONLY against a git trailer's value, where "Claude

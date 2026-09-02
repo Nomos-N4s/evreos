@@ -72,4 +72,22 @@ cites this decision rather than describing history as non-compliant.
 
 ## Corrections
 
-None.
+**2026-09-02** — Three claims this record makes about its own surroundings were
+wrong, found by adversarial review of the change that landed it. The decision
+itself is unaffected; all three are about what else the repository said.
+
+- The Question says the constitution's Sync Impact Report, `CLAUDE.md` and
+  `docs/governance/branch-protection.md` each gave the remedy as changing the
+  forge account's display name. Two did. `branch-protection.md` named the
+  display name as an author the rule forbids and proposed nothing, so it is
+  corrected here rather than being an instance of what the sentence describes.
+- The Consequences say three documents recorded the previous position and are
+  corrected in the change that lands this record. There were four. The
+  Constitution Check and the Complexity Tracking row of
+  `specs/001-evreos-v1/plan.md` carried it too and were missed; both are
+  corrected in the same pull request, one commit later.
+- The Serves entry names `FOUNDER_AUTHORS` and `ALLOWED_COMMITTERS` as citing
+  this record. Only the first did. `ALLOWED_COMMITTERS` derives its founder half
+  from `FOUNDER_AUTHORS` and is served by this decision, so the entry is right
+  about what the decision reaches and was wrong only about the citation. The
+  citation is added rather than the claim withdrawn.
