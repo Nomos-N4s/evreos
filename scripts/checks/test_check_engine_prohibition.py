@@ -258,6 +258,16 @@ check("#![cfg(feature = ...)] is a Cargo feature and passes",
       nightly_problems(lambda r: rs(r, '#![cfg(feature = "fixture-brand")]\n')) == [])
 check("#[cfg(feature = \"nightly\")] is a Cargo feature and passes",
       nightly_problems(lambda r: rs(r, '#[cfg(feature = "nightly")]\nfn f() {}\n')) == [])
+# `feature` is a crate-level attribute and exists only in the inner `#![...]`
+# form, so the pattern anchors on `#!`. An OUTER attribute is an attribute
+# macro's argument list, where `feature(...)` is that macro's own vocabulary
+# and means nothing about the toolchain. Dropping the anchor would report
+# these, and the pair below is what says so: same argument list, one form
+# reported and the other not.
+check("feature(...) as an outer attribute macro's argument passes",
+      nightly_problems(lambda r: rs(r, "#[wrapper(feature(A))]\nstruct T;\n")) == [])
+check("the same argument list in the inner form fails",
+      nightly_problems(lambda r: rs(r, "#![wrapper(feature(A))]\nstruct T;\n")))
 check("#![forbid(unsafe_code)] passes", nightly_problems(lambda r: rs(r, "#![forbid(unsafe_code)]\n")) == [])
 check("a commented-out feature attribute passes",
       nightly_problems(lambda r: rs(r, "// #![feature(specialization)] was tried and rejected\n")) == [])
@@ -386,6 +396,30 @@ check("a clean workspace passes the acquisition clause", acquisition_problems(la
 # `.lock` is excluded because it is generated and restates manifests the
 # dependency clause already judges from the resolved graph. Nothing pinned that
 # exclusion, so removing it would have silently widened the clause.
+# The shared-runtime blanking. A line naming the operating system's own web
+# runtime is judged on whatever ELSE it names, and the runtime's own name must
+# not be read as an engine -- `MicrosoftEdgeWebView2RuntimeInstaller_chromium`
+# contains one. No fixture distinguished the blanking from its absence, so the
+# carve-out's mechanism was untested; only its no-op on the fixtures was.
+check("the runtime's own installer name is not an engine acquisition",
+      acquisition_problems(lambda r: rs(
+          r,
+          'download("https://x/MicrosoftEdgeWebView2RuntimeInstaller_chromium_120.zip");\n',
+          "build.rs")) == [])
+check("...while a real engine archive beside it still fails",
+      acquisition_problems(lambda r: rs(
+          r,
+          'download("https://x/MicrosoftEdgeWebView2RuntimeInstaller.exe");\n'
+          'download("https://x/cef_binary_120.tar.bz2");\n',
+          "build.rs")))
+
+# A binary file under a member's src/ is not read. Without the NUL guard its
+# bytes are decoded and an engine name inside them reads as an acquisition.
+check("a binary file is not read by the acquisition clause",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/src/blob.dat",
+          "\x00\x01chromium.zip\x00")) == [])
+
 check("a lockfile is not read by the acquisition clause",
       acquisition_problems(lambda r: write(
           r, "crates/evreos-shell/src/Cargo.lock",
