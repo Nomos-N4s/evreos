@@ -5,10 +5,15 @@ Cases come from three rounds of adversarial review. The must-PASS block matters
 most: this is a browser project, so "cursor", "AI panel" and vendor URLs are
 everyday vocabulary, and rejecting them would be worse than the miss it prevents.
 
+The signature cases generate throwaway keys with ssh-keygen and never touch the
+founder's key. They need ssh-keygen on PATH; without it they FAIL rather than
+skip, because a signature check whose tests cannot run is not a check.
+
 Run: python3 scripts/test_check_commit_hygiene.py
 """
 import importlib.util
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,6 +55,9 @@ MUST_PASS = [
     ("recording a review ran", "docs(x): note the round\n\nRound 2: 3 lenses, 29 agents, 13 refuted.\n\nCloses #11"),
 ]
 
+FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
+               "GIT_COMMITTER_NAME": "xcoder-es", "GIT_COMMITTER_EMAIL": "capintobe@gmail.com"}
+
 
 def check_text(text):
     """True when the message would be rejected."""
@@ -62,11 +70,17 @@ def git(*args, cwd, **kw):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, **kw)
 
 
+def run_check(cwd, *args):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "check-commit-hygiene.py"), *args],
+        cwd=cwd, capture_output=True, text=True,
+    )
+
+
 def end_to_end(failures):
     """Exercise author, committer, exit codes and the hook in a real repo."""
     with tempfile.TemporaryDirectory() as tmp:
-        env_ok = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
-                  "GIT_COMMITTER_NAME": "xcoder-es", "GIT_COMMITTER_EMAIL": "capintobe@gmail.com"}
+        env_ok = FOUNDER_ENV
         git("init", "-q", "-b", "main", cwd=tmp)
         for key, value in env_ok.items():
             git("config", f"user.{key.split('_')[1].lower()}", value, cwd=tmp)
@@ -81,23 +95,17 @@ def end_to_end(failures):
             git("add", "-A", cwd=tmp)
             git("commit", "-q", "-m", msg, cwd=tmp, env=env)
 
-        def run_check(*args):
-            return subprocess.run(
-                [sys.executable, str(ROOT / "check-commit-hygiene.py"), *args],
-                cwd=tmp, capture_output=True, text=True,
-            ).returncode
-
         commit("feat(a): good commit\n\nCloses #2")
-        if run_check("--range", f"{base}..HEAD") != 0:
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: a compliant commit was rejected")
 
         commit("feat(b): wrong author\n\nCloses #3",
                GIT_AUTHOR_NAME="Someone Else", GIT_AUTHOR_EMAIL="x@y.z")
-        if run_check("--range", f"{base}..HEAD") != 1:
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 1:
             failures.append("end-to-end: a wrong-author commit was accepted")
 
         # An unresolvable range exits 2, not a traceback.
-        if run_check("--range", "nope..alsonope") != 2:
+        if run_check(tmp, "--range", "nope..alsonope").returncode != 2:
             failures.append("end-to-end: unresolvable range did not exit 2")
 
         # The hook must ignore git's comment block and -v diff.
@@ -108,15 +116,122 @@ def end_to_end(failures):
             "# ------------------------ >8 ------------------------\n"
             f"diff --git a/x b/x\n+{FOOTER}\n"
         )
-        if run_check("--commit-msg", str(msg)) != 0:
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook flagged git's comment block or diff")
         msg.write_text(f"feat(x): add thing\n\nCloses #1\n\n{TRAILER}\n")
-        if run_check("--commit-msg", str(msg)) != 1:
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 1:
             failures.append("end-to-end: hook accepted a co-author trailer")
         # A merge subject is exempt from the subject and issue rules.
         msg.write_text("Merge branch 'main' into feature\n")
-        if run_check("--commit-msg", str(msg)) != 0:
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook rejected a merge subject")
+
+
+def signatures(failures):
+    """Prove the signature check with throwaway keys. Returns the number of
+    cases, so the summary line counts them even when ssh-keygen is missing."""
+    cases = 0
+
+    def case(label, result, expected_code, expected_text=None):
+        nonlocal cases
+        cases += 1
+        output = result.stdout + result.stderr
+        if result.returncode != expected_code:
+            failures.append(
+                f"signatures: {label}: exit {result.returncode}, expected {expected_code}"
+                f" ({output.strip().splitlines()[-1] if output.strip() else 'no output'})"
+            )
+        elif expected_text and expected_text not in output:
+            failures.append(f"signatures: {label}: output lacks {expected_text!r}")
+
+    if shutil.which("ssh-keygen") is None:
+        cases += 1
+        failures.append("signatures: ssh-keygen is not on PATH, so no signature case could run")
+        return cases
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp), **FOUNDER_ENV}
+        for name in ("founder", "stranger"):
+            subprocess.run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", str(tmp / name)],
+                check=True, capture_output=True, env=env,
+            )
+        founder_key = " ".join((tmp / "founder.pub").read_text().split()[:2])
+
+        allowed = tmp / "allowed-signers"
+        allowed.write_text(f"# the founder's key\ncapintobe@gmail.com {founder_key}\n")
+        not_enabled = tmp / "not-enabled"
+        not_enabled.write_text("# the founder's key goes here\n")
+        other_principal = tmp / "other-principal"
+        other_principal.write_text(f"someone@else.example {founder_key}\n")
+        pasted_pub = tmp / "pasted-pub"
+        pasted_pub.write_text(f"{founder_key} founder\n")
+
+        repo = tmp / "repo"
+        repo.mkdir()
+        git("init", "-q", "-b", "main", cwd=repo)
+        (repo / "a").write_text("1")
+        git("add", "-A", cwd=repo)
+        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=repo, env=env)
+
+        def commit(msg, key=None):
+            (repo / "a").write_text(msg[:8])
+            git("add", "-A", cwd=repo)
+            signing = ["-c", "gpg.format=ssh", "-c", f"user.signingkey={tmp / key}",
+                       "-c", "commit.gpgsign=true"] if key else []
+            result = git(*signing, "commit", "-q", "-m", msg, cwd=repo, env=env)
+            if result.returncode:
+                raise RuntimeError(f"could not create commit {msg!r}: {result.stderr}")
+
+        def check(*args):
+            return run_check(repo, "--range", "HEAD~1..HEAD", *args)
+
+        commit("feat(a): signed by the founder\n\nCloses #2", key="founder")
+        case("a commit signed by the listed key", check("--allowed-signers-file", str(allowed)),
+             0, "Verified 1 signature(s)")
+        case("the same key under another principal",
+             check("--allowed-signers-file", str(other_principal)), 1, "not the founder's address")
+        case("a file with no key entry skips and says so",
+             check("--allowed-signers-file", str(not_enabled)), 0, "signing is not yet enabled")
+        case("a file that does not exist is an error, not a skip",
+             check("--allowed-signers-file", str(tmp / "missing")), 2, "does not exist")
+        case("a pasted .pub line has no principal and is an error",
+             check("--allowed-signers-file", str(pasted_pub)), 2, "no principal")
+
+        commit("feat(b): unsigned\n\nCloses #3")
+        case("an unsigned commit", check("--allowed-signers-file", str(allowed)), 1, "is not signed")
+        case("an unsigned commit passes when signatures are not asked for", check(), 0)
+        case("an unsigned commit passes while signing is not yet enabled",
+             check("--allowed-signers-file", str(not_enabled)), 0, "signing is not yet enabled")
+
+        commit("feat(c): signed by a key not in the file\n\nCloses #4", key="stranger")
+        case("a commit signed by a key not in the file",
+             check("--allowed-signers-file", str(allowed)), 1, "is not in the allowed-signers file")
+
+        # An OpenPGP signature cannot be checked against an allowed_signers
+        # file, whatever key made it. The object is written by hand so the case
+        # needs no gpg and no keyring; git never has to verify it, because the
+        # checker reads the signature's kind from the object header first.
+        tree = git("rev-parse", "HEAD^{tree}", cwd=repo).stdout.strip()
+        parent = git("rev-parse", "HEAD", cwd=repo).stdout.strip()
+        stamp = "xcoder-es <capintobe@gmail.com> 1700000000 +0000"
+        pgp = git("hash-object", "-t", "commit", "-w", "--stdin", cwd=repo, input=(
+            f"tree {tree}\nparent {parent}\nauthor {stamp}\ncommitter {stamp}\n"
+            "gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n"
+            " -----END PGP SIGNATURE-----\n\nfeat(d): openpgp signed\n\nCloses #5\n"
+        )).stdout.strip()
+        case("an OpenPGP signature",
+             run_check(repo, "--range", f"{parent}..{pgp}", "--allowed-signers-file", str(allowed)),
+             1, "carries an openpgp signature")
+
+        # The hook path never sees a signature and must be unaffected by the flag.
+        msg = tmp / "MSG"
+        msg.write_text("feat(x): add thing\n\nCloses #1\n")
+        case("the hook ignores the flag",
+             run_check(repo, "--commit-msg", str(msg), "--allowed-signers-file", str(allowed)), 0)
+
+    return cases
 
 
 def main():
@@ -139,10 +254,11 @@ def main():
             failures.append(f"issue ref {text!r}: expected {should_match}")
 
     end_to_end(failures)
+    signature_cases = signatures(failures)
 
     for failure in failures:
         print(f"FAIL  {failure}")
-    total = len(MUST_FAIL) + len(MUST_PASS) + 5 + 6
+    total = len(MUST_FAIL) + len(MUST_PASS) + 5 + 6 + signature_cases
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0
 

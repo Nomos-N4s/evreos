@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Check commit authorship and block automated AI-attribution artifacts.
+"""Check commit authorship and signatures, and block automated AI-attribution
+artifacts.
 
 WHAT THIS CHECKS, and why the scope is narrow.
 
@@ -26,6 +27,29 @@ the known defects below):
   * a git trailer in the trailing trailer block whose value names an AI identity
   * a literal generator footer, matched even inside code fences
   * Conventional Commits subject, and an issue reference
+  * with --allowed-signers-file: every commit in the range carries an SSH
+    signature that verifies against a key in that file, under the founder's
+    address as principal
+
+SIGNATURES. Principle I requires every commit to be signed. The trust root is
+an OpenSSH allowed_signers file, `.github/allowed-signers` in this repository,
+and verification is git's own (`gpg.ssh.allowedSignersFile`, which runs
+`ssh-keygen -Y`). Three properties of the check are deliberate:
+
+  * A file with no key entry means signing is not yet enabled. The check says
+    so and skips, rather than failing every commit, so the mechanism can land
+    before the founder adds a key without breaking every pull request. A file
+    that does not exist, by contrast, is an error: a typo in the flag must not
+    silently turn enforcement off.
+  * The CI workflow hands this script the copy of the file on the BASE branch,
+    not the one in the pull request. A pull request that could add its own key
+    would authorise its own signatures. A key therefore takes effect one merge
+    after it lands, and the pull request that adds the first key is checked
+    against no key at all — the not-yet-enabled case above.
+  * The check sees `origin/<base>..HEAD`, which never contains the merge commit
+    the forge creates when the pull request lands; that commit does not exist
+    yet. So this gates the branch, and only branch protection gates `main`.
+    The required settings are recorded in docs/governance/branch-protection.md.
 
 KNOWN DEFECTS, both tracked as issue #25. Note #26 tracks the inverse of the
 second one: a co-authorship trailer naming a human currently passes.
@@ -46,19 +70,25 @@ so the canonical Co-Authored-By and Reviewed-By spellings are invisible to this
 rule; such a trailer is caught only if its own text hits the footer list.
 """
 import argparse
+import os
 import re
+import shutil
 import subprocess
 import sys
 import unicodedata
 
 # The canonical founder identity, named in error messages and in CLAUDE.md.
 REQUIRED_AUTHOR = "xcoder-es <capintobe@gmail.com>"
+# The address alone identifies the founder; it is also the principal every
+# entry in the allowed-signers file carries, which ties a signing key to the
+# same identity the author check requires.
+FOUNDER_EMAIL = "capintobe@gmail.com"
 # The founder writes under two display names on one address. The address is what
 # identifies them; the display name is presentation, and a forge stamps whichever
 # one the account carries onto the merge commits it creates. Both are the founder,
 # recorded as a founder decision on 2026-08-30. This is not a widening: an author
 # at any other address still fails, which is the property Principle I needs.
-FOUNDER_AUTHORS = {REQUIRED_AUTHOR, "Carlos Pinto <capintobe@gmail.com>"}
+FOUNDER_AUTHORS = {REQUIRED_AUTHOR, f"Carlos Pinto <{FOUNDER_EMAIL}>"}
 # A forge is the committer of the merge commits it creates. That is infrastructure.
 ALLOWED_COMMITTERS = FOUNDER_AUTHORS | {"GitHub <noreply@github.com>"}
 
@@ -97,6 +127,31 @@ ISSUE_REF = re.compile(
 GENERATED_SUBJECT = re.compile(r"^(Merge |Revert \"|fixup! |squash! )")
 
 CODE_SPAN_OR_BLOCK = re.compile(r"```.*?```|`[^`\n]*`", re.DOTALL)
+
+# The armour git wraps each signature format in, inside the commit object's
+# gpgsig header. Read from the object rather than inferred from verification
+# output, because only an SSH signature can be checked against the file at all.
+SIGNATURE_ARMOUR = {
+    "-----BEGIN SSH SIGNATURE-----": "ssh",
+    "-----BEGIN PGP SIGNATURE-----": "openpgp",
+    "-----BEGIN SIGNED MESSAGE-----": "x509",
+}
+# A public key type, which begins an OpenSSH public-key line but must NOT begin
+# an allowed_signers entry: the entry starts with the principal. Pasting a
+# .pub line unchanged is the likely mistake, and it would make every signature
+# fail with a message about a missing principal rather than about the file.
+KEY_TYPE_PREFIX = ("ssh-", "ecdsa-sha2-", "sk-")
+# What git's %G? reports when a signature does not verify, in words. Only "G"
+# passes; every other value is a failure and gets its reason from here.
+SIGNATURE_STATUS = {
+    "U": "the signing key is not in the allowed-signers file",
+    "B": "the signature is bad: the commit was altered after signing",
+    "E": "the signature cannot be checked",
+    "X": "the signature has expired",
+    "Y": "the signing key has expired",
+    "R": "the signing key has been revoked",
+    "N": "the commit is not signed",
+}
 
 
 def normalise(text):
@@ -152,7 +207,76 @@ def check_message(message, where, problems):
         )
 
 
-def check_commit(sha, problems):
+def allowed_signer_entries(path):
+    """The key entries in an allowed_signers file: every line that is neither
+    blank nor a comment. Raises ValueError for an entry with no principal."""
+    entries = []
+    with open(path, encoding="utf-8") as handle:
+        for number, line in enumerate(handle, 1):
+            entry = line.strip()
+            if not entry or entry.startswith("#"):
+                continue
+            if entry.startswith(KEY_TYPE_PREFIX):
+                raise ValueError(
+                    f"{path}:{number}: entry starts with a key type and so has no "
+                    f"principal; the format is '{FOUNDER_EMAIL} ssh-ed25519 AAAA...'"
+                )
+            entries.append(entry)
+    return entries
+
+
+def signature_kind(sha):
+    """'ssh', 'openpgp', 'x509', 'unknown', or None when the commit is unsigned.
+    Read from the commit object's header, before the first blank line, so a
+    message quoting a signature block cannot be mistaken for one."""
+    header = run("cat-file", "commit", sha).split("\n\n", 1)[0]
+    for armour, kind in SIGNATURE_ARMOUR.items():
+        if armour in header:
+            return kind
+    if header.startswith("gpgsig ") or "\ngpgsig " in header:
+        return "unknown"
+    return None
+
+
+def check_signature(sha, where, allowed_signers, problems):
+    """Fail unless the commit carries an SSH signature that git verifies against
+    `allowed_signers` under the founder's address as principal."""
+    listed = f"the keys in {os.path.basename(allowed_signers)}"
+    kind = signature_kind(sha)
+    if kind is None:
+        problems.append(
+            f"{where}: is not signed; Principle I requires a signature by one of {listed}"
+        )
+        return
+    if kind != "ssh":
+        problems.append(
+            f"{where}: carries an {kind} signature, which cannot be verified against "
+            f"{listed}; sign with the SSH key listed there"
+        )
+        return
+    # The verifier is named here so a global git configuration on the machine
+    # running the check cannot substitute another program for it; it is the
+    # ssh-keygen main() confirmed is on PATH.
+    status, principal, fingerprint = run(
+        "-c", f"gpg.ssh.allowedSignersFile={allowed_signers}",
+        "-c", "gpg.ssh.program=ssh-keygen",
+        "log", "-1", "--format=%G?%x00%GS%x00%GF", sha,
+    ).rstrip("\n").split("\0")
+    if status != "G":
+        reason = SIGNATURE_STATUS.get(status, f"git reports signature status {status!r}")
+        problems.append(
+            f"{where}: signature by key {fingerprint or '(unknown)'} does not verify "
+            f"against {listed}: {reason}"
+        )
+        return
+    if principal != FOUNDER_EMAIL:
+        problems.append(
+            f"{where}: signature verifies for principal {principal!r}, "
+            f"not the founder's address {FOUNDER_EMAIL!r}"
+        )
+
+
+def check_commit(sha, problems, allowed_signers=None):
     author = run("log", "-1", "--format=%an <%ae>", sha).strip()
     committer = run("log", "-1", "--format=%cn <%ce>", sha).strip()
     message = run("log", "-1", "--format=%B", sha)
@@ -164,6 +288,8 @@ def check_commit(sha, problems):
     if committer not in ALLOWED_COMMITTERS:
         problems.append(f"{where}: committer is {committer!r}, must be {REQUIRED_AUTHOR!r}")
     check_message(message, where, problems)
+    if allowed_signers:
+        check_signature(sha, where, allowed_signers, problems)
 
 
 def main():
@@ -172,9 +298,40 @@ def main():
     parser.add_argument("--pr-body", help="file holding the pull request body")
     parser.add_argument("--pr-title", help="file holding the pull request title")
     parser.add_argument("--commit-msg", help="file holding a commit message, for the hook")
+    parser.add_argument(
+        "--allowed-signers-file",
+        help="OpenSSH allowed_signers file every commit in --range must verify "
+        "against; a file with no key entry means signing is not yet enabled",
+    )
     args = parser.parse_args()
 
     problems = []
+
+    allowed_signers = None
+    if args.allowed_signers_file:
+        allowed_signers = os.path.abspath(args.allowed_signers_file)
+        if not os.path.isfile(allowed_signers):
+            print(f"Allowed-signers file {allowed_signers!r} does not exist.", file=sys.stderr)
+            return 2
+        try:
+            entries = allowed_signer_entries(allowed_signers)
+        except ValueError as error:
+            print(f"Malformed allowed-signers file: {error}", file=sys.stderr)
+            return 2
+        if not entries:
+            print(
+                f"Signature check skipped: {args.allowed_signers_file} lists no key, so "
+                "signing is not yet enabled. It is enabled by listing the founder's "
+                "public key in .github/allowed-signers."
+            )
+            allowed_signers = None
+        elif shutil.which("ssh-keygen") is None:
+            print(
+                "Cannot verify signatures: ssh-keygen is not on PATH, and git needs it "
+                "to check an SSH signature.",
+                file=sys.stderr,
+            )
+            return 2
 
     if args.range:
         try:
@@ -189,7 +346,13 @@ def main():
         if not shas:
             print(f"No commits in {args.range}; nothing to check.")
         for sha in shas:
-            check_commit(sha, problems)
+            check_commit(sha, problems, allowed_signers)
+        if shas and allowed_signers:
+            print(
+                f"Verified {len(shas)} signature(s) against {args.allowed_signers_file}."
+                if not problems else
+                f"Checked {len(shas)} signature(s) against {args.allowed_signers_file}."
+            )
 
     for path, label in ((args.pr_body, "pull request body"), (args.pr_title, "pull request title")):
         if path:
