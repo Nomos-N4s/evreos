@@ -1,0 +1,79 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    # The job name is what a required-status-check setting on main refers to.
+    # Renaming it would un-require every check in scripts/checks/ at once, and
+    # silently, so it changes only together with that setting.
+    name: Repository checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        # A check that reads `cargo metadata` reasons over the graph Cargo
+        # resolves, so the toolchain is named here for the reason build.yml
+        # names it: a runner image update must not silently change what a
+        # check reads. Minimal profile, because no check compiles anything.
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
+
+      - name: Every check has its tests
+        # One check_<name>.py beside one test_check_<name>.py, the convention
+        # scripts/checks/README.md states. A check with no tests is a gate
+        # whose own behaviour nobody has proved, so the pair is enforced here
+        # rather than asked for in review. The rule is one-way: a test file
+        # with no check is not an error.
+        run: |
+          shopt -s nullglob
+          missing=0
+          for check in scripts/checks/check_*.py; do
+            expected="scripts/checks/test_$(basename "$check")"
+            if [ ! -f "$expected" ]; then
+              echo "MISSING  $expected, the tests for $check" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Every check's own tests
+        # Every file runs to completion even after one fails, so one red file
+        # does not hide another; the step fails at the end. With no check
+        # landed yet the glob is empty and the step passes, which is what lets
+        # this harness land before its first check.
+        run: |
+          shopt -s nullglob
+          files=(scripts/checks/test_*.py)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No tests under scripts/checks/ yet."
+          fi
+          failed=0
+          for file in "${files[@]}"; do
+            echo "== $file"
+            python3 "$file" || { echo "FAILED  $file" >&2; failed=1; }
+          done
+          exit "$failed"
+
+      - name: Every check
+        # Reached only if every test above passed: a check whose tests fail
+        # has no verdict worth reading. Otherwise the same shape as the step
+        # above, for the same reasons.
+        run: |
+          shopt -s nullglob
+          files=(scripts/checks/check_*.py)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No checks under scripts/checks/ yet."
+          fi
+          failed=0
+          for file in "${files[@]}"; do
+            echo "== $file"
+            python3 "$file" || { echo "FAILED  $file" >&2; failed=1; }
+          done
+          exit "$failed"
