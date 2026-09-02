@@ -373,6 +373,33 @@ check("...with the failure on stderr", "Crate policy check FAILED" in result.std
 check("...naming the manifest", "crates/a/Cargo.toml" in result.stderr)
 
 
+# A workspace whose ROOT is itself a package. Cargo makes it a member, and the
+# clause that adds it was unpinned: dropping it let a non-compliant root crate
+# through while the suite stayed green.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/a"]\nresolver = "2"\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n'
+        '[package]\nname = "rootcrate"\nversion = "0.0.0"\nedition = "2021"\n'
+        "[lints]\nworkspace = true\n"
+    )
+    (root / "src").mkdir()
+    (root / "src" / "lib.rs").write_text("pub fn root() {}\n")
+    directory = root / "crates" / "a"
+    (directory / "src").mkdir(parents=True)
+    (directory / "Cargo.toml").write_text(
+        '[package]\nname = "a"\nversion = "0.0.0"\nedition = "2021"\n'
+        "[lints]\nworkspace = true\n"
+    )
+    (directory / "src" / "lib.rs").write_text("#![forbid(unsafe_code)]\n")
+    allowlist = root / "allow.txt"
+    allowlist.write_text("")
+    found, crates, _ = policy.check_workspace(root, allowlist)
+    check("a root package is a member", crates == 2)
+    check("...and its missing forbid is reported",
+          any("src/lib.rs: omits" in problem for problem in found))
+
 # --- a crate reached only through [workspace.dependencies] ------------------
 # `cargo metadata` reports it in workspace_members and `cargo build -p` builds
 # it, so it is a member and is bound by all three clauses. It was reached by no
@@ -515,6 +542,10 @@ for label, source, forbids in (
     # FORBID is anchored to the line start. Unanchored it would read an
     # attribute mid-statement, which rustc rejects anyway -- but the anchor is
     # a real behavioural choice and nothing pinned it.
+    # `#[forbid(...)]` is an OUTER attribute: it binds the next item only, not
+    # the crate. Accepting it would let a crate root carrying nothing else pass.
+    ("an outer attribute is not the crate forbid",
+     "#[forbid(unsafe_code)]\npub fn f() {}\n", False),
     ("an attribute mid-statement does not count",
      "let x = 1; #![forbid(unsafe_code)]\n", False),
     # The raw-string hash count must match exactly. With `r##"..."##`, a `"#`
