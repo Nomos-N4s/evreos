@@ -293,9 +293,29 @@ class Gate:
         return bool(self.blocking)
 
 
+class Unreadable(Exception):
+    """The budget file cannot be read, so no gate has an input."""
+
+
 def load_budgets(path):
-    with open(path, "rb") as handle:
-        return tomllib.load(handle)
+    """The budget file as a dict. Raises Unreadable rather than a traceback.
+
+    `run_gates` already guards a misread ENTRY on the ground that a verdict over
+    a misread file is a verdict on nothing. That guard sits three hundred lines
+    below this function and cannot help when the file itself does not parse: the
+    traceback replaced the message one level up from where it was fixed.
+    """
+    try:
+        with open(path, "rb") as handle:
+            return tomllib.load(handle)
+    except FileNotFoundError:
+        raise Unreadable(f"{path}: no such file") from None
+    except IsADirectoryError:
+        raise Unreadable(f"{path}: is a directory, not a budget file") from None
+    except UnicodeDecodeError as error:
+        raise Unreadable(f"{path}: not valid UTF-8 ({error.reason})") from None
+    except tomllib.TOMLDecodeError as error:
+        raise Unreadable(f"{path}: {error}") from None
 
 
 def label_of(criterion, name, platform):
@@ -1015,7 +1035,13 @@ def main():
     )
     args = parser.parse_args()
 
-    budgets = load_budgets(args.budgets)
+    try:
+        budgets = load_budgets(args.budgets)
+    except Unreadable as error:
+        # 2, not 1: the check reached no verdict rather than finding a breach.
+        # An unrun gate is not a pass either way, and the workflow fails on both.
+        print(f"Cannot read the budget file: {error}", file=sys.stderr)
+        return 2
 
     if args.refuse_exemptions:
         return refuse_exemptions(budgets)

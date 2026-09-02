@@ -68,9 +68,35 @@ FORBID = re.compile(r"^\s*#!\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
 DEPENDENCY_TABLES = ("dependencies", "dev-dependencies", "build-dependencies")
 
 
+class Unreadable(Exception):
+    """A file this check must read is not decodable as UTF-8."""
+
+
+def read_text(path):
+    """The file's text. Raises Unreadable rather than a decode traceback.
+
+    Every caller already reports a manifest it cannot parse, so a file it
+    cannot decode belongs on the same path: a traceback is not a verdict, and
+    an operator reading the log cannot tell it from the check crashing.
+    """
+    try:
+        return Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise Unreadable(f"not valid UTF-8 ({error.reason})") from None
+
+
 def load_toml(path):
     with open(path, "rb") as handle:
-        return tomllib.load(handle)
+        try:
+            return tomllib.load(handle)
+        except UnicodeDecodeError as error:
+            # tomllib decodes before it parses, so a non-UTF-8 manifest raises
+            # this rather than a TOML error. Callers handle one kind; a
+            # manifest that is unreadable for the other reason is the same
+            # verdict and is reported through the same branch.
+            raise tomllib.TOMLDecodeError(
+                f"not valid UTF-8 ({error.reason})"
+            ) from None
 
 
 def lint_level(table, name):
@@ -290,7 +316,12 @@ def read_allowlist(path, problems):
         )
         return []
     names = []
-    for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+    try:
+        text = read_text(path)
+    except Unreadable as error:
+        problems.append(f"{path.name}: {error}")
+        return []
+    for number, line in enumerate(text.splitlines(), 1):
         entry = line.split("#", 1)[0].strip()
         if not entry:
             continue
@@ -348,7 +379,12 @@ def check_crate(root, crate_dir, allowlist, allowlist_name, problems):
             "check cannot see is one it cannot vouch for"
         )
     for crate_root in roots:
-        if not forbids_unsafe(crate_root.read_text(encoding="utf-8")):
+        try:
+            source = read_text(crate_root)
+        except Unreadable as error:
+            problems.append(f"{relative(root, crate_root)}: {error}, so it is not Rust this check can read")
+            continue
+        if not forbids_unsafe(source):
             problems.append(f"{relative(root, crate_root)}: omits #![forbid(unsafe_code)]")
     return name, False
 

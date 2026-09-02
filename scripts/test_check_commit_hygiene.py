@@ -527,6 +527,24 @@ def end_to_end(failures):
         if run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title)).returncode != 0:
             failed("the pull request title was held to the commit-message rules")
 
+        # CI writes the title and body from webhook data, so those bytes are
+        # outside this repository's control, and a hook hands over the commit
+        # message. None of the three failing to decode is a breach: it is an
+        # input the check could not read, which is exit 2. It was a traceback,
+        # which an operator cannot tell from the check crashing.
+        for flag, name in (("--pr-body", "body"), ("--pr-title", "title"),
+                           ("--commit-msg", "commit message")):
+            undecodable = pathlib.Path(tmp) / f"bad-{name.split()[0]}.txt"
+            undecodable.write_bytes("caf\u00e9\n".encode("latin-1"))
+            arguments = ([flag, str(undecodable)] if flag == "--commit-msg"
+                         else ["--range", f"{base}..HEAD", flag, str(undecodable)])
+            cases += 1
+            result = run_check(tmp, *arguments)
+            if result.returncode != 2:
+                failed(f"an undecodable {name} exited {result.returncode}, expected 2")
+            elif "Traceback" in result.stderr or "not valid UTF-8" not in result.stderr:
+                failed(f"an undecodable {name} did not say why it could not be read")
+
     return cases
 
 

@@ -1494,6 +1494,38 @@ code, out, err = run_main(b, "--allow-unmeasured", "--allow-unpinned-runners", h
 check("...and with it the same file passes, the failure filed as advisory",
       code == 0 and "is not pinned" in out)
 
+# A budget file the script cannot read is exit 2, not a traceback. `run_gates`
+# already guards a misread ENTRY on the ground that a verdict over a misread file
+# is a verdict on nothing; that guard sits far below `load_budgets` and cannot
+# help when the file itself does not parse, so the traceback replaced the message
+# one level up from where it was fixed.
+for label, data in (
+    ("malformed TOML", b"[not toml\n"),
+    # Real undecodable bytes: 0xE9 is a valid latin-1 'e-acute' and an invalid
+    # UTF-8 continuation byte. Encoding with errors="replace" produces plain
+    # ASCII and proves nothing, which is what the first version of this did.
+    ("bytes that are not UTF-8", b'name = "caf\xe9"\n'),
+):
+    with tempfile.NamedTemporaryFile("wb", suffix=".toml", delete=False) as handle:
+        handle.write(data)
+        path = handle.name
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--budgets", path],
+        capture_output=True, text=True,
+    )
+    os.unlink(path)
+    check(f"a budget file of {label} exits 2, no verdict having been reached",
+          result.returncode == 2)
+    check(f"...saying so rather than raising: {label}",
+          "Cannot read the budget file" in result.stderr and "Traceback" not in result.stderr)
+
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--budgets", "/nonexistent/budgets.toml"],
+    capture_output=True, text=True,
+)
+check("a budget file that does not exist exits 2",
+      result.returncode == 2 and "no such file" in result.stderr)
+
 # The unmeasured branch's own undeclared-tier case, which had no test at all:
 # reverting the branch left the whole suite green. An entry on a tier the file
 # does not declare is BLOCKING-unmeasured, where one on a declared-but-unpinned

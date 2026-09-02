@@ -479,6 +479,41 @@ found, _, _ = workspace_at(lambda r: (
 check("a non-boolean workspace lints value is not inheritance",
       any("lifts unsafe_code" in problem for problem in found))
 
+
+# --- files this check cannot decode ------------------------------------------
+# Four reads that died with a traceback rather than reporting anything. A
+# traceback is not a verdict: an operator reading the log cannot tell it from
+# the check crashing, and the guard elsewhere in this file that reports a
+# manifest it cannot PARSE exists for exactly that reason.
+LATIN1 = "caf\u00e9\n".encode("latin-1")
+
+for label, build, fragment in (
+    ("a root manifest that is not UTF-8",
+     lambda r: (r / "Cargo.toml").write_bytes(LATIN1), "not valid UTF-8"),
+    ("a member manifest that is not UTF-8",
+     lambda r: ((r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+                member(r), (r / "crates" / "a" / "Cargo.toml").write_bytes(LATIN1)),
+     "not valid UTF-8"),
+    ("a crate root that is not UTF-8",
+     lambda r: ((r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+                member(r), (r / "crates" / "a" / "src" / "lib.rs").write_bytes(LATIN1)),
+     "not valid UTF-8"),
+):
+    found, _, _ = workspace_at(build)
+    check(f"{label} is reported, not raised", bool(found))
+    check(f"...saying why: {label}",
+          any(fragment in problem for problem in found))
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "Cargo.toml").write_text(WORKSPACE_ROOT)
+    member(root)
+    allowlist = root / "allow.txt"
+    allowlist.write_bytes(LATIN1)
+    found, _, _ = policy.check_workspace(root, allowlist)
+    check("an allowlist that is not UTF-8 is reported, not raised", bool(found))
+    check("...saying why", any("not valid UTF-8" in problem for problem in found))
+
 # --- a crate reached only through [workspace.dependencies] ------------------
 # `cargo metadata` reports it in workspace_members and `cargo build -p` builds
 # it, so it is a member and is bound by all three clauses. It was reached by no

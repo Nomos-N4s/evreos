@@ -297,6 +297,29 @@ def check_message(message, where, problems):
         )
 
 
+class Unreadable(Exception):
+    """A file passed on the command line cannot be decoded."""
+
+
+def read_utf8(path):
+    """The file's text. Raises Unreadable rather than a decode traceback.
+
+    CI writes the pull request title and body to files from webhook data, so
+    the bytes are outside this repository's control; a commit message is a file
+    a hook hands over. None of the three is a breach when it fails to decode --
+    it is an input the check could not read, which is exit 2, not exit 1.
+    """
+    try:
+        with open(path, encoding="utf-8") as handle:
+            return handle.read()
+    except FileNotFoundError:
+        raise Unreadable(f"{path}: no such file") from None
+    except IsADirectoryError:
+        raise Unreadable(f"{path}: is a directory") from None
+    except UnicodeDecodeError as error:
+        raise Unreadable(f"{path}: not valid UTF-8 ({error.reason})") from None
+
+
 def allowed_signer_entries(path):
     """The key entries in an allowed_signers file: every line that is neither
     blank nor a comment. Raises ValueError for an entry with no principal."""
@@ -446,12 +469,19 @@ def main():
 
     for path, label in ((args.pr_body, "pull request body"), (args.pr_title, "pull request title")):
         if path:
-            with open(path, encoding="utf-8") as handle:
-                problems.extend(attribution_problems(handle.read(), label))
+            try:
+                text = read_utf8(path)
+            except Unreadable as error:
+                print(f"Cannot read the {label}: {error}", file=sys.stderr)
+                return 2
+            problems.extend(attribution_problems(text, label))
 
     if args.commit_msg:
-        with open(args.commit_msg, encoding="utf-8") as handle:
-            raw = handle.read()
+        try:
+            raw = read_utf8(args.commit_msg)
+        except Unreadable as error:
+            print(f"Cannot read the commit message: {error}", file=sys.stderr)
+            return 2
         body = "\n".join(
             line for line in raw.split("# ------------------------ >8")[0].splitlines()
             if not line.startswith("#")
