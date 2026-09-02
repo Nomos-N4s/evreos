@@ -100,6 +100,7 @@ and the amendment cites the record that carries the founder's reasons.
 | Number | Decision | Status | Date | Serves |
 | --- | --- | --- | --- | --- |
 | [0001](0001-ratified-budget-figures.md) | Ratified budget figures | Decided | 2026-08-30 | Principle II; SC-001, SC-004 on tier 1, SC-005, SC-006 — thirteen budget entries |
+| [0002](0002-founder-display-name.md) | The founder's forge display name is an accepted author | Decided | 2026-09-01 | Principle I; `FOUNDER_AUTHORS` and `ALLOWED_COMMITTERS` |
 
 The next free number is the one after the last row.
 

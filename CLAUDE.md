@@ -28,13 +28,14 @@
     — the set `ALLOWED_COMMITTERS` in `scripts/check-commit-hygiene.py`.
     Principle I constrains the author and is silent on the committer, so naming
     the permitted set here is one of those narrowings.
-  - The author half is not handled by that set, and it is not currently clean.
-    Nine merge commits on `main` are authored `Carlos Pinto`, the GitHub account's
-    display name, which is not `xcoder-es <capintobe@gmail.com>` and so does not
-    satisfy Principle I. They pass CI only because the check runs over
-    `origin/<base>..HEAD`, which never contains the merge commit being created.
-    The fix is to set the GitHub account's display name to `xcoder-es`; until
-    then, history does not meet the rule the check appears to enforce.
+  - The author half is settled by `decisions/0002`. The founder's forge display
+    name, `Carlos Pinto <capintobe@gmail.com>`, is an accepted author and
+    committer alongside `xcoder-es <capintobe@gmail.com>`: two spellings of one
+    identity, bound by the one address Principle I names, so sole authorship is
+    unaffected and no second author exists. The nine merge commits on `main`
+    authored that way are compliant, the account is not renamed, and
+    `FOUNDER_AUTHORS` cites that record. A commit under either name with any
+    other address is refused exactly as before.
   - `scripts/check-commit-hygiene.py` checks, on every pull request: author and
     committer identity, AI identities inside git trailer values, a fixed list of
     literal generator-footer strings, Conventional Commits subjects, and issue

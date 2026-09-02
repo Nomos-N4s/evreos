@@ -65,12 +65,15 @@ Follow-up TODOs (status as of 1.1.0):
     `.github/workflows/commit-hygiene.yml`.
   - DONE — ADR-0001, the engine decision the Development Workflow section requires, is
     recorded at `docs/adr/0001-rendering-engine.md`.
-  - OPEN — nine merge commits on `main` are authored with the founder's GitHub account
-    display name, `Carlos Pinto`, rather than `xcoder-es <capintobe@gmail.com>`, and so
-    do not satisfy Principle I. The forge is their committer, which is permitted; the
-    author is the account's display name, which is not. They escape the check because it
-    runs over `origin/<base>..HEAD`, which never contains the merge commit being created.
-    Remedy: set that account's display name to `xcoder-es`.
+  - CLOSED by `decisions/0002` — nine merge commits on `main` are authored with the
+    founder's GitHub account display name, `Carlos Pinto`, rather than
+    `xcoder-es <capintobe@gmail.com>`. The founder has accepted that name as an author
+    and a committer alongside the canonical one: the two spellings denote one person and
+    are bound by the one address Principle I names, so sole authorship is unaffected.
+    The account is not renamed, and the remedy this entry previously proposed is not
+    carried out. `scripts/check-commit-hygiene.py` cites that record. What remains open
+    is unrelated to the name: the check runs over `origin/<base>..HEAD`, which never
+    contains the merge commit being created, so only branch protection gates what lands.
   - OPEN — the merge gate above is only partly mechanical. A check can verify that a
     record exists, names the current head and merge base, and reports no confirmed
     finding; it cannot verify that the round was adversarial, that the findings list is

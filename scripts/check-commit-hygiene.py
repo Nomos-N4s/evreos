@@ -97,6 +97,12 @@ FOUNDER_EMAIL = "capintobe@gmail.com"
 # one the account carries onto the merge commits it creates. Both are the founder,
 # recorded as a founder decision on 2026-08-30. This is not a widening: an author
 # at any other address still fails, which is the property Principle I needs.
+# Two spellings of one identity, bound by the address Principle I names. The
+# second is the founder's forge display name, which every merge the forge
+# creates is authored with. Accepted by decisions/0002, which is what makes
+# this a recorded founder decision rather than a widening asserted in a
+# comment -- and which the three documents that previously recorded the
+# opposite now cite.
 FOUNDER_AUTHORS = {REQUIRED_AUTHOR, f"Carlos Pinto <{FOUNDER_EMAIL}>"}
 # A forge is the committer of the merge commits it creates. That is infrastructure.
 ALLOWED_COMMITTERS = FOUNDER_AUTHORS | {"GitHub <noreply@github.com>"}

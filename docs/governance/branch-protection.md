@@ -161,11 +161,16 @@ required values do not. Record which form is in use in the status section.
 The hygiene check runs over `origin/<base>..HEAD`: the commits the pull request
 would add. That range never contains the merge commit the forge creates when
 the pull request lands, because at the time the check runs that commit does not
-exist. This is the identical blind spot that lets the merge commits on `main`
-carry an author the rule forbids — `Carlos Pinto`, the account's display name,
-recorded in the repository rules file and in the constitution's Sync Impact
-Report. So the signature check gates the branch, and only branch protection
+exist. The same blind spot means an unsigned merge commit reaches `main`
+whatever this check says: only branch protection can require a signature on
+what lands. So the signature check gates the branch, and only branch protection
 gates what lands on `main`.
+
+The merge commits on `main` authored `Carlos Pinto` are no longer an instance of
+that blind spot. `decisions/0002` accepts the founder's forge display name as an
+author and a committer alongside the canonical one -- two spellings of one
+identity, bound by the one address Principle I names -- so those commits are
+compliant rather than escaping a rule.
 
 The consequence is worth stating in full. The merge commit the forge creates is
 authored with the account's display name, committed by `GitHub
