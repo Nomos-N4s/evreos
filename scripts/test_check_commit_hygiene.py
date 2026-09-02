@@ -274,10 +274,10 @@ def git(*args, cwd, **kw):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, **kw)
 
 
-def run_check(cwd, *args):
+def run_check(cwd, *args, env=None):
     return subprocess.run(
         [sys.executable, str(ROOT / "check-commit-hygiene.py"), *args],
-        cwd=cwd, capture_output=True, text=True,
+        cwd=cwd, capture_output=True, text=True, env=env,
     )
 
 
@@ -419,8 +419,8 @@ def signatures(failures):
             if result.returncode:
                 raise RuntimeError(f"could not create commit {msg!r}: {result.stderr}")
 
-        def check(*args):
-            return run_check(repo, "--range", "HEAD~1..HEAD", *args)
+        def check(*args, env=None):
+            return run_check(repo, "--range", "HEAD~1..HEAD", *args, env=env)
 
         commit("feat(a): signed by the founder\n\nCloses #2", key="founder")
         case("a commit signed by the listed key", check("--allowed-signers-file", str(allowed)),
@@ -486,6 +486,37 @@ def signatures(failures):
         case("an OpenPGP signature",
              run_check(repo, "--range", f"{parent}..{pgp}", "--allowed-signers-file", str(allowed)),
              1, "carries an openpgp signature")
+
+        # A `gpgsig` header whose armour is none of the three named ones. The
+        # kind is "unknown" and the verdict says so rather than "not signed",
+        # which is the difference between "sign this commit" and "this is
+        # signed with something that cannot be checked here". Dropping the
+        # branch leaves the exit code alone and changes only the diagnosis, so
+        # no exit-code assertion could have caught it.
+        novel = git("hash-object", "-t", "commit", "-w", "--stdin", cwd=repo, input=(
+            f"tree {tree}\nparent {parent}\nauthor {stamp}\ncommitter {stamp}\n"
+            "gpgsig -----BEGIN NOVEL SIGNATURE-----\n \n AAAA\n"
+            " -----END NOVEL SIGNATURE-----\n\nfeat(e): novel armour\n\nCloses #6\n"
+        )).stdout.strip()
+        case("an unrecognised signature armour is unknown, not unsigned",
+             run_check(repo, "--range", f"{parent}..{novel}",
+                       "--allowed-signers-file", str(allowed)),
+             1, "carries an unknown signature")
+
+        # ssh-keygen absent with a populated allowed-signers file. Git needs it
+        # to check an SSH signature, so the check has no verdict to give and
+        # exits 2. Without the guard it exits 1 and reports every commit as
+        # unverified -- a wrong answer rather than no answer, and the one the
+        # log would be read as a real breach. PATH holds git and nothing else.
+        bindir = tmp / "bin"
+        bindir.mkdir(exist_ok=True)
+        git_path = shutil.which("git")
+        if git_path and not (bindir / "git").exists():
+            (bindir / "git").symlink_to(git_path)
+        case("ssh-keygen missing is an error, not a wall of failures",
+             check("--allowed-signers-file", str(allowed),
+                   env={**env, "PATH": str(bindir)}),
+             2, "ssh-keygen is not on PATH")
 
         # The hook path never sees a signature and must be unaffected by the flag.
         msg = tmp / "MSG"
