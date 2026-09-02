@@ -441,6 +441,13 @@ for label, line in (
     ("include_dir!", 'static CEF: Dir = include_dir!("$CARGO_MANIFEST_DIR/cef");\n'),
     ("third-party, hyphenated", 'include!("third-party/chromium/mod.rs");\n'),
     ("third_party, underscored", 'include!("third_party/cef/mod.rs");\n'),
+    # Four more the round after this one found still unpinned: the two WebKit
+    # library spellings, and the two directory names `vendor` does not cover
+    # because the pattern requires the slash to follow immediately.
+    ("webkit2gtk", 'download("https://x/webkit2gtk-4.1.tar.xz");\n'),
+    ("libwebkit", 'download("https://x/libwebkit.so.tar.gz");\n'),
+    ("a vendored directory", 'include!("vendored/chromium/mod.rs");\n'),
+    ("a bundled directory", 'include!("bundled/cef/mod.rs");\n'),
 ):
     check(f"{label} is an engine acquisition",
           acquisition_problems(lambda r, line=line: rs(r, line, "build.rs")))

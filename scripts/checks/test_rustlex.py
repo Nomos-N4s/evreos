@@ -129,11 +129,18 @@ check("a doubled hash count does not close on a single one",
 check("an unterminated raw string runs to the end of the file",
       blanked('let s = r#"a\n#![forbid(unsafe_code)]\n', "#![forbid(unsafe_code)]"))
 # Every prefix the opener admits. A byte raw string is a raw string, and both
-# orderings of the prefix are read the same way.
-for label, opener in (("br", 'br#"'), ("rb", 'rb#"'), ("r", 'r#"')):
+# orderings of the prefix are read the same way. What distinguishes the readings
+# is where the literal STARTS: drop `br` and the `r#"` inside it still opens a
+# raw string ending at the same offset, so an assertion about what survives
+# afterwards holds either way -- as the first version of this loop did. The
+# blanked prefix is the difference.
+for label, opener in (("br", "br"), ("rb", "rb"), ("r", "r")):
     check(f"{label} opens a raw string",
-          kept(f'let s = {opener}a " b"#; #![forbid(unsafe_code)]\n',
+          kept(f'let s = {opener}#"a " b"#; #![forbid(unsafe_code)]\n',
                "#![forbid(unsafe_code)]"))
+    check(f"...and {label} is blanked with the literal it opens",
+          rustlex.strip_non_code(f'let s = {opener}"a";')
+          == "let s = " + " " * (len(opener) + 3) + ";")
 
 # --- plain strings and their escapes ------------------------------------------
 check("a plain string is blanked", blanked('let s = "forbid";\n', "forbid"))
