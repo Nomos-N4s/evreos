@@ -13,16 +13,20 @@ there. This script is those three, and it adds none of its own.
                naming no recorded founder decision, a baseline above the
                entry's stated figure, an SC-004 entry declaring no cross-check
                margin or one outside its cap, a baseline reset naming no
-               recorded decision or leaving a baseline above the figure, or a
-               runner not pinned. Not hardware dependent -- it compares numbers
-               in a file -- so it blocks from M0 unconditionally. It is what
-               bounds the advisory period on the absolute gate, rather than
-               leaving that to good intentions. It also fails on a file this
-               script cannot read as the schema states it -- a figure with no
-               unit, or in a unit its criterion does not state; a spike
-               exemption, baseline reset or wake lacking a field its schema
-               names -- because a verdict over a misread file is a verdict on
-               nothing.
+               recorded decision or leaving a baseline above the figure, a
+               runner not pinned, SC-005's wake enumeration absent, a wake in
+               it lacking a period, a processor-time bound or a justifying
+               requirement, a wake bounded above the 50 ms SC-005 caps a wake
+               at, or the enumerated bounds summing above the 500 ms SC-005
+               allows in a 60-minute window. Not hardware dependent -- it
+               compares numbers in a file -- so it blocks from M0
+               unconditionally. It is what bounds the advisory period on the
+               absolute gate, rather than leaving that to good intentions. It
+               also fails on a file this script cannot read as the schema
+               states it -- a figure with no unit, or in a unit its criterion
+               does not state; a spike exemption, baseline reset or wake
+               lacking a field its schema names -- because a verdict over a
+               misread file is a verdict on nothing.
 
   ABSOLUTE     fails when a measured figure exceeds its stated value. On a
                hardware-dependent entry this is advisory until that tier's
@@ -54,6 +58,28 @@ A RATIFIED FIGURE NAMES THE DECISION THAT SET IT, in the decision register's
 citation form, decisions/NNNN, and so does a baseline reset. A name, a clarify
 question or a bare "yes" is not a citation: the gate can read a citation off
 the file and can read nothing off a description.
+
+A SPIKE EXEMPTION LIFTS ONE ENTRY'S ABSOLUTE GATE AND NOTHING ELSE. Recorded on
+an entry while a spike establishes a figure that does not yet exist, it turns
+that entry's absolute breach into an advisory. It never lifts the regression
+gate, which is what stops a spike being a route around a baseline; it never
+lifts the budget-file gate, which refuses a malformed exemption and one naming
+another entry's figure; and it never reaches another entry, because the only
+exemption an entry is read against is the one recorded on it. A malformed
+exemption is not an exemption, so the absolute gate does not lift on one.
+Retiring an exemption is deleting it, in the change that lands the figure;
+until then the file records it, and a build produced from such a commit is not
+released or tagged. --refuse-exemptions is the release job's refusal: it fails
+on any recorded exemption, well formed or not, and runs nothing else, because
+the build job the release job depends on has already run the gates.
+
+THE WAKE ENUMERATION IS READ AT ITS STRICTEST. SC-005 bounds every wake at
+50 ms of processor time and the enumerated wakes together at 500 ms in any
+60-minute window. "Any" window is the worst one: a wake with period p seconds
+fires at most floor(3600 / p) + 1 times in a window that opens on one firing
+and closes on another, and that count times its bound is what it contributes.
+An absent enumeration fails; an empty one, `wake = []`, passes, being the
+statement that nothing on the idle path is scheduled.
 
 A FIGURE IS COMPARED ONLY IN ITS CRITERION'S UNIT. Every entry states its unit,
 and the unit is the one its criterion states -- MB, ms or percent-of-core -- so
@@ -138,6 +164,16 @@ RETIRED_FIELDS = ("figure_mb", "baseline_mb")
 # The phrase every unpinned-runner failure carries. --allow-unpinned-runners
 # defers exactly the failures that carry it and nothing else.
 UNPINNED = "is not pinned"
+
+# SC-005's two caps on the wake enumeration, in ms of processor time: what one
+# wake completes within, and what the enumerated wakes together consume in a
+# 60-minute window. The window is 3600 s, and a wake with period p fires in it
+# at most floor(3600 / p) + 1 times -- once at its opening and once every
+# period after, the last on its close -- which is the count "any 60-minute
+# window" binds, since the criterion binds the worst one.
+WAKE_BOUND_CAP_MS = 50
+WAKES_WINDOW_CAP_MS = 500
+WINDOW_SECONDS = 3600
 
 
 def is_number(value):
@@ -247,21 +283,74 @@ def runner_missing(runner):
     return missing
 
 
-def check_record(gate, label, record, fields):
-    """A sub-table must carry exactly the fields its schema names, well typed."""
+def record_defects(label, record, fields):
+    """Why a sub-table is not what its schema names; empty when it is.
+
+    A sub-table carries exactly the fields its schema names, well typed. The
+    defects are returned rather than blocked so that a caller can also ask
+    whether a record is well formed at all, which is what the absolute gate
+    asks of a spike exemption before lifting on it.
+    """
     if not isinstance(record, dict):
         names = ", ".join(name for name, _, _ in fields)
-        gate.block(f"{label} must be a table {{ {names} }}")
-        return
+        return [f"{label} must be a table {{ {names} }}"]
+    defects = []
     for name, accepts, description in fields:
         if name not in record:
-            gate.block(f"{label} lacks {name}")
+            defects.append(f"{label} lacks {name}")
         elif not accepts(record[name]):
-            gate.block(f"{label}: {name} must be {description}")
+            defects.append(f"{label}: {name} must be {description}")
     known = {name for name, _, _ in fields}
     for name in record:
         if name not in known:
-            gate.block(f"{label} carries an unknown field {name}")
+            defects.append(f"{label} carries an unknown field {name}")
+    return defects
+
+
+def check_record(gate, label, record, fields):
+    """A sub-table must carry exactly the fields its schema names, well typed."""
+    for message in record_defects(label, record, fields):
+        gate.block(message)
+
+
+def spike_exemption_defects(entry):
+    """Why the spike exemption this entry records is not one; empty when it is.
+
+    Beyond its schema, the exemption names the figure the spike measures, as
+    the criterion states it, and that is this entry's own figure: an exemption
+    recorded on one entry and naming another's is an exemption that has
+    extended to another entry in its own record, which it never does.
+    """
+    label = f"{entry_label(entry)}: spike_exemption"
+    record = entry["spike_exemption"]
+    defects = record_defects(label, record, SPIKE_EXEMPTION_FIELDS)
+    if not defects and record["figure"] != entry["name"]:
+        defects.append(
+            f"{label} names the figure {record['figure']!r}; this entry's figure "
+            f"is {entry['name']!r}, and an exemption never extends to another "
+            "entry"
+        )
+    return defects
+
+
+def spike_exemption_of(entry):
+    """The well-formed spike exemption recorded on this entry, or None.
+
+    A malformed record is not an exemption. The budget-file gate refuses the
+    file on it, and the absolute gate does not lift on it: a record that fails
+    its own schema cannot be read as saying what it would have to say.
+    """
+    if "spike_exemption" not in entry or spike_exemption_defects(entry):
+        return None
+    return entry["spike_exemption"]
+
+
+def firings_in_window(period):
+    """The most firings of a wake with this period, in seconds, that one
+    60-minute window can hold: one at the window's opening and one every period
+    after it, the last landing on its close. "Any 60-minute window" binds the
+    worst one, so this is the count a wake's bound is multiplied by."""
+    return int(WINDOW_SECONDS // period) + 1
 
 
 def check_budget_file(budgets, gate):
@@ -385,10 +474,8 @@ def check_budget_file(budgets, gate):
             )
 
         if "spike_exemption" in entry:
-            check_record(
-                gate, f"{label}: spike_exemption", entry["spike_exemption"],
-                SPIKE_EXEMPTION_FIELDS,
-            )
+            for message in spike_exemption_defects(entry):
+                gate.block(message)
         if "baseline_reset" in entry:
             check_record(
                 gate, f"{label}: baseline_reset", entry["baseline_reset"],
@@ -442,23 +529,57 @@ def check_budget_file(budgets, gate):
             "absent from the file"
         )
 
-    # SC-005's wake enumeration. An empty enumeration is a statement -- nothing
-    # on the idle path is scheduled -- and is read as one; each wake declared
-    # carries every field its schema names.
+    # SC-005's wake enumeration. Absent, it fails: every scheduled wake on the
+    # idle path is enumerated here, and a file with none says so with
+    # `wake = []`, a statement rather than an omission. Each wake declared
+    # carries every field its schema names and a bound inside the per-wake
+    # cap, and the bounds together stay inside the window cap at the count the
+    # worst 60-minute window can hold of each.
     wakes = budgets.get("wake")
-    if wakes is not None:
-        if not isinstance(wakes, list):
-            gate.block("wake must be an array of tables, `wake = []` when empty")
-        else:
-            names = set()
-            for position, wake in enumerate(wakes, start=1):
-                name = wake.get("name") if isinstance(wake, dict) else None
-                label = f"wake {name!r}" if is_text(name) else f"wake {position}"
-                check_record(gate, label, wake, WAKE_FIELDS)
-                if is_text(name):
-                    if name in names:
-                        gate.block(f"{label}: enumerated twice")
-                    names.add(name)
+    if wakes is None:
+        gate.block(
+            "no wake enumeration; SC-005 requires every scheduled wake on the idle "
+            "path enumerated in this file, and a file with none writes "
+            "`wake = []`, a statement rather than an omission"
+        )
+    elif not isinstance(wakes, list):
+        gate.block("wake must be an array of tables, `wake = []` when empty")
+    else:
+        names = set()
+        contributions = []
+        for position, wake in enumerate(wakes, start=1):
+            name = wake.get("name") if isinstance(wake, dict) else None
+            label = f"wake {name!r}" if is_text(name) else f"wake {position}"
+            defects = record_defects(label, wake, WAKE_FIELDS)
+            for message in defects:
+                gate.block(message)
+            if is_text(name):
+                if name in names:
+                    gate.block(f"{label}: enumerated twice")
+                names.add(name)
+            if defects:
+                # A wake the schema cannot read has no bound to sum; the
+                # failures above report it.
+                continue
+            bound = wake["processor_time_bound"]
+            if bound > WAKE_BOUND_CAP_MS:
+                gate.block(
+                    f"{label}: processor_time_bound {bound:g} ms is above the "
+                    f"{WAKE_BOUND_CAP_MS} ms SC-005 caps a wake at"
+                )
+            contributions.append((label, bound, firings_in_window(wake["period"])))
+        total = sum(bound * firings for _, bound, firings in contributions)
+        if total > WAKES_WINDOW_CAP_MS:
+            breakdown = ", ".join(
+                f"{label} {bound:g} ms x {firings}"
+                for label, bound, firings in contributions
+            )
+            gate.block(
+                f"the enumerated wakes' bounds sum to {total:g} ms of processor "
+                f"time in a 60-minute window ({breakdown}), above the "
+                f"{WAKES_WINDOW_CAP_MS} ms SC-005 allows; work that needs more is "
+                "a change to this file stating its cost, not an exception"
+            )
 
 
 def defer_unpinned_runners(gate):
@@ -530,10 +651,21 @@ def run_gates(budgets, measurements):
         hardware = entry["criterion"] in HARDWARE_DEPENDENT
         tier = tier_of.get(entry["platform"])
         runner_pinned = pinned.get(tier, False)
+        exemption = spike_exemption_of(entry)
 
         if measured > figure:
             message = f"{label}: measured {measured:.3f} {unit} exceeds {figure} {unit}"
-            if hardware and not runner_pinned:
+            if exemption is not None:
+                # The one thing a spike exemption lifts: this entry's absolute
+                # gate, read off this entry. The breach is still reported, and
+                # the release job refuses the build for as long as the
+                # exemption is recorded.
+                absolute.advise(
+                    f"{message} (exempt: the spike in pull request "
+                    f"#{exemption['pull_request']} is establishing this figure, "
+                    "and a build carrying the exemption is not released or tagged)"
+                )
+            elif hardware and not runner_pinned:
                 absolute.advise(f"{message} (advisory: {tier} runner not pinned)")
             else:
                 absolute.block(message)
@@ -548,6 +680,63 @@ def run_gates(budgets, measurements):
             )
 
     return absolute, regression, unmeasured
+
+
+def unretired_exemptions(budgets):
+    """Every spike exemption the file records, as (entry label, record).
+
+    A recorded exemption is an unretired one: retiring it is deleting it, in
+    the change that lands the figure it was establishing. A malformed record
+    counts, because it is still a recorded exemption and refusing is the safe
+    direction -- the budget-file gate has refused the file on it already, and
+    a release that read past it would be a release on a technicality.
+    """
+    identity = ("criterion", "name", "platform")
+    found = []
+    for entry in budgets.get("entry", []):
+        if "spike_exemption" not in entry:
+            continue
+        if all(is_text(entry.get(field)) for field in identity):
+            label = entry_label(entry)
+        else:
+            label = f"an entry without a criterion, a name and a platform: {entry}"
+        found.append((label, entry["spike_exemption"]))
+    return found
+
+
+def refuse_exemptions(budgets):
+    """The release job's refusal: non-zero on any recorded spike exemption.
+
+    The preamble: a build produced while an exemption is unretired MUST NOT be
+    released or tagged, and the release job refuses an artefact built from a
+    commit whose budget file records one. This runs nothing else, because the
+    build job the release job depends on has already run the gates.
+    """
+    exemptions = unretired_exemptions(budgets)
+    for label, record in exemptions:
+        number = record.get("pull_request") if isinstance(record, dict) else None
+        if is_pull_request_number(number):
+            carrier = f"pull request #{number}"
+        else:
+            carrier = "a malformed record, which is still a recorded one"
+        print(
+            f"  FAIL     [release] {label}: unretired spike exemption ({carrier}); "
+            "a build carrying it is not released or tagged",
+            file=sys.stderr,
+        )
+    if exemptions:
+        count = len(exemptions)
+        noun = "exemption" if count == 1 else "exemptions"
+        print(
+            f"\nRelease REFUSED: the budget file records {count} unretired spike "
+            f"{noun}.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print("The budget file records no unretired spike exemption; the release is not "
+          "refused on that count.")
+    return 0
 
 
 def main():
@@ -565,9 +754,19 @@ def main():
         help="do not fail the budget-file gate on a runner that is not pinned; "
         "for use before the reference machines are procured",
     )
+    parser.add_argument(
+        "--refuse-exemptions",
+        action="store_true",
+        help="fail when the budget file records an unretired spike exemption, and "
+        "run nothing else; the release job's refusal, since a build produced "
+        "while one stands is not released or tagged",
+    )
     args = parser.parse_args()
 
     budgets = load_budgets(args.budgets)
+
+    if args.refuse_exemptions:
+        return refuse_exemptions(budgets)
 
     file_gate = Gate("budget file")
     check_budget_file(budgets, file_gate)

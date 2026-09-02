@@ -4,6 +4,8 @@ its own behaviour is checked rather than assumed."""
 import datetime
 import importlib.util
 import io
+import os
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -146,8 +148,9 @@ def file_gate(b):
     return g
 
 
-# Well-formed sub-tables, for the cases that vary one field of each.
-EXEMPTION = {"pull_request": 57, "figure": "cold start"}
+# Well-formed sub-tables, for the cases that vary one field of each. The
+# exemption names the default entry's own figure, as one must.
+EXEMPTION = {"pull_request": 57, "figure": "download size"}
 RESET = {
     "date": datetime.date(2026, 9, 1),
     "measured_cost": 1.5,
@@ -418,6 +421,9 @@ check("a cross-check margin that is not a number fails",
       file_gate(budget_file(entry={**TEN_TAB, "cross_check_margin": "2"})).failed)
 
 # --- spike_exemption --------------------------------------------------------
+# Recorded on an entry while a spike establishes a figure that does not yet
+# exist. The budget-file gate reads its schema and refuses one naming another
+# entry's figure; what the exemption lifts is proved under the measuring gates.
 
 check("a complete spike exemption passes",
       not file_gate(budget_file(entry={"spike_exemption": dict(EXEMPTION)})).failed)
@@ -441,6 +447,17 @@ check("a spike exemption with an unknown field fails",
 
 check("a spike exemption that is not a table fails",
       file_gate(budget_file(entry={"spike_exemption": 57})).failed)
+
+g = file_gate(exemption(figure="cold start"))
+check("a spike exemption naming another entry's figure fails, since an exemption "
+      "never extends to another entry",
+      g.failed and len(g.blocking) == 1
+      and "never extends to another entry" in g.blocking[0])
+
+check("a spike exemption never lifts the budget-file gate: a baseline above the "
+      "figure fails with one recorded",
+      file_gate(budget_file(entry={"baseline": 25.0,
+                                   "spike_exemption": dict(EXEMPTION)})).failed)
 
 # --- baseline_reset ---------------------------------------------------------
 # A reset is the provenance of a baseline moved upward, which only a recorded
@@ -494,8 +511,25 @@ check("a provisional figure binds a reset exactly as a ratified one does",
                                    "baseline_reset": dict(RESET)})).failed)
 
 # --- the wake enumeration ---------------------------------------------------
+# SC-005's. Absent it fails and empty it passes; each wake carries its four
+# fields and a bound inside the per-wake cap; and the bounds together stay
+# inside the window cap at the count the worst 60-minute window holds of each,
+# floor(3600 / period) + 1, a window that opens on one firing and closes on
+# another.
 
-check("an empty enumeration passes", not file_gate(budget_file(wake=[])).failed)
+check("the caps are SC-005's own: 50 ms a wake, 500 ms an hour",
+      budgets.WAKE_BOUND_CAP_MS == 50 and budgets.WAKES_WINDOW_CAP_MS == 500)
+
+b = budget_file()
+del b["wake"]
+g = file_gate(b)
+check("an absent enumeration fails",
+      g.failed and len(g.blocking) == 1 and "no wake enumeration" in g.blocking[0])
+check("...and the failure says how a file with no wake states that",
+      "`wake = []`" in g.blocking[0])
+
+check("an empty enumeration passes, being a statement rather than an omission",
+      not file_gate(budget_file(wake=[])).failed)
 
 check("a complete wake passes", not file_gate(budget_file(wake=[dict(WAKE)])).failed)
 
@@ -519,12 +553,52 @@ check("a wake that is not a table fails",
 check("an enumeration that is not an array fails",
       file_gate(budget_file(wake=WAKE)).failed)
 
-# An absent enumeration is not yet a failure. The clause that fails on it lands
-# with the enumeration's semantics -- the per-wake cap and the hourly sum --
-# and is recorded here as not enforced rather than left to be assumed.
-b = budget_file()
-del b["wake"]
-check("an absent enumeration is not yet a failure", not file_gate(b).failed)
+# The per-wake cap: a bound declared above 50 ms declares a wake SC-005 does
+# not permit.
+g = file_gate(budget_file(wake=[{**WAKE, "processor_time_bound": 51}]))
+check("a wake bounded above 50 ms fails",
+      g.failed and len(g.blocking) == 1 and "caps a wake at" in g.blocking[0])
+
+check("a wake bounded at 50 ms passes",
+      not file_gate(budget_file(wake=[{**WAKE, "processor_time_bound": 50}])).failed)
+
+# The count a worst-case window holds.
+check("a wake with a period above an hour fires once in a 60-minute window",
+      budgets.firings_in_window(21600) == 1)
+check("a wake with a period of exactly an hour fires twice, on the window's "
+      "opening and on its close",
+      budgets.firings_in_window(3600) == 2)
+check("a wake every ten minutes fires seven times",
+      budgets.firings_in_window(600) == 7)
+
+
+def wake(name, period, bound=50):
+    return {"name": name, "period": period, "processor_time_bound": bound,
+            "justifying_requirement": "FR-014"}
+
+
+# The window cap, over every wake at that count.
+check("ten 50 ms firings in an hour pass, at the cap",
+      not file_gate(budget_file(wake=[wake("a", 400)])).failed)
+
+g = file_gate(budget_file(wake=[wake("a", 360)]))
+check("eleven fail: a 6-minute wake at the cap fires eleven times in a closed hour",
+      g.failed and len(g.blocking) == 1 and "above the 500 ms" in g.blocking[0])
+check("...and the failure states the sum and each wake's share of it",
+      "550 ms" in g.blocking[0] and "50 ms x 11" in g.blocking[0])
+
+check("the sum is over every wake: two inside the per-wake cap fail together",
+      file_gate(budget_file(wake=[wake("a", 600), wake("b", 900)])).failed)
+
+check("...and two that sum to the cap pass",
+      not file_gate(budget_file(wake=[wake("a", 600), wake("b", 1800)])).failed)
+
+check("a wake well under the per-wake cap still counts toward the window",
+      file_gate(budget_file(wake=[wake("a", 60, 10)])).failed)
+
+g = file_gate(budget_file(wake=[{**WAKE, "period": 0}, wake("b", 400)]))
+check("a wake the schema cannot read is reported and left out of the sum",
+      g.failed and len(g.blocking) == 1 and "period" in g.blocking[0])
 
 # --- the repository's own budget file ---------------------------------------
 # The file as committed reads under the schema and fails only on what it says
@@ -611,6 +685,11 @@ hourly = sum(w["processor_time_bound"] * (3600 // w["period"] + 1) for w in wake
 check("the committed wakes sum inside 500 ms of processor time in any 60-minute "
       "window",
       hourly <= 500)
+check("...at the count the gate multiplies each bound by",
+      hourly == sum(w["processor_time_bound"] * budgets.firings_in_window(w["period"])
+                    for w in wakes))
+check("the committed budget file records no unretired spike exemption",
+      budgets.unretired_exemptions(real) == [])
 
 # --- absolute and regression gates -------------------------------------------
 # These read entries one at a time and report each, so they are exercised on a
@@ -744,6 +823,120 @@ absolute, regression, unmeasured = budgets.run_gates(
     b, {("SC-001", "download size"): 1.0}
 )
 check("a measured entry is not reported unmeasured", unmeasured == [])
+
+# --- the spike exemption under the measuring gates ---------------------------
+# It lifts that one entry's absolute gate and nothing else: never the
+# regression gate, never the budget-file gate, never another entry.
+
+EXEMPT = {"spike_exemption": dict(EXEMPTION)}
+
+b = single_entry(entry=EXEMPT)
+absolute, regression, unmeasured = budgets.run_gates(b, over)
+check("a spike exemption lifts the entry's absolute gate", not absolute.failed)
+check("...and the breach is still reported, naming the pull request and the "
+      "consequence",
+      len(absolute.advisory) == 1 and "#57" in absolute.advisory[0]
+      and "not released or tagged" in absolute.advisory[0])
+check("...and never the regression gate", regression.failed)
+
+b = single_entry(entry=EXEMPT)
+b["entry"].append({**stated_entry("SC-001", "installed footprint", "windows"),
+                   "baseline": 1.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size"): 25.0, ("SC-001", "installed footprint"): 70.0}
+)
+check("...and never another entry: the breach beside it blocks",
+      absolute.failed and len(absolute.blocking) == 1
+      and "installed footprint" in absolute.blocking[0]
+      and len(absolute.advisory) == 1)
+
+b = single_entry(entry={"spike_exemption": {"pull_request": 57}})
+absolute, regression, _ = budgets.run_gates(b, over)
+check("a malformed spike exemption is not one, and lifts nothing", absolute.failed)
+
+b = single_entry(entry={"spike_exemption": {**EXEMPTION, "figure": "cold start"}})
+absolute, regression, _ = budgets.run_gates(b, over)
+check("a spike exemption naming another entry's figure lifts nothing",
+      absolute.failed)
+
+b = single_entry(entry=EXEMPT)
+absolute, regression, unmeasured = budgets.run_gates(b, {})
+check("an exempt entry with no measurement is still unmeasured and blocking, the "
+      "unmeasured clause being the budget-file gate's",
+      unmeasured == [("SC-001 download size (windows)", "BLOCKING")])
+
+b = single_entry(
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150,
+           "spike_exemption": {"pull_request": 57, "figure": "ten-tab memory"}},
+    runner={"identity": ""},
+)
+absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+check("an exempt hardware entry on an unpinned runner is advised once, as exempt",
+      not absolute.failed and len(absolute.advisory) == 1
+      and "exempt" in absolute.advisory[0])
+
+# --- the release refusal ----------------------------------------------------
+# A build produced while an exemption is unretired is not released or tagged.
+# The release job runs --refuse-exemptions, which fails on any recorded
+# exemption, well formed or not, and runs nothing else; the build job it
+# depends on has already run the gates.
+
+check("a file recording no exemption has none unretired",
+      budgets.unretired_exemptions(budget_file()) == [])
+
+found = budgets.unretired_exemptions(budget_file(entry=EXEMPT))
+check("a recorded exemption is an unretired one, named by its entry",
+      len(found) == 1 and found[0][0] == "SC-001 download size (windows)")
+
+check("a malformed exemption is still a recorded one, and refused",
+      len(budgets.unretired_exemptions(budget_file(entry={"spike_exemption": 57})))
+      == 1)
+
+SCRIPT = Path(__file__).resolve().parent / "check-budgets.py"
+EXEMPT_TOML = """\
+[[entry]]
+criterion = "SC-002"
+name = "cold start"
+platform = "windows"
+figure = 2000
+unit = "ms"
+status = "provisional"
+baseline = 0.0
+tolerance_pct = 0.0
+spike_exemption = { pull_request = 57, figure = "cold start" }
+"""
+
+
+def refuse(toml_text):
+    """Run the script as the release job runs it, over this file."""
+    with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+        handle.write(toml_text)
+        path = handle.name
+    try:
+        return subprocess.run(
+            [sys.executable, str(SCRIPT), "--budgets", path, "--refuse-exemptions"],
+            capture_output=True, text=True,
+        )
+    finally:
+        os.unlink(path)
+
+
+result = refuse(EXEMPT_TOML)
+check("--refuse-exemptions exits non-zero on a recorded exemption",
+      result.returncode == 1)
+check("...naming the entry and the pull request",
+      "SC-002 cold start (windows)" in result.stderr and "#57" in result.stderr)
+
+retired = EXEMPT_TOML.replace(
+    'spike_exemption = { pull_request = 57, figure = "cold start" }\n', ""
+)
+check("--refuse-exemptions exits zero once the exemption is retired",
+      "spike_exemption" not in retired and refuse(retired).returncode == 0)
+
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--refuse-exemptions"], capture_output=True, text=True
+)
+check("...and on the committed budget file", result.returncode == 0)
 
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)
