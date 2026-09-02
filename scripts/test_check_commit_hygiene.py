@@ -375,6 +375,12 @@ def end_to_end(failures):
     It was a literal `10` while twelve assertions sat here, which is the same
     defect as any other number nobody recomputes -- and in a test suite it
     misreports the one figure the suite exists to report.
+
+    One case is one `run_check` invocation whose outcome is asserted, and the
+    count is one `cases += 1` immediately above each. A case may carry two
+    assertions -- an exit code and the text it printed -- and that is still one
+    case; the counter's first version incremented twice for those, which put the
+    number back out of step with what runs, in the counter written to end that.
     """
     cases = 0
 
@@ -418,7 +424,6 @@ def end_to_end(failures):
                GIT_COMMITTER_NAME="Some Bot", GIT_COMMITTER_EMAIL="bot@example.com")
         cases += 1
         result = run_check(tmp, "--range", f"{base}..HEAD")
-        cases += 1
         if result.returncode != 1:
             failures.append("end-to-end: a wrong-committer commit was accepted")
         elif "committer is" not in result.stdout + result.stderr:
@@ -454,7 +459,6 @@ def end_to_end(failures):
                GIT_AUTHOR_NAME="GitHub", GIT_AUTHOR_EMAIL="noreply@github.com")
         cases += 1
         result = run_check(tmp, "--range", f"{base}..HEAD")
-        cases += 1
         if result.returncode != 1:
             failures.append("end-to-end: the forge as AUTHOR was accepted")
         elif "author is" not in result.stdout + result.stderr:
