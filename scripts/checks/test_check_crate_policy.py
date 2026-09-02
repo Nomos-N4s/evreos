@@ -368,5 +368,56 @@ check("end-to-end: a lifting crate fails the run", result.returncode == 1)
 check("...with the failure on stderr", "Crate policy check FAILED" in result.stderr)
 check("...naming the manifest", "crates/a/Cargo.toml" in result.stderr)
 
+
+# --- a crate reached only through [workspace.dependencies] ------------------
+# `cargo metadata` reports it in workspace_members and `cargo build -p` builds
+# it, so it is a member and is bound by all three clauses. It was reached by no
+# path at all: the per-crate tables do not mention it, and in a virtual
+# workspace -- one whose root is not itself a package, which is this
+# repository's shape -- nothing walked the root manifest either.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/app"]\nresolver = "2"\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n'
+        '[workspace.dependencies]\nshared = { path = "lib/shared" }\n'
+    )
+    for name, lints, source in (
+        ("crates/app", "[lints]\nworkspace = true\n", "#![forbid(unsafe_code)]\n"),
+        ("lib/shared", "", "pub unsafe fn boom() {}\n"),
+    ):
+        directory = root / name
+        (directory / "src").mkdir(parents=True)
+        (directory / "Cargo.toml").write_text(
+            f'[package]\nname = "{name.split("/")[-1]}"\nversion = "0.0.0"\n'
+            f'edition = "2021"\n{lints}'
+        )
+        (directory / "src" / "lib.rs").write_text(source)
+    allowlist = root / "allow.txt"
+    allowlist.write_text("")
+    found, crates, _ = policy.check_workspace(root, allowlist)
+    check("a [workspace.dependencies] path crate is a member", crates == 2)
+    check("...and its lifted lint is reported",
+          any("lifts unsafe_code" in problem for problem in found))
+    check("...and its missing forbid is reported",
+          any("omits #![forbid(unsafe_code)]" in problem for problem in found))
+
+# --- where a forbid attribute does and does not bind ------------------------
+# Commenting the attribute out to try `unsafe`, then forgetting to restore it,
+# is the realistic way a crate loses its forbid. Each of these read as forbidden
+# before the matcher blanked comments and raw strings and required crate scope.
+for label, source, forbids in (
+    ("a crate-scoped attribute", "#![forbid(unsafe_code)]\npub fn f() {}\n", True),
+    ("one after a closed function", "pub fn f() {}\n#![forbid(unsafe_code)]\n", True),
+    ("a multi-lint attribute", "#![forbid(unsafe_code, missing_docs)]\n", True),
+    ("one inside a block comment", "/*\n#![forbid(unsafe_code)]\n*/\n", False),
+    ("one inside a nested block comment", "/* /* #![forbid(unsafe_code)] */ */\n", False),
+    ("one inside a raw string", 'const S: &str = r#"\n#![forbid(unsafe_code)]\n"#;\n', False),
+    ("one inside a function body", "pub fn f() {\n    #![forbid(unsafe_code)]\n}\n", False),
+    ("one in a doc comment", "//! #![forbid(unsafe_code)]\n", False),
+):
+    check(f"forbid binds ({forbids}): {label}",
+          policy.forbids_unsafe(source) is forbids)
+
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

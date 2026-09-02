@@ -85,10 +85,64 @@ def lint_level(table, name):
     return value
 
 
+def strip_non_code(source):
+    """`source` with block comments and raw strings blanked, newlines kept.
+
+    An inner attribute inside `/* ... */` or inside `r#"..."#` is not an
+    attribute -- it is text the compiler never reads -- and one written inside a
+    function body is block-scoped rather than crate-scoped, so none of the three
+    forbids anything. Matching them let a crate pass by commenting its own
+    forbid out, which is the realistic way in: comment it, try `unsafe`, forget
+    to restore it. Line comments are left alone; the pattern is anchored to the
+    line start, so `//! #![forbid(...)]` never matched anyway.
+    """
+    out, i, n = [], 0, len(source)
+    while i < n:
+        if source.startswith("/*", i):
+            depth, j = 1, i + 2          # Rust block comments nest
+            while j < n and depth:
+                if source.startswith("/*", j):
+                    depth, j = depth + 1, j + 2
+                elif source.startswith("*/", j):
+                    depth, j = depth - 1, j + 2
+                else:
+                    j += 1
+            out.append("".join(c if c == "\n" else " " for c in source[i:j]))
+            i = j
+        elif source.startswith("r#", i) or source.startswith('r"', i):
+            j = i + 1
+            hashes = 0
+            while j < n and source[j] == "#":
+                hashes, j = hashes + 1, j + 1
+            if j < n and source[j] == '"':
+                close = '"' + "#" * hashes
+                end = source.find(close, j + 1)
+                end = n if end == -1 else end + len(close)
+                out.append("".join(c if c == "\n" else " " for c in source[i:end]))
+                i = end
+            else:
+                out.append(source[i]); i += 1
+        else:
+            out.append(source[i]); i += 1
+    return "".join(out)
+
+
+def crate_scoped(source, start):
+    """Whether the match at `start` sits at crate scope, outside every brace.
+
+    An inner attribute inside a function body applies to that block. Counting
+    braces before the match is enough here: string and comment braces are
+    already blanked by `strip_non_code`, and a crate root that does not parse is
+    a compile error rather than this check's business.
+    """
+    return source.count("{", 0, start) == source.count("}", 0, start)
+
+
 def forbids_unsafe(source):
-    """Whether a crate root carries `#![forbid(unsafe_code)]`."""
+    """Whether a crate root carries `#![forbid(unsafe_code)]` that binds."""
+    source = strip_non_code(source)
     return any(
-        lint.strip() == "unsafe_code"
+        lint.strip() == "unsafe_code" and crate_scoped(source, match.start())
         for match in FORBID.finditer(source)
         for lint in match.group(1).split(",")
     )
@@ -117,11 +171,27 @@ def relative(root, path):
 
 
 def path_dependencies(manifest):
-    """Every `path = ...` a manifest declares, from every table Cargo reads."""
+    """Every `path = ...` a manifest declares, from every table Cargo reads.
+
+    `[workspace.dependencies]` is one of them. A path dependency declared there
+    and inherited by a member with `foo = { workspace = true }` is a workspace
+    member as surely as one listed in `members`: `cargo metadata` reports it in
+    `workspace_members` and `cargo build -p` builds it. Reading only the
+    per-crate tables left such a crate unchecked by all three clauses at once
+    -- no inherited lint, no forbid attribute, no allowlist entry -- which is
+    the retrofit the carve-out clause exists to make visible.
+    """
     tables = [manifest.get(table, {}) for table in DEPENDENCY_TABLES]
+    workspace = manifest.get("workspace")
+    if isinstance(workspace, dict):
+        tables.extend(workspace.get(table, {}) for table in DEPENDENCY_TABLES)
     for target in manifest.get("target", {}).values():
+        if not isinstance(target, dict):
+            continue
         tables.extend(target.get(table, {}) for table in DEPENDENCY_TABLES)
     for table in tables:
+        if not isinstance(table, dict):
+            continue
         for dependency in table.values():
             if isinstance(dependency, dict) and "path" in dependency:
                 yield dependency["path"]
@@ -160,6 +230,14 @@ def workspace_members(root, manifest, problems):
 
     if "package" in manifest:
         add(root, "Cargo.toml")
+    # A path dependency declared in the ROOT manifest's [workspace.dependencies]
+    # is a member too, and in a virtual workspace -- one whose root is not
+    # itself a package, which is this repository's shape -- nothing above walks
+    # the root manifest, so such a crate was reached by no path at all.
+    for path in path_dependencies(manifest):
+        dependency = (root / path).resolve()
+        if dependency.is_relative_to(root):
+            add(dependency, "Cargo.toml")
     for pattern in workspace.get("members", []):
         if any(character in pattern for character in "*?["):
             matches = sorted(path for path in root.glob(pattern) if path.is_dir())

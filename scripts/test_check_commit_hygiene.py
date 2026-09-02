@@ -26,6 +26,26 @@ spec.loader.exec_module(hygiene)
 FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 TRAILER = "Co-Authored-By: Claude <noreply@anthropic.com>"
 
+# Every co-authorship trailer is refused, whoever it names. CLAUDE.md's
+# Authorship section is explicit -- "NO `Co-Authored-By` trailer of any kind,
+# including one naming a human" -- and is stricter than Principle I on purpose.
+# Each of these passed until the key capture took in the `-by` suffix and the
+# trailer match became case-insensitive: the key of `Co-Authored-By:` read as
+# `Co-Authored`, so no rule keyed on the full name could see it.
+VALID = "feat(x): a thing\n\nCloses #1\n\n"
+CO_AUTHORSHIP = [
+    "Co-Authored-By: GitHub Copilot <copilot@github.com>",
+    "Co-authored-by: Cursor <hi@cursor.com>",
+    "Co-Authored-By: A Human <a@b.c>",
+    "co-authored-by: someone <x@y.z>",
+    "CO-AUTHORED-BY: SHOUTING <x@y.z>",
+]
+AI_TRAILERS = [
+    "Assisted-By: Claude <a@b.c>",
+    "Helped-With: Codex <a@b.c>",
+    "Reported-By: Devin <a@b.c>",
+]
+
 MUST_FAIL = [
     ("canonical footer", FOOTER),
     ("canonical footer in a code fence", f"```\n{FOOTER}\n```"),
@@ -53,6 +73,29 @@ MUST_PASS = [
     # Description of the tooling this repo integrates with.
     ("naming the integration", "chore(speckit): update the Claude Code integration\n\nCloses #2"),
     ("recording a review ran", "docs(x): note the round\n\nRound 2: 3 lenses, 29 agents, 13 refuted.\n\nCloses #11"),
+    # Principle I expressly permits recording that a review ran, and a
+    # sign-off is not a co-authorship claim.
+    ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
+    ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
+]
+
+# Asserted against the attribution matcher ALONE. `check_text` also runs the
+# Conventional-Commits and issue-reference rules, so a bare footer string fails
+# it whether or not the attribution matcher fires -- which is why every fixture
+# below carries a valid subject and issue reference, and why these are checked
+# through `attribution_problems` rather than through `check_message`.
+ATTRIBUTION_MUST_FAIL = (
+    [(f"co-authorship trailer: {t[:36]}", VALID + t) for t in CO_AUTHORSHIP]
+    + [(f"AI identity in {t.split(':')[0]}", VALID + t) for t in AI_TRAILERS]
+    + [("a trailer above a later paragraph",
+        "feat(x): a thing\n\nCo-Authored-By: X <a@b.c>\n\nCloses #1\n")]
+    + [("the canonical footer with a valid message around it", VALID + FOOTER)]
+)
+
+ATTRIBUTION_MUST_PASS = [
+    ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
+    ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
+    ("prose naming an integrated tool", VALID + "Note: the Claude Code integration lives in .claude/"),
 ]
 
 FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
@@ -60,10 +103,20 @@ FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gm
 
 
 def check_text(text):
-    """True when the message would be rejected."""
+    """True when the message would be rejected, for any reason."""
     problems = []
     hygiene.check_message(text, "test", problems)
     return bool(problems)
+
+
+def attributed(text):
+    """True when the message is rejected FOR ATTRIBUTION specifically.
+
+    `check_text` also runs the Conventional-Commits and issue-reference rules,
+    so a bare footer string fails it whether or not the attribution matcher
+    fires. A fixture proving an attribution rule must be tested against this.
+    """
+    return bool(hygiene.attribution_problems(text, "test"))
 
 
 def git(*args, cwd, **kw):
@@ -245,6 +298,16 @@ def main():
             hygiene.check_message(text, "t", problems)
             failures.append(f"{label}: expected PASS, got FAIL ({problems})")
 
+    # The attribution matcher on its own, so a case cannot be satisfied by the
+    # subject or issue-reference rule firing instead.
+    for label, text in ATTRIBUTION_MUST_FAIL:
+        if not hygiene.attribution_problems(text, "t"):
+            failures.append(f"{label}: expected an ATTRIBUTION problem, got none")
+    for label, text in ATTRIBUTION_MUST_PASS:
+        found = hygiene.attribution_problems(text, "t")
+        if found:
+            failures.append(f"{label}: expected no attribution problem, got {found}")
+
     for text, should_match in [
         ("Closes #7", True), ("Refs #7", True), ("See #7", True),
         ("tweak the palette to #000000", False),
@@ -258,7 +321,9 @@ def main():
 
     for failure in failures:
         print(f"FAIL  {failure}")
-    total = len(MUST_FAIL) + len(MUST_PASS) + 5 + 6 + signature_cases
+    total = (len(MUST_FAIL) + len(MUST_PASS)
+             + len(ATTRIBUTION_MUST_FAIL) + len(ATTRIBUTION_MUST_PASS)
+             + 5 + 6 + signature_cases)
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0
 

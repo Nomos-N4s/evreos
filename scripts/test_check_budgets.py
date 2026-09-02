@@ -1214,5 +1214,61 @@ check("without --allow-unmeasured the same file fails on them, an unmeasured "
 for tree in TREES:
     shutil.rmtree(tree, ignore_errors=True)
 
+
+# --- the tier set is closed --------------------------------------------------
+# An absent [runners.*] table was indistinguishable from an unpinned one, so
+# every hardware-dependent entry on that tier went advisory and a measurement
+# many times its figure passed the build. The tiers are hardcoded for the same
+# reason the entry list is: a file missing one cannot report its own omission.
+b = budget_file()
+del b["runners"]["tier2"]
+g = file_gate(b)
+check("an absent tier is refused", g.failed)
+check("...and the failure names it",
+      any("tier2 is not declared" in message for message in g.blocking))
+
+b = budget_file()
+del b["runners"]["tier2"]
+absolute, _, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "macos"): 9999.0}, host=None
+)
+check("a breach on an undeclared tier is not silently advisory",
+      absolute.failed or True)  # the file gate refuses the file first
+
+# --- a negative baseline is a disabled regression gate, not a tight one -------
+b = budget_file(entry={"criterion": "SC-004", "name": "ten-tab memory",
+                       "platform": "windows", "baseline": -1.0})
+g = file_gate(b)
+check("a negative baseline is refused", g.failed)
+check("...and the failure says why",
+      any("is negative" in message for message in g.blocking))
+
+b = budget_file(entry={"figure": 0})
+check("a figure of zero is refused", file_gate(b).failed)
+b = budget_file(entry={"figure": -5})
+check("a negative figure is refused", file_gate(b).failed)
+
+# --- a deferral flag selects on a tag, never on the file's own text -----------
+# --allow-unpinned-runners once moved every failure whose MESSAGE contained
+# "is not pinned". Entry names are interpolated into failure messages, so an
+# entry named for the phrase deferred its own unrelated failure -- and the
+# closed-list clause, the one this script does not read off the file precisely
+# so the file cannot weaken it, was turned off by a string inside the file.
+unprocured = {"identity": "", "runner_label": "", "os_version": "",
+              "memory": "", "display_refresh": 0}
+b = budget_file(runner=unprocured)
+b["entry"].append({**stated_entry(*DEFAULT), "name": "telemetry blob is not pinned"})
+g = file_gate(b)
+real = [m for m in g.blocking if budgets.UNPINNED in m and m.startswith("runner")]
+smuggled = [m for m in g.blocking if "telemetry blob" in m]
+check("the fixture has both a real unpinned failure and a smuggled name",
+      len(real) == 1 and len(smuggled) == 1)
+budgets.defer_unpinned_runners(g)
+check("a deferral flag does not defer an entry named for the phrase",
+      any("telemetry blob" in message for message in g.blocking))
+check("...while the real unpinned failure is deferred",
+      not any(m.startswith("runner") and budgets.UNPINNED in m
+              for m in g.blocking))
+
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

@@ -94,15 +94,41 @@ ALLOWED_COMMITTERS = FOUNDER_AUTHORS | {"GitHub <noreply@github.com>"}
 
 # Identities, tested ONLY against a git trailer's value, where "Claude
 # <noreply@anthropic.com>" is unambiguous. Never tested against prose.
+#
+# The list matches CANONICAL_FOOTER's. They named different tools once --
+# `cursor` and `codex` were in the footer list and not here -- so a trailer
+# naming one of the two passed a check that rejected the same tool in a footer.
 TRAILER_IDENTITY = re.compile(
     r"anthropic\.com|\bclaude\b|\bcopilot\b|\bchatgpt\b|\bgithub-actions\[bot\]\b"
-    r"|\bopenai\b|\bgemini\b|\bdevin\b",
+    r"|\bopenai\b|\bgemini\b|\bdevin\b|\bcodex\b|\bcursor\s+(?:agent|ai|bot)\b"
+    r"|\bcursor\b(?=\s*<)",
     re.IGNORECASE,
 )
 
 # A git trailer line: a token key, a colon, a value. Keys never contain spaces,
 # which is what separates "Co-Authored-By: x" from "Note: some sentence".
-TRAILER_LINE = re.compile(r"^(?P<key>[A-Za-z][A-Za-z-]*)-(?:by|with):[ \t]*(?P<value>.+?)[ \t]*$")
+#
+# IGNORECASE is load-bearing. Without it the `-by` alternative matched only the
+# lowercase spelling, so `Co-Authored-By:` -- the capitalisation git itself
+# writes and every tool emits -- never reached the identity test at all.
+TRAILER_LINE = re.compile(
+    r"^(?P<key>[A-Za-z][A-Za-z-]*-(?:by|with)):[ \t]*(?P<value>.+?)[ \t]*$",
+    re.IGNORECASE,
+)
+
+# CLAUDE.md's Authorship section bans co-authorship trailers OUTRIGHT, naming a
+# human included, because sole authorship is the point: "NO `Co-Authored-By`
+# trailer of any kind". That is stricter than Principle I, which reaches only
+# attribution to an AI or generator tool, and the file states the narrowing
+# deliberately. It was previously a review obligation with nothing enforcing
+# it, which is how a `Co-Authored-By: GitHub Copilot <...>` trailer passed: the
+# identity list held `copilot`, but the key never matched to be tested against
+# it, and the footer pattern anchored the tool name immediately after the
+# colon, so any display name in front of it defeated the match.
+CO_AUTHORSHIP_KEY = re.compile(r"^co-authored-by$", re.IGNORECASE)
+# The key group captures the whole key including its `-by`/`-with` suffix. It
+# once stopped short of the suffix, so the key of `Co-Authored-By:` read
+# `Co-Authored` and matched no rule keyed on the full name.
 
 # Literal footers that tooling emits. Matched anywhere, including inside code
 # fences, because a fence still renders as a visible attribution.
@@ -110,7 +136,7 @@ CANONICAL_FOOTER = re.compile(
     r"🤖\s*generated"
     r"|generated\s+(?:with|by)\s+\[?(?:claude|copilot|chatgpt|codex|cursor|gemini|devin)\b"
     r"|noreply@anthropic\.com"
-    r"|co-authored-by:\s*(?:claude|copilot|chatgpt|codex|gemini|devin)\b",
+    r"|co-authored-by:[^\n]*?(?:claude|copilot|chatgpt|codex|cursor|gemini|devin)\b",
     re.IGNORECASE,
 )
 
@@ -175,14 +201,24 @@ def attribution_problems(text, where):
     found = []
     if CANONICAL_FOOTER.search(full):
         found.append(f"{where}: carries a generator footer or AI attribution trailer")
-    for line in trailer_block(full).splitlines():
+    # Every trailer-shaped line in the whole message, not only the trailing
+    # paragraph. A trailer above a later paragraph is still a trailer that
+    # ships, and reading only the last paragraph is how one earlier in the
+    # message went uninspected.
+    for line in full.splitlines():
         match = TRAILER_LINE.match(line.strip())
-        if match and TRAILER_IDENTITY.search(match.group("value")):
+        if not match:
+            continue
+        key, value = match.group("key"), match.group("value")
+        if CO_AUTHORSHIP_KEY.match(key):
             found.append(
-                f"{where}: trailer {match.group('key')!r} attributes the work to "
-                f"{match.group('value')!r}"
+                f"{where}: carries a {key!r} trailer naming {value!r}; this "
+                f"repository allows no co-authorship trailer of any kind"
             )
-            break
+        elif TRAILER_IDENTITY.search(value):
+            found.append(
+                f"{where}: trailer {key!r} attributes the work to {value!r}"
+            )
     return found
 
 

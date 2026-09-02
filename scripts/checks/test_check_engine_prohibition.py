@@ -567,5 +567,52 @@ with tempfile.TemporaryDirectory() as tmp:
     result = run_check("--root", str(root), "--denylist", str(deny), "--metadata", str(root / "missing.json"))
     check("an unreadable metadata file exits 2", result.returncode == 2)
 
+
+# --- the toolchain file is parsed by content, not by extension ---------------
+# rustup honours the TOML form in the extensionless `rust-toolchain` too, and
+# reading that file's first line as a channel yields the literal "[toolchain]",
+# which matches no channel -- so the file that most directly puts the release
+# path on nightly was read and then misparsed into silence.
+for label, name, body, caught in (
+    ("TOML in the extensionless file", "rust-toolchain",
+     '[toolchain]\nchannel = "nightly"\n', True),
+    ("TOML in the .toml file", "rust-toolchain.toml",
+     '[toolchain]\nchannel = "nightly"\n', True),
+    ("the legacy plain form", "rust-toolchain", "nightly\n", True),
+    ("a custom toolchain path", "rust-toolchain",
+     '[toolchain]\npath = "/opt/rust-nightly"\n', True),
+    ("a pinned stable release", "rust-toolchain",
+     '[toolchain]\nchannel = "1.85.0"\n', False),
+    ("a table written as a string", "rust-toolchain.toml",
+     'toolchain = "nightly"\n', True),
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / name
+        path.write_text(body)
+        found = []
+        engine.check_toolchain_file(root, path, found)
+        check(f"toolchain, {label}", bool(found) is caught)
+
+# --- a feature attribute rustfmt has split across lines ----------------------
+# The per-line match needed `#![` and `feature(` on one line. rustfmt splits a
+# long cfg_attr exactly where that match breaks, so the spelling a formatter
+# actually produces was the one that passed.
+for label, source, caught in (
+    ("on one line", "#![cfg_attr(docsrs, feature(doc_cfg))]\n", True),
+    ("split by rustfmt", "#![cfg_attr(\n    nightly,\n    feature(let_chains)\n)]\n", True),
+    ("a split bare attribute", "#![\n    feature(let_chains)\n]\n", True),
+    ("a split argument list", "#![feature(\n    let_chains\n)]\n", True),
+    ("the word in prose", "// this feature (of the API) is stable\npub fn f() {}\n", False),
+    ("ordinary source", "pub fn f() {}\n", False),
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        path = root / "lib.rs"
+        path.write_text(source)
+        found = []
+        engine.check_rust_source_nightly(root, path, found)
+        check(f"feature attribute, {label}", bool(found) is caught)
+
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

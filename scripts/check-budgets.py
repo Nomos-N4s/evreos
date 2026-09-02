@@ -180,9 +180,22 @@ DECISION_CITATION = re.compile(r"^decisions/[0-9]{4}$")
 # migrated, and is named as such rather than reported as merely incomplete.
 RETIRED_FIELDS = ("figure_mb", "baseline_mb")
 
+# The two tiers, closed. Every entry's platform maps to exactly one, and the
+# budget file must declare both: the closed list of eighteen entries is checked
+# against this constant rather than read off the file, for the reason the entry
+# list is -- a file missing a tier cannot report its own omission. Before this
+# was closed, deleting a `[runners.*]` table made that tier indistinguishable
+# from an unpinned one, so every hardware-dependent entry on it went advisory
+# and a measurement thirty times its figure passed the build.
+TIER_OF = {"windows": "tier1", "macos": "tier2"}
+
 # The phrase every unpinned-runner failure carries. --allow-unpinned-runners
 # defers exactly the failures that carry it and nothing else.
 UNPINNED = "is not pinned"
+# The tag --allow-unpinned-runners selects on. The phrase above stays for the
+# reader; the tag is what the deferral matches, so no text in the budget file
+# can decide what a flag defers.
+UNPINNED_TAG = "unpinned-runner"
 
 # SC-005's two caps on the wake enumeration, in ms of processor time: what one
 # wake completes within, and what the enumerated wakes together consume in a
@@ -257,9 +270,20 @@ class Gate:
         self.name = name
         self.blocking = []
         self.advisory = []
+        self.tags = []
 
-    def block(self, message):
+    def block(self, message, tag=None):
+        """Record a blocking failure, optionally tagged.
+
+        `tag` is what a deferral flag selects on. It was once selected by
+        searching the message text for a phrase, which put the choice in the
+        hands of the file being judged: an entry whose *name* contained that
+        phrase deferred its own unrelated failure, and the closed-list clause --
+        the one this script does not read off the file precisely so the file
+        cannot weaken it -- was turned off by a string inside the file.
+        """
         self.blocking.append(message)
+        self.tags.append(tag)
 
     def advise(self, message):
         self.advisory.append(message)
@@ -395,10 +419,31 @@ def firings_in_window(period):
 def check_budget_file(budgets, gate):
     """The file must describe a state a gate can be run against."""
     runners = budgets.get("runners", {})
+    if not isinstance(runners, dict):
+        gate.block("runners must be a table of tiers; a verdict over a misread "
+                   "file is a verdict on nothing")
+        runners = {}
     if not runners:
         gate.block("no runners declared; every measured figure is reported against one")
 
+    # The tier set is closed for the same reason the entry list is: a file
+    # missing a tier cannot report its own omission, and an absent tier was
+    # indistinguishable from an unpinned one -- so deleting a [runners.*] table
+    # turned every hardware-dependent gate on that tier advisory and let a
+    # measurement many times its figure pass. This is stated against TIER_OF
+    # rather than against whatever the file happens to declare.
+    for tier in sorted(set(TIER_OF.values()) - set(runners)):
+        gate.block(
+            f"runner {tier} is not declared; the two tiers are closed, and an "
+            "absent tier is not an unpinned one -- every hardware-dependent "
+            "entry on it would go unreported rather than blocked"
+        )
+
     for tier, runner in runners.items():
+        if not isinstance(runner, dict):
+            gate.block(f"runner {tier}: must be a table, not "
+                       f"{type(runner).__name__}")
+            continue
         model = runner.get("model", "unnamed")
         if not isinstance(runner.get("runner_label", ""), str):
             gate.block(f"runner {tier} ({model}): runner_label must be a string")
@@ -413,7 +458,8 @@ def check_budget_file(budgets, gate):
             gate.block(
                 f"runner {tier} ({model}) {UNPINNED}: {', '.join(missing)}; until "
                 "it is procured and pinned no hardware-dependent figure is "
-                "reproducible and no workflow job can resolve it"
+                "reproducible and no workflow job can resolve it",
+                tag=UNPINNED_TAG,
             )
 
     entries = budgets.get("entry", [])
@@ -529,6 +575,28 @@ def check_budget_file(budgets, gate):
         if not is_number(figure) or not is_number(baseline):
             gate.block(f"{label}: figure and baseline must be numbers")
             continue
+        # A negative baseline is not a smaller baseline; it is a disabled
+        # regression gate. `run_gates` compares only when `baseline > 0`,
+        # because 0.0 means "not yet measured" and is documented as inert. A
+        # negative value is not a documented state and was accepted in silence,
+        # which on a hardware-dependent entry -- whose absolute gate is already
+        # advisory while the runner is unpinned -- left the entry with no
+        # blocking gate at all. This is the same reading the tolerance clause
+        # takes: the opposite one lets an entry disable its own gate by writing
+        # a number nobody would notice.
+        if baseline < 0:
+            gate.block(
+                f"{label}: baseline {baseline} is negative; a baseline is a "
+                "measured figure, and a negative one disables the regression "
+                "gate rather than tightening it"
+            )
+            continue
+        if figure <= 0:
+            gate.block(
+                f"{label}: figure {figure} is not positive; a budget that is "
+                "zero or negative is met by nothing and refuses everything"
+            )
+            continue
 
         # A provisional figure binds a baseline exactly as a ratified one does.
         # A provisional figure is a ceiling for as long as it stands, which is
@@ -628,9 +696,14 @@ def defer_unpinned_runners(gate):
     Q-E9a names are procured. Every other budget-file failure keeps blocking,
     which is what makes it a deferral rather than a way to turn the gate off.
     """
-    moved = [message for message in gate.blocking if UNPINNED in message]
-    gate.blocking = [message for message in gate.blocking if message not in moved]
-    gate.advisory.extend(moved)
+    kept, kept_tags = [], []
+    for message, tag in zip(gate.blocking, gate.tags):
+        if tag == UNPINNED_TAG:
+            gate.advisory.append(message)
+        else:
+            kept.append(message)
+            kept_tags.append(tag)
+    gate.blocking, gate.tags = kept, kept_tags
 
 
 # Where each tier's packaging build publishes its installer artefact, relative
@@ -724,7 +797,6 @@ def run_gates(budgets, measurements, host=None):
 
     runners = budgets.get("runners", {})
     pinned = {tier: not runner_missing(runner) for tier, runner in runners.items()}
-    tier_of = {"windows": "tier1", "macos": "tier2"}
 
     for entry in budgets.get("entry", []):
         label = entry_label(entry)
@@ -751,7 +823,7 @@ def run_gates(budgets, measurements, host=None):
             # exist does not, and a gate that passes it is a gate that certifies
             # a number nobody produced.
             hardware = entry["criterion"] in HARDWARE_DEPENDENT
-            tier = tier_of.get(platform)
+            tier = TIER_OF.get(platform)
             if hardware and not pinned.get(tier, False):
                 unmeasured.append((label, "no pinned runner for this tier", False))
             elif not hardware and platform != host:
@@ -778,7 +850,7 @@ def run_gates(budgets, measurements, host=None):
         tolerance = entry.get("tolerance_pct", 0.0)
 
         hardware = entry["criterion"] in HARDWARE_DEPENDENT
-        tier = tier_of.get(entry["platform"])
+        tier = TIER_OF.get(entry["platform"])
         runner_pinned = pinned.get(tier, False)
         exemption = spike_exemption_of(entry)
 

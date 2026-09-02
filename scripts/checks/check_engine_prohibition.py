@@ -543,11 +543,23 @@ def check_toolchain_file(root, path, problems):
     text = read_text(path)
     if text is None:
         return
-    if path.suffix == ".toml":
+    # Discriminate on CONTENT, not on the extension. rustup honours the TOML
+    # form in the extensionless `rust-toolchain` too, and reading that file's
+    # first line as a channel yields the literal "[toolchain]", which matches
+    # no channel pattern -- so the single file that most directly puts the
+    # release path on nightly was read and then silently misparsed.
+    stripped = text.strip()
+    if stripped.startswith("[toolchain]") or path.suffix == ".toml":
         try:
             toolchain = load_toml(path).get("toolchain", {})
         except tomllib.TOMLDecodeError as error:
             problems.append(f"{where}: {error}")
+            return
+        if not isinstance(toolchain, dict):
+            problems.append(
+                f"{where}: [toolchain] is {type(toolchain).__name__}, not a table; "
+                "a verdict over a misread file is a verdict on nothing"
+            )
             return
         channel = str(toolchain.get("channel", ""))
         if "path" in toolchain:
@@ -556,7 +568,7 @@ def check_toolchain_file(root, path, problems):
                 "path builds on the stable channel and nothing this check can classify"
             )
     else:
-        channel = text.strip().splitlines()[0] if text.strip() else ""
+        channel = stripped.splitlines()[0] if stripped else ""
     if UNSTABLE_CHANNEL.match(channel):
         problems.append(
             f"{where}: selects the {channel.strip()!r} toolchain; Principle III requires stable "
@@ -675,14 +687,42 @@ def check_workflow_nightly(root, path, problems):
 
 
 def check_rust_source_nightly(root, path, problems):
+    """Feature attributes and RUSTC_BOOTSTRAP in one crate root.
+
+    The feature attribute is matched over a JOINED window rather than one line
+    at a time. rustfmt splits a long `#![cfg_attr(nightly, feature(...))]`
+    across lines, and a per-line match needs `#![` and `feature(` on the same
+    one -- so the split form, which is what a formatter actually produces, was
+    not caught while the single-line form was. The window is the comment-free
+    lines of the file joined with spaces; the reported line is the one the
+    attribute opens on.
+    """
     where = relative(root, path)
-    for number, line in code_lines(path):
-        if FEATURE_ATTRIBUTE.search(line):
-            problems.append(
-                f"{where}:{number}: carries a feature attribute, {line.strip()!r}; nightly "
-                "features are not permitted on the release path"
-            )
-        elif "RUSTC_BOOTSTRAP" in line:
+    lines = list(code_lines(path))
+    joined, offsets = [], []
+    for number, line in lines:
+        offsets.append((len("".join(joined)) + len(joined), number))
+        joined.append(line.strip())
+    window = " ".join(joined)
+
+    def line_of(position):
+        found = lines[0][0] if lines else 0
+        for start, number in offsets:
+            if start <= position:
+                found = number
+            else:
+                break
+        return found
+
+    for match in FEATURE_ATTRIBUTE.finditer(window):
+        number = line_of(match.start())
+        problems.append(
+            f"{where}:{number}: carries a feature attribute, "
+            f"{window[match.start():match.start() + 60].strip()!r}; nightly "
+            "features are not permitted on the release path"
+        )
+    for number, line in lines:
+        if "RUSTC_BOOTSTRAP" in line:
             problems.append(
                 f"{where}:{number}: names RUSTC_BOOTSTRAP, whose only use is nightly features"
             )
