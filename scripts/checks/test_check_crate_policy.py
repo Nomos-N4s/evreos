@@ -546,6 +546,19 @@ for label, source, forbids in (
     # the crate. Accepting it would let a crate root carrying nothing else pass.
     ("an outer attribute is not the crate forbid",
      "#[forbid(unsafe_code)]\npub fn f() {}\n", False),
+    # rustfmt leaves these alone but a person writes them, and they compile.
+    # The pattern allows whitespace inside the brackets and around the call for
+    # that reason; nothing held it to that, so the spacing could be dropped and
+    # a crate that does forbid unsafe would be reported as omitting it.
+    ("padding inside the brackets still counts",
+     "#![ forbid(unsafe_code) ]\n", True),
+    ("padding around the argument list still counts",
+     "#![forbid ( unsafe_code )]\n", True),
+    # The lint list is bounded by the closing parenthesis, not by the end of
+    # the line. Without that bound a second attribute on the same line would be
+    # swallowed into the list and the forbid would stop being recognised.
+    ("a second attribute on the same line does not swallow the list",
+     "#![forbid(unsafe_code)] #[cfg(test)]\n", True),
     ("an attribute mid-statement does not count",
      "let x = 1; #![forbid(unsafe_code)]\n", False),
     # The raw-string hash count must match exactly. With `r##"..."##`, a `"#`
