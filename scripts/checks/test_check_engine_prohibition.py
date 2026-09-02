@@ -205,6 +205,14 @@ check("beta is not stable",
 # one space is all it takes to select nightly unseen -- and rustup reads the
 # value as TOML, which does not trim inside the quotes, so this is a spelling
 # that behaves differently from how it reads.
+# The trailing word bound. `nightly` and `nightly-2026-08-01` are the channel;
+# a custom toolchain linked under a longer name that merely begins with those
+# letters is not, and the pattern says so by requiring the word to end. Without
+# the bound the check reports a toolchain it cannot actually know is nightly.
+check("a custom toolchain whose name begins with the channel word passes",
+      nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "nightlyfork"\n')) == [])
+check("...while the dated channel still fails",
+      nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly-2026-08-01"\n')))
 check("a channel padded with a space is still nightly",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = " nightly"\n')))
 check("a custom toolchain path fails",
@@ -226,6 +234,21 @@ check("a -Z rustflag fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", '[build]\nrustflags = ["-Zbuild-std"]\n')))
 check("a -Z rustflag on a target table fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", '[target.x86_64-pc-windows-msvc]\nrustflags = "-C target-feature=+crt-static -Zshare-generics"\n')))
+# The other key each loop reads. `rustflags` and `rustc` were fixtured and their
+# siblings were not, so either could be dropped from its tuple and a nightly
+# flag or a nightly compiler named under it would go unreported.
+check("a -Z rustdocflag fails",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       '[build]\nrustdocflags = ["-Zunstable-options"]\n')))
+check("a nightly rustc-wrapper fails",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       '[build]\nrustc-wrapper = "/usr/bin/rustc-nightly"\n')))
+check("a nightly rustc-workspace-wrapper fails",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       '[build]\nrustc-workspace-wrapper = "rustc-nightly"\n')))
+check("a nightly rustc fails",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       '[build]\nrustc = "/opt/rust-nightly/bin/rustc"\n')))
 check("RUSTC_BOOTSTRAP in [env] fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", '[env]\nRUSTC_BOOTSTRAP = "1"\n')))
 check("RUSTUP_TOOLCHAIN in [env] pointing at nightly fails",
@@ -289,6 +312,14 @@ def wf(root, text):
 
 
 # Installing a non-stable toolchain, under either spelling rustup accepts.
+# The `-Z` match requires a cargo or rustc word on the same line, because `-Z`
+# alone is too common a letter in other tools' flags. Both halves of that guard
+# were unpinned: the lookahead could be dropped and an unrelated tool's flag
+# would read as a nightly one.
+check("a -Z flag on a cargo line fails",
+      nightly_problems(lambda r: wf(r, "run: cargo build -Zbuild-std\n")))
+check("a -Z flag on a line naming no toolchain tool passes",
+      nightly_problems(lambda r: wf(r, "run: tar -Zcf archive.tar.gz src\n")) == [])
 check("a workflow installing nightly fails",
       nightly_problems(lambda r: wf(r, "run: rustup toolchain install nightly --profile minimal\n")))
 check("rustup install, the alias of toolchain install, fails",
