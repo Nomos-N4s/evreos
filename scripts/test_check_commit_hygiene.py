@@ -105,6 +105,11 @@ SUBJECT_MUST_FAIL = [
     ("capitalised subject", "feat(x): Add a thing\n\nCloses #1"),
     ("empty subject", "feat(x): \n\nCloses #1"),
     ("scope with a space", "feat(the ui): a thing\n\nCloses #1"),
+    # The separator is a colon and exactly one space. Relaxing it to any run of
+    # whitespace admits `fix:a thing`, which is not the convention and which
+    # every other tool reading these messages would parse differently.
+    ("no space after the colon", "fix:a thing\n\nCloses #1"),
+    ("two spaces after the colon", "fix:  a thing\n\nCloses #1"),
 ]
 SUBJECT_MUST_PASS = [
     # Every type the rule admits. Five of the eleven -- revert, style, perf,
@@ -125,6 +130,9 @@ SUBJECT_MUST_PASS = [
     # dropped from the exemption and a message git itself produced would be
     # refused for the shape git gives it.
     ("a squash subject", "squash! feat(x): a thing"),
+    # The subject is read from the STRIPPED message, so leading blank lines do
+    # not make the subject empty and the whole message unreadable.
+    ("a message with leading blank lines", "\n\nfeat(x): a thing\n\nCloses #1"),
 ]
 ISSUE_MUST_FAIL = [
     ("no reference at all", "feat(x): a thing\n\nA body with no link."),
@@ -144,6 +152,8 @@ ISSUE_MUST_FAIL = [
     ("a keyword run into the number", "feat(x): a thing\n\nCloses#12"),
     ("a keyword inside a longer word", "feat(x): a thing\n\nThe autocloses #12 path."),
     ("refs inside a longer word", "feat(x): a thing\n\nIt unrefs #3 on drop."),
+    # The number ends at a word bound, so a reference run into a word is not one.
+    ("a number run into a word", "feat(x): a thing\n\nCloses #12abc"),
 ]
 ISSUE_MUST_PASS = [
     ("Closes", "feat(x): a thing\n\nCloses #1"),
@@ -158,6 +168,13 @@ ISSUE_MUST_PASS = [
     ("Resolves", "feat(x): a thing\n\nResolves #1"),
     ("Resolve", "feat(x): a thing\n\nResolve #1"),
     ("Ref", "feat(x): a thing\n\nRef #1"),
+    # The issue search runs over the FOLDED message, the same text the
+    # attribution rules read. A keyword split by an invisible character is
+    # therefore still a link -- which is the reading that matches what a person
+    # sees, and the alternative would refuse a message whose reference is
+    # visibly there. Nothing pinned the fold on this path.
+    ("a keyword split by a zero-width space",
+     "feat(x): a thing\n\nClo\u200bses #12"),
 ]
 
 # Read directly against the pattern rather than through a whole message, so a
@@ -194,6 +211,14 @@ ATTRIBUTION_MUST_PASS = [
      VALID + "> Co-authored-by: is rejected however it is spelled."),
     ("a bulleted key with a name but no address",
      VALID + "- Co-authored-by: nobody in particular here"),
+    # The co-authorship key is matched whole. A longer key that merely begins
+    # with it is a different trailer and is judged on its value like any other.
+    # The key is matched WHOLE. A longer key that merely begins with it is a
+    # different trailer and is judged on its value like any other -- and it has
+    # to end in `-by` or `-with` to be read as a trailer at all, which is why
+    # the fixture is shaped this way rather than as an obvious near-miss.
+    ("a longer key beginning with the co-authorship key",
+     VALID + "Co-authored-by-and-reviewed-by: A Human <a@b.c>"),
     # The identity a marked line must carry is anchored to the FRONT of the
     # value: a real trailer names its author first, and prose does not. Both
     # anchors carry the whole of that distinction, and nothing held them --
@@ -229,6 +254,10 @@ ATTRIBUTION_MUST_FAIL_EXTRA = [
      VALID + "\n\nGenerated with Cursor"),
     ("an AI identity in a non-co-authorship trailer, gemini",
      VALID + "Reviewed-by: Gemini <g@example.com>"),
+    ("an AI identity in a non-co-authorship trailer, openai",
+     VALID + "Reviewed-by: OpenAI <o@example.com>"),
+    ("a cursor agent in a non-co-authorship trailer",
+     VALID + "Reviewed-by: Cursor Agent <c@example.com>"),
     # The footer branch admits a linked tool name and any run of whitespace
     # after the verb, which is what a wrapped or bulleted footer looks like.
     ("a generator footer with the tool name linked",
@@ -458,6 +487,45 @@ def end_to_end(failures):
         cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook rejected a merge subject")
+
+        # The pull request title and body. CI writes each to a file and passes
+        # it, and the script reads both through the same loop -- which nothing
+        # ran: every invocation in this suite passed a range or a message, so
+        # either half of that tuple could be dropped and the attribution rules
+        # would stop reaching the text a reviewer actually reads first.
+        body = pathlib.Path(tmp) / "pr-body.txt"
+        title = pathlib.Path(tmp) / "pr-title.txt"
+        body.write_text("A clean description.\n")
+        title.write_text("feat(x): a clean title\n")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD",
+                     "--pr-body", str(body), "--pr-title", str(title)).returncode != 0:
+            failed("a clean pull request title and body were rejected")
+
+        body.write_text(f"A description.\n\n{FOOTER}\n")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-body", str(body))
+        if result.returncode != 1:
+            failed("a generator footer in the pull request BODY was accepted")
+        elif "pull request body" not in result.stdout + result.stderr:
+            failed("the pull request body was not named as the source")
+
+        body.write_text("A description.\n")
+        title.write_text(f"feat(x): {FOOTER}\n")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title))
+        if result.returncode != 1:
+            failed("a generator footer in the pull request TITLE was accepted")
+        elif "pull request title" not in result.stdout + result.stderr:
+            failed("the pull request title was not named as the source")
+
+        # Only attribution is applied to them. A title is not a commit subject
+        # and carries no issue reference, so running the message rules over it
+        # would refuse every pull request this repository opens.
+        title.write_text("Some title with no conventional prefix\n")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title)).returncode != 0:
+            failed("the pull request title was held to the commit-message rules")
 
     return cases
 
