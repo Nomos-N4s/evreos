@@ -160,6 +160,15 @@ ISSUE_MUST_PASS = [
     ("Ref", "feat(x): a thing\n\nRef #1"),
 ]
 
+# Read directly against the pattern rather than through a whole message, so a
+# `#` that is not an issue reference is judged on the pattern alone.
+ISSUE_REF_DIRECT = [
+    ("Closes #7", True), ("Refs #7", True), ("See #7", True),
+    ("tweak the palette to #000000", False),
+    ("https://example.com/guide#2-setup", False),
+]
+ISSUE_REF_CASES = len(ISSUE_REF_DIRECT)
+
 ATTRIBUTION_MUST_PASS = [
     ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
     ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
@@ -195,6 +204,12 @@ ATTRIBUTION_MUST_PASS = [
      VALID + "- Reviewed-by: the checker rejects claude; write to me@example.com"),
     ("a bulleted sentence citing an address mid-line",
      VALID + "- Co-authored-by: a line like a@b.example is prose, not a trailer."),
+    # The two alternatives are anchored separately, and the cases above reach
+    # only the second: a bare address. This one carries an address IN ANGLES
+    # with prose before it, which is the first alternative's shape, so it is
+    # the only case that can tell whether that anchor is there.
+    ("a bulleted sentence citing an angle-bracketed address after prose",
+     VALID + "- Reviewed-by: use <angle> markers, ask claude <a@b.example>"),
     # A signature block QUOTED in a message body is not a signature: the kind
     # is read from the object header, not from anywhere in the text.
     ("a message quoting a signature block",
@@ -325,7 +340,18 @@ def run_check(cwd, *args, env=None):
 
 
 def end_to_end(failures):
-    """Exercise author, committer, exit codes and the hook in a real repo."""
+    """Exercise author, committer, exit codes and the hook in a real repo.
+
+    Returns the number of cases, so the summary line counts what actually ran.
+    It was a literal `10` while twelve assertions sat here, which is the same
+    defect as any other number nobody recomputes -- and in a test suite it
+    misreports the one figure the suite exists to report.
+    """
+    cases = 0
+
+    def failed(label):
+        failures.append(f"end-to-end: {label}")
+
     with tempfile.TemporaryDirectory() as tmp:
         env_ok = FOUNDER_ENV
         git("init", "-q", "-b", "main", cwd=tmp)
@@ -343,11 +369,13 @@ def end_to_end(failures):
             git("commit", "-q", "-m", msg, cwd=tmp, env=env)
 
         commit("feat(a): good commit\n\nCloses #2")
+        cases += 1
         if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: a compliant commit was rejected")
 
         commit("feat(b): wrong author\n\nCloses #3",
                GIT_AUTHOR_NAME="Someone Else", GIT_AUTHOR_EMAIL="x@y.z")
+        cases += 1
         if run_check(tmp, "--range", f"{base}..HEAD").returncode != 1:
             failures.append("end-to-end: a wrong-author commit was accepted")
 
@@ -359,7 +387,9 @@ def end_to_end(failures):
         git("reset", "-q", "--hard", base, cwd=tmp)
         commit("feat(c): committed by a bot\n\nCloses #4",
                GIT_COMMITTER_NAME="Some Bot", GIT_COMMITTER_EMAIL="bot@example.com")
+        cases += 1
         result = run_check(tmp, "--range", f"{base}..HEAD")
+        cases += 1
         if result.returncode != 1:
             failures.append("end-to-end: a wrong-committer commit was accepted")
         elif "committer is" not in result.stdout + result.stderr:
@@ -370,6 +400,7 @@ def end_to_end(failures):
         git("reset", "-q", "--hard", base, cwd=tmp)
         commit("feat(d): committed by the forge\n\nCloses #5",
                GIT_COMMITTER_NAME="GitHub", GIT_COMMITTER_EMAIL="noreply@github.com")
+        cases += 1
         if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: the forge as committer was rejected")
 
@@ -377,12 +408,33 @@ def end_to_end(failures):
         git("reset", "-q", "--hard", base, cwd=tmp)
         commit("feat(e): the founder's other display name\n\nCloses #6",
                GIT_AUTHOR_NAME="Carlos Pinto", GIT_COMMITTER_NAME="Carlos Pinto")
+        cases += 1
         if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: the founder's other display name was rejected")
+
+        # The two sets are NOT the same set, and this is the case that says so.
+        # The forge is an allowed committer and is not an allowed author: it is
+        # infrastructure recording that it performed a merge, never a party that
+        # wrote anything. Every existing case pairs a permitted author with a
+        # permitted committer or a forbidden one with a forbidden one, so the
+        # author test could have read `ALLOWED_COMMITTERS` and the suite would
+        # not have noticed -- which is exactly the distinction this branch spent
+        # two rounds settling.
+        git("reset", "-q", "--hard", base, cwd=tmp)
+        commit("feat(f): authored by the forge\n\nCloses #7",
+               GIT_AUTHOR_NAME="GitHub", GIT_AUTHOR_EMAIL="noreply@github.com")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD")
+        cases += 1
+        if result.returncode != 1:
+            failures.append("end-to-end: the forge as AUTHOR was accepted")
+        elif "author is" not in result.stdout + result.stderr:
+            failures.append("end-to-end: the forge as author was not named as such")
 
         git("reset", "-q", "--hard", base, cwd=tmp)
 
         # An unresolvable range exits 2, not a traceback.
+        cases += 1
         if run_check(tmp, "--range", "nope..alsonope").returncode != 2:
             failures.append("end-to-end: unresolvable range did not exit 2")
 
@@ -394,15 +446,20 @@ def end_to_end(failures):
             "# ------------------------ >8 ------------------------\n"
             f"diff --git a/x b/x\n+{FOOTER}\n"
         )
+        cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook flagged git's comment block or diff")
         msg.write_text(f"feat(x): add thing\n\nCloses #1\n\n{TRAILER}\n")
+        cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 1:
             failures.append("end-to-end: hook accepted a co-author trailer")
         # A merge subject is exempt from the subject and issue rules.
         msg.write_text("Merge branch 'main' into feature\n")
+        cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook rejected a merge subject")
+
+    return cases
 
 
 def signatures(failures):
@@ -611,15 +668,11 @@ def main():
         if found:
             failures.append(f"issue {label}: expected none, got {found}")
 
-    for text, should_match in [
-        ("Closes #7", True), ("Refs #7", True), ("See #7", True),
-        ("tweak the palette to #000000", False),
-        ("https://example.com/guide#2-setup", False),
-    ]:
+    for text, should_match in ISSUE_REF_DIRECT:
         if bool(hygiene.ISSUE_REF.search(text)) != should_match:
             failures.append(f"issue ref {text!r}: expected {should_match}")
 
-    end_to_end(failures)
+    end_to_end_cases = end_to_end(failures)
     signature_cases = signatures(failures)
 
     for failure in failures:
@@ -629,7 +682,7 @@ def main():
              + len(ATTRIBUTION_MUST_PASS)
              + len(SUBJECT_MUST_FAIL) + len(SUBJECT_MUST_PASS)
              + len(ISSUE_MUST_FAIL) + len(ISSUE_MUST_PASS)
-             + 5 + 10 + signature_cases)
+             + ISSUE_REF_CASES + end_to_end_cases + signature_cases)
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0
 
