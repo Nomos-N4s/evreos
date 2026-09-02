@@ -3,6 +3,7 @@
 its own behaviour is checked rather than assumed."""
 import datetime
 import importlib.util
+import io
 import os
 import shutil
 import subprocess
@@ -1374,6 +1375,124 @@ def main_gate_lengths(path):
 lengths = main_gate_lengths(Path(__file__).resolve().parent.parent / "budgets.toml")
 check("main() leaves blocking and tags in step",
       bool(lengths) and all(b == t for b, t in lengths.values()))
+
+# --- main()'s own decisions --------------------------------------------------
+# Three of them, and each is a place where a gate can report a breach and not
+# block on it. The gates themselves are exercised directly above; what is
+# exercised here is main()'s assembly of them, which is a separate thing and
+# was pinned only for the budget-file gate.
+
+def as_toml(b):
+    """The fixture dict as the file the script reads. There is no TOML writer
+    in the standard library and the shapes here are three levels deep at most,
+    so this writes exactly those shapes and nothing more."""
+
+    def value(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, (int, float)):
+            return repr(v)
+        if isinstance(v, dict):
+            inner = ", ".join(f"{k} = {value(x)}" for k, x in v.items())
+            return "{ " + inner + " }"
+        return '"' + str(v).replace('"', '\\"') + '"'
+
+    out = []
+    # An empty enumeration is written as `wake = []`, which the gate requires:
+    # a file with none must say so rather than omit the key. A writer that
+    # emitted nothing for an empty list produced a file the gate refused, which
+    # is the gate working.
+    if not b.get("wake"):
+        out.append("wake = []")
+        out.append("")
+    for tier, runner in b.get("runners", {}).items():
+        out.append(f"[runners.{tier}]")
+        out += [f"{k} = {value(v)}" for k, v in runner.items()]
+        out.append("")
+    for entry in b.get("entry", []):
+        out.append("[[entry]]")
+        out += [f"{k} = {value(v)}" for k, v in entry.items()]
+        out.append("")
+    for wake in b.get("wake", []):
+        out.append("[[wake]]")
+        out += [f"{k} = {value(v)}" for k, v in wake.items()]
+        out.append("")
+    return "\n".join(out) + "\n"
+
+
+def run_main(b, *flags, host=None, megabytes=None):
+    """main() over this fixture, with the host and its one measurement supplied.
+
+    main() calls `host_platform()` and `measure_download_size()` with their
+    defaults, so a test cannot reach the measuring path without standing in for
+    both -- which is why nothing did, and why main()'s keying and its failing
+    set were unpinned while `run_gates`' were not.
+    """
+    with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+        handle.write(as_toml(b))
+        path = handle.name
+    saved = (sys.argv, budgets.host_platform, budgets.measure_download_size,
+             sys.stdout, sys.stderr)
+    out, err = io.StringIO(), io.StringIO()
+    budgets.host_platform = lambda *a, **k: host
+    budgets.measure_download_size = lambda *a, **k: budgets.DownloadSize(
+        host, megabytes, None if megabytes is not None else "no artefact")
+    sys.argv = ["check-budgets.py", "--budgets", path, *flags]
+    sys.stdout, sys.stderr = out, err
+    try:
+        code = budgets.main()
+    except SystemExit as exit:
+        code = exit.code
+    finally:
+        (sys.argv, budgets.host_platform, budgets.measure_download_size,
+         sys.stdout, sys.stderr) = saved
+        os.unlink(path)
+    return code, out.getvalue(), err.getvalue()
+
+
+# The file gate alone was pinned in main()'s failing set, so `absolute` or
+# `regression` could be dropped from it and a gate would print its FAIL line and
+# return zero -- a gate that reports and does not block, which is the defect
+# class T012 exists for.
+b = budget_file(entry={"figure": 20})
+code, out, err = run_main(b, "--allow-unmeasured", host="windows", megabytes=400.0)
+check("main() fails when only the absolute gate fails", code == 1)
+check("...naming that gate", "FAILED: absolute" in err)
+check("...having reported the breach", "400.000 MB exceeds 20 MB" in err)
+
+b = budget_file(entry={"figure": 500, "baseline": 100.0, "tolerance_pct": 5.0})
+code, out, err = run_main(b, "--allow-unmeasured", host="windows", megabytes=200.0)
+check("main() fails when only the regression gate fails", code == 1)
+check("...naming that gate", "FAILED: regression" in err)
+
+b = budget_file(entry={"figure": 500})
+code, out, err = run_main(b, "--allow-unmeasured", host="windows", megabytes=5.0)
+check("main() passes when no gate fails", code == 0)
+
+# main()'s measurement key. `run_gates` keying on the platform and
+# measure_download_size declaring one are both pinned; main()'s assembly of the
+# two into a key was not, and hardcoding a platform there is the T012 defect
+# exactly -- one host's artefact judged against another platform's entry.
+b = budget_file()
+for entry in b["entry"]:
+    if entry["criterion"] == "SC-001" and entry["name"] == "download size":
+        entry["figure"] = 20 if entry["platform"] == "macos" else 9999
+code, out, err = run_main(b, "--allow-unmeasured", host="macos", megabytes=400.0)
+check("a macos measurement is judged against the macos entry",
+      code == 1 and "download size (macos)" in err)
+check("...and not against the windows entry",
+      "download size (windows): measured" not in err)
+
+# The flag's conditionality. Every other invocation passes
+# --allow-unpinned-runners, so only the deferral's ON state was pinned: making
+# it unconditional left the suite green, and that flag's conditionality is what
+# bounds the advisory period the constitution's Principle II entry cites.
+b = budget_file(runner={"identity": "", "runner_label": ""})
+code, out, err = run_main(b, "--allow-unmeasured", host=None)
+check("without the flag an unpinned runner blocks", code == 1 and "is not pinned" in err)
+code, out, err = run_main(b, "--allow-unmeasured", "--allow-unpinned-runners", host=None)
+check("...and with it the same file passes, the failure filed as advisory",
+      code == 0 and "is not pinned" in out)
 
 # The unmeasured branch's own undeclared-tier case, which had no test at all:
 # reverting the branch left the whole suite green. An entry on a tier the file
