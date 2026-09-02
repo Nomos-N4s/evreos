@@ -9,16 +9,20 @@ Criteria preamble defines three gates and says they are defined there and only
 there. This script is those three, and it adds none of its own.
 
   BUDGET FILE  fails when the file does not describe a gateable state: an entry
-               a criterion states is missing, a baseline above the entry's
-               stated figure, or a runner not pinned. Not hardware dependent --
-               it compares numbers in a file -- so it blocks from M0
-               unconditionally. It is what bounds the advisory period on the
-               absolute gate, rather than leaving that to good intentions. It
-               also fails on a file this script cannot read as the schema
-               states it -- a figure with no unit, or in a unit its criterion
-               does not state; a spike exemption, baseline reset or wake
-               lacking a field its schema names -- because a verdict over a
-               misread file is a verdict on nothing.
+               the preamble's closed list states is absent, a ratified entry
+               naming no recorded founder decision, a baseline above the
+               entry's stated figure, an SC-004 entry declaring no cross-check
+               margin or one outside its cap, a baseline reset naming no
+               recorded decision or leaving a baseline above the figure, or a
+               runner not pinned. Not hardware dependent -- it compares numbers
+               in a file -- so it blocks from M0 unconditionally. It is what
+               bounds the advisory period on the absolute gate, rather than
+               leaving that to good intentions. It also fails on a file this
+               script cannot read as the schema states it -- a figure with no
+               unit, or in a unit its criterion does not state; a spike
+               exemption, baseline reset or wake lacking a field its schema
+               names -- because a verdict over a misread file is a verdict on
+               nothing.
 
   ABSOLUTE     fails when a measured figure exceeds its stated value. On a
                hardware-dependent entry this is advisory until that tier's
@@ -30,8 +34,26 @@ there. This script is those three, and it adds none of its own.
                by more than its declared tolerance. It compares one machine
                against itself, so it blocks from M0 on every entry.
 
-An UNDECLARED TOLERANCE IS ZERO, not unbounded. That direction matters: the
-opposite reading lets an entry disable its own regression gate by omission.
+THE CLOSED LIST IS READ FROM THIS SCRIPT, not off the file. A file that is
+missing an entry cannot report its own omission, and iterating the entries a
+file declares is exactly asking it to. So the eighteen entries the preamble
+states are written here and the file is compared against them, in both
+directions: one it lacks is absent, one it adds is stated by no criterion.
+Adding an entry is an amendment to the specification, made in the change that
+states the figure, and that change extends this list.
+
+An UNDECLARED TOLERANCE IS ZERO, not unbounded, and so is an undeclared
+cross-check margin. That direction matters: the opposite reading lets an entry
+disable its own regression gate, or SC-004 its whole-machine cross-check, by
+omission. The budget-file gate goes one step further on SC-004 and fails an
+entry that declares no margin, because the preamble requires the declaration on
+that entry; reading absence as zero is what keeps the cross-check strict rather
+than absent on a file this gate has already refused.
+
+A RATIFIED FIGURE NAMES THE DECISION THAT SET IT, in the decision register's
+citation form, decisions/NNNN, and so does a baseline reset. A name, a clarify
+question or a bare "yes" is not a citation: the gate can read a citation off
+the file and can read nothing off a description.
 
 A FIGURE IS COMPARED ONLY IN ITS CRITERION'S UNIT. Every entry states its unit,
 and the unit is the one its criterion states -- MB, ms or percent-of-core -- so
@@ -50,6 +72,7 @@ is not a pass.
 import argparse
 import datetime
 import os
+import re
 import subprocess
 import sys
 import tomllib
@@ -62,8 +85,13 @@ REPO = Path(__file__).resolve().parent.parent
 HARDWARE_DEPENDENT = {"SC-002", "SC-004", "SC-005", "SC-006"}
 
 # The tolerance cap the Success Criteria preamble sets, as a percentage of the
-# entry's baseline.
+# entry's baseline. SC-004's cross-check margin is "declared and justified
+# exactly as a tolerance is": a percentage of the summed per-process figure its
+# cross-check compares against, under the same cap. The preamble sets one limit
+# and no second one for the margin, and a percentage is the only form in which
+# a gate that reads a file and no measurement can compare a margin against it.
 MAX_TOLERANCE_PCT = 5.0
+MAX_CROSS_CHECK_MARGIN_PCT = MAX_TOLERANCE_PCT
 
 # The units a figure may be stated in, and the unit each criterion states its
 # figures in. A criterion absent here states no figure and carries no entry:
@@ -76,6 +104,32 @@ UNIT_OF = {
     "SC-005": "percent-of-core",
     "SC-006": "ms",
 }
+
+# The entries the Success Criteria preamble closes over, by criterion: nine per
+# platform, eighteen across tier 1 and tier 2. The gate compares the file
+# against this list rather than reading the list off the file, because a file
+# missing an entry cannot report its own omission. Adding an entry is an
+# amendment to the specification, and the change that states the figure adds
+# it here.
+PLATFORMS = ("windows", "macos")
+STATED_ENTRIES = {
+    "SC-001": ("download size", "installed footprint"),
+    "SC-002": ("warm start", "cold start"),
+    "SC-004": ("ten-tab memory",),
+    "SC-005": ("60-minute window", "wake-free 1-second sample"),
+    "SC-006": ("tab switch", "address-field keystroke"),
+}
+CLOSED_LIST = frozenset(
+    (criterion, name, platform)
+    for criterion, names in STATED_ENTRIES.items()
+    for name in names
+    for platform in PLATFORMS
+)
+
+# The decision register's citation form. A ratified figure is one a recorded
+# founder decision set, and a baseline is reset upward only by one, so both
+# name the decision in the form the register is cited by.
+DECISION_CITATION = re.compile(r"^decisions/[0-9]{4}$")
 
 # Field names the schema retired. An entry still written with them was not
 # migrated, and is named as such rather than reported as merely incomplete.
@@ -110,6 +164,14 @@ def is_date(value):
     return isinstance(value, datetime.date)
 
 
+def is_decision_citation(value):
+    """A recorded founder decision, cited as the register cites it:
+    decisions/NNNN. A name, a clarify question or a bare "yes" is not one; the
+    gate can read a citation off the file and can read nothing off a
+    description."""
+    return isinstance(value, str) and DECISION_CITATION.match(value) is not None
+
+
 # The sub-tables an entry may carry and the wake table, each as the fields it
 # must carry with what each accepts. A sub-table carries exactly these fields:
 # a misspelt one is refused rather than ignored, because an ignored field is how
@@ -122,7 +184,8 @@ BASELINE_RESET_FIELDS = (
     ("date", is_date, "a TOML date, unquoted"),
     ("measured_cost", is_number, "a number in the entry's unit"),
     ("requirement_served", is_text, "the requirement the cost serves"),
-    ("founder_decision", is_text, "the recorded founder decision, as decisions/NNNN"),
+    ("founder_decision", is_decision_citation,
+     "the recorded founder decision, cited as decisions/NNNN"),
 )
 WAKE_FIELDS = (
     ("name", is_text, "a name"),
@@ -156,8 +219,12 @@ def load_budgets(path):
         return tomllib.load(handle)
 
 
+def label_of(criterion, name, platform):
+    return f"{criterion} {name} ({platform})"
+
+
 def entry_label(entry):
-    return f"{entry['criterion']} {entry['name']} ({entry['platform']})"
+    return label_of(entry["criterion"], entry["name"], entry["platform"])
 
 
 def runner_missing(runner):
@@ -257,6 +324,11 @@ def check_budget_file(budgets, gate):
         units = ", ".join(sorted(UNITS))
         if stated is None:
             gate.block(f"{label}: {criterion} states no budget entry")
+        elif key not in CLOSED_LIST:
+            gate.block(
+                f"{label}: no criterion states this entry; the list of eighteen is "
+                "closed, and adding one is an amendment to the specification"
+            )
         if unit is None:
             gate.block(f"{label}: no unit; one of {units} is required")
         elif unit not in UNITS:
@@ -267,19 +339,50 @@ def check_budget_file(budgets, gate):
             )
         unit_text = unit if unit in UNITS else "(no unit)"
 
+        # A ratified figure is one a recorded founder decision set, so a
+        # ratified entry names that decision; a provisional entry names none,
+        # because no decision has set its figure, and gains one in the change
+        # that ratifies it. Either way what is named is a citation, not a
+        # description.
         decision = entry.get("founder_decision")
-        if decision is not None and not is_text(decision):
-            gate.block(f"{label}: founder_decision must cite a recorded decision")
-
-        margin = entry.get("cross_check_margin")
-        if margin is not None:
-            if entry["criterion"] != "SC-004":
+        if decision is None:
+            if entry.get("status") == "ratified":
                 gate.block(
-                    f"{label}: cross_check_margin is declared only on SC-004, whose "
-                    "whole-machine cross-check it bounds"
+                    f"{label}: ratified and names no founder decision; a ratified "
+                    "figure is one a recorded decision set, cited as decisions/NNNN"
                 )
-            if not is_number(margin):
+        elif not is_decision_citation(decision):
+            gate.block(
+                f"{label}: founder_decision {decision!r} does not cite a recorded "
+                "decision; the register's citation form is decisions/NNNN"
+            )
+
+        # SC-004 declares its cross-check margin on every entry, a percentage
+        # under the tolerance cap. An undeclared margin is zero rather than
+        # unbounded, so omitting it does not switch the cross-check off; it is
+        # refused here because the preamble requires the declaration.
+        margin = entry.get("cross_check_margin")
+        if criterion == "SC-004":
+            if margin is None:
+                gate.block(
+                    f"{label}: no cross_check_margin; SC-004 declares one for its "
+                    "whole-machine cross-check, 0.0 until a measurement writes it, "
+                    "and an undeclared margin is zero rather than unbounded"
+                )
+            elif not is_number(margin):
                 gate.block(f"{label}: cross_check_margin must be a number")
+            elif margin < 0:
+                gate.block(f"{label}: negative cross_check_margin")
+            elif margin > MAX_CROSS_CHECK_MARGIN_PCT:
+                gate.block(
+                    f"{label}: cross_check_margin {margin}% exceeds the "
+                    f"{MAX_CROSS_CHECK_MARGIN_PCT}% cap"
+                )
+        elif margin is not None:
+            gate.block(
+                f"{label}: cross_check_margin is declared only on SC-004, whose "
+                "whole-machine cross-check it bounds"
+            )
 
         if "spike_exemption" in entry:
             check_record(
@@ -303,12 +406,21 @@ def check_budget_file(budgets, gate):
 
         # A provisional figure binds a baseline exactly as a ratified one does.
         # A provisional figure is a ceiling for as long as it stands, which is
-        # the whole of its function.
+        # the whole of its function. Where a reset is recorded, the reset is
+        # what placed the baseline there, and the failure says so.
         if baseline > figure:
-            gate.block(
-                f"{label}: baseline {baseline} {unit_text} is above the stated figure "
-                f"{figure} {unit_text}; a reset may never place a baseline above it"
-            )
+            if "baseline_reset" in entry:
+                gate.block(
+                    f"{label}: baseline_reset leaves the baseline at {baseline} "
+                    f"{unit_text}, above the stated figure {figure} {unit_text}; a "
+                    "reset may never place a baseline above it"
+                )
+            else:
+                gate.block(
+                    f"{label}: baseline {baseline} {unit_text} is above the stated "
+                    f"figure {figure} {unit_text}; a reset may never place a "
+                    "baseline above it"
+                )
 
         tolerance = entry.get("tolerance_pct", 0.0)
         if not is_number(tolerance):
@@ -320,6 +432,15 @@ def check_budget_file(budgets, gate):
             )
         if tolerance < 0:
             gate.block(f"{label}: negative tolerance")
+
+    # The closed list, compared against the preamble's statement of it rather
+    # than read off the file: a file missing an entry cannot report its own
+    # omission, and iterating the entries declared is exactly asking it to.
+    for criterion, name, platform in sorted(CLOSED_LIST - seen):
+        gate.block(
+            f"{label_of(criterion, name, platform)}: stated by the preamble and "
+            "absent from the file"
+        )
 
     # SC-005's wake enumeration. An empty enumeration is a statement -- nothing
     # on the idle path is scheduled -- and is read as one; each wake declared

@@ -27,8 +27,9 @@
 #       a decision set, so every ratified entry names one: today decisions/0001,
 #       the record of Q-E9's ratification. A provisional entry names none,
 #       because no decision has set its figure -- that is what provisional
-#       means -- and it gains one in the change that ratifies it. The gate
-#       clause that fails a ratified entry naming no decision lands separately.
+#       means -- and it gains one in the change that ratifies it. The
+#       budget-file gate fails a ratified entry that names none, and any entry
+#       whose citation is not in that form.
 #   baseline, tolerance_pct
 #       What the regression gate compares against, in the entry's unit, and
 #       the tolerance around it as a percentage of the baseline, at most 5.
@@ -39,8 +40,10 @@
 #       runner, so an entry with no measurement declares 0.0 there too.
 #   cross_check_margin
 #       SC-004 only: the margin for that criterion's whole-machine
-#       cross-check, declared and justified exactly as a tolerance is. An
-#       undeclared margin is zero.
+#       cross-check, declared and justified exactly as a tolerance is -- a
+#       percentage of the summed per-process figure the cross-check compares
+#       against, at most 5. An undeclared margin is zero, and the budget-file
+#       gate fails an SC-004 entry that declares none.
 #   spike_exemption = { pull_request, figure }
 #       Present only while a spike is establishing a figure that does not yet
 #       exist. It exempts this one entry's absolute gate and nothing else --
