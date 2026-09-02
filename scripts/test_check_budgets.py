@@ -315,7 +315,10 @@ check("an absent enumeration is not yet a failure", not file_gate(b).failed)
 
 # --- the repository's own budget file ---------------------------------------
 # The file as committed reads under the schema and fails only on what it says
-# it fails on: two runners awaiting procurement.
+# it fails on: two runners awaiting procurement. Beyond that it carries the
+# eighteen entries the preamble closes over, Q-E9's split of them, and SC-005's
+# enumeration. The gate clauses that would fail on their absence land
+# separately, so until they do the file's completeness is proved here.
 
 real = budgets.load_budgets(budgets.REPO / "budgets.toml")
 g = file_gate(real)
@@ -323,10 +326,87 @@ check("the committed budget file fails only on its two unpinned runners",
       len(g.blocking) == 2 and all(budgets.UNPINNED in m for m in g.blocking))
 budgets.defer_unpinned_runners(g)
 check("...and passes once that is deferred", not g.failed)
-check("the committed budget file carries an empty wake enumeration, not none",
-      real.get("wake") == [])
 check("every committed entry states its unit",
       all(e.get("unit") == budgets.UNIT_OF[e["criterion"]] for e in real["entry"]))
+
+# The closed list: nine entries per platform, eighteen in all, and no other.
+NAMES = {
+    "SC-001": ("download size", "installed footprint"),
+    "SC-002": ("warm start", "cold start"),
+    "SC-004": ("ten-tab memory",),
+    "SC-005": ("60-minute window", "wake-free 1-second sample"),
+    "SC-006": ("tab switch", "address-field keystroke"),
+}
+CLOSED_LIST = {
+    (criterion, name, platform)
+    for criterion, names in NAMES.items()
+    for name in names
+    for platform in ("windows", "macos")
+}
+committed = {(e["criterion"], e["name"], e["platform"]) for e in real["entry"]}
+check("the committed budget file carries exactly the eighteen entries the "
+      "preamble closes over",
+      len(real["entry"]) == 18 and committed == CLOSED_LIST)
+
+check("every committed entry states its measurement condition",
+      all(budgets.is_text(e.get("condition")) for e in real["entry"]))
+
+# Q-E9's split: thirteen ratified, five provisional -- SC-002's four and SC-004
+# on tier 2 -- and every ratified entry names the decision that set it.
+ratified = [e for e in real["entry"] if e["status"] == "ratified"]
+provisional = [e for e in real["entry"] if e["status"] == "provisional"]
+check("thirteen committed entries are ratified and five provisional",
+      len(ratified) == 13 and len(provisional) == 5)
+check("the provisional entries are SC-002's four and SC-004 on macos",
+      {(e["criterion"], e["platform"]) for e in provisional}
+      == {("SC-002", "windows"), ("SC-002", "macos"), ("SC-004", "macos")})
+check("every ratified entry names decisions/0001",
+      all(e.get("founder_decision") == "decisions/0001" for e in ratified))
+check("no provisional entry names a founder decision, since one that set its "
+      "figure would ratify it",
+      all("founder_decision" not in e for e in provisional))
+
+# SC-004's two entries declare the cross-check margin, and only they do.
+check("both SC-004 entries declare a cross_check_margin",
+      all("cross_check_margin" in e
+          for e in real["entry"] if e["criterion"] == "SC-004"))
+check("no other committed entry declares one",
+      all("cross_check_margin" not in e
+          for e in real["entry"] if e["criterion"] != "SC-004"))
+
+# SC-005's conditions state what 0.5% of one core is in processor time at each
+# condition's own scale, since that is the quantity a harness reports.
+by_key = {(e["criterion"], e["name"], e["platform"]): e for e in real["entry"]}
+check("the 60-minute window condition names 18 s of processor time",
+      all("18 s" in by_key[("SC-005", "60-minute window", p)]["condition"]
+          for p in ("windows", "macos")))
+check("the wake-free sample condition names 5 ms of processor time",
+      all("5 ms" in by_key[("SC-005", "wake-free 1-second sample", p)]["condition"]
+          for p in ("windows", "macos")))
+
+# A tolerance is justified by measured variation, so an entry no measurement
+# has written a baseline for cannot have one.
+check("an unmeasured committed entry declares no tolerance",
+      all(e["tolerance_pct"] == 0.0 for e in real["entry"] if e["baseline"] == 0.0))
+
+# SC-005's enumeration: the two wakes it names, each inside the per-wake cap,
+# and together inside the hourly cap however their periods fall in an hour. A
+# closed 60-minute window holds at most floor(3600 / period) + 1 firings of a
+# wake, so that is the count each bound is multiplied by.
+wakes = real.get("wake")
+check("the committed budget file enumerates the update check and the "
+      "blocking-list refresh",
+      isinstance(wakes, list)
+      and {w["name"] for w in wakes} == {"update check", "blocking-list refresh"})
+check("each committed wake names the requirement SC-005 justifies it by",
+      {(w["name"], w["justifying_requirement"]) for w in wakes}
+      == {("update check", "FR-014"), ("blocking-list refresh", "FR-008")})
+check("each committed wake is bounded at or below 50 ms of processor time",
+      all(0 < w["processor_time_bound"] <= 50 for w in wakes))
+hourly = sum(w["processor_time_bound"] * (3600 // w["period"] + 1) for w in wakes)
+check("the committed wakes sum inside 500 ms of processor time in any 60-minute "
+      "window",
+      hourly <= 500)
 
 # --- absolute and regression gates -------------------------------------------
 
