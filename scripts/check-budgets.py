@@ -831,7 +831,16 @@ def run_gates(budgets, measurements, host=None):
             # a number nobody produced.
             hardware = entry["criterion"] in HARDWARE_DEPENDENT
             tier = TIER_OF.get(platform)
-            if hardware and tier not in pinned:
+            if hardware and tier is None:
+                # A platform TIER_OF does not map. check_budget_file refuses
+                # such an entry already, so this is only ever a second verdict
+                # on an already-refused file -- but it must not name a tier
+                # called "None".
+                unmeasured.append(
+                    (f"{label}: platform {platform!r} maps to no tier",
+                     "no tier for this platform", True)
+                )
+            elif hardware and tier not in pinned:
                 # Not "unpinned": the file declares no usable runner for this
                 # tier at all, so there is nothing to defer to. The measured
                 # branch below draws the same distinction; drawing it in one

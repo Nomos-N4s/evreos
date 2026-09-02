@@ -166,10 +166,6 @@ UNSTABLE_VALUE = re.compile(r"(?<![\w-])(?:nightly|beta)\b", re.IGNORECASE)
 # no statement terminator falls inside one attribute head.
 FEATURE_ATTRIBUTE = re.compile(r'#!\[[^\];]*\bfeature\s*\(')
 
-# Enough of Rust's string grammar to blank literals in a joined window. The
-# crate-policy check carries the full scanner; this needs only the quoted forms
-# that could hold an attribute-looking fragment.
-STRING_LITERAL = re.compile(r'(?:br|rb|r)(#*)"|b?"')
 
 # What a workflow does, on a command line or in a variable, to put the release
 # path on a non-stable toolchain. The rustup forms accept any flags and values
@@ -282,6 +278,14 @@ NOT_READ = {".md", ".txt", ".lock"}
 
 class CheckError(Exception):
     """The check cannot reach a verdict. An unrun check is not a pass."""
+
+
+# The one Rust scanner, shared with the crate policy check. A second, weaker
+# copy lived here: it had no char-literal rule and no escape handling, so a
+# quote inside `'"'` or behind a backslash desynchronised it -- rejecting
+# compliant crate roots AND blanking away a genuine `feature(...)` gate.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from rustlex import strip_non_code  # noqa: E402
 
 
 def relative(root, path):
@@ -723,30 +727,6 @@ def check_workflow_nightly(root, path, problems):
         )
 
 
-def blank_strings(text):
-    """`text` with the contents of string literals replaced by spaces.
-
-    Length is preserved so a caller's offsets stay valid. This is what stops a
-    constant such as `const OPEN: &str = "#![";` reaching an unrelated
-    `feature(` further down the joined window, without narrowing the pattern in
-    a way that loses the real quoted-predicate form of a cfg_attr.
-    """
-    out, i, n = [], 0, len(text)
-    while i < n:
-        match = STRING_LITERAL.match(text, i)
-        if match is None:
-            out.append(text[i])
-            i += 1
-            continue
-        hashes = match.group(1) or ""
-        close = '"' + hashes
-        end = text.find(close, match.end())
-        end = n if end == -1 else end + len(close)
-        out.append(" " * (end - i))
-        i = end
-    return "".join(out)
-
-
 def check_rust_source_nightly(root, path, problems):
     """Feature attributes and RUSTC_BOOTSTRAP in one crate root.
 
@@ -763,7 +743,7 @@ def check_rust_source_nightly(root, path, problems):
     joined, offsets = [], []
     for number, line in lines:
         offsets.append((len("".join(joined)) + len(joined), number))
-        joined.append(blank_strings(line.strip()))
+        joined.append(strip_non_code(line).strip())
     window = " ".join(joined)
 
     def line_of(position):

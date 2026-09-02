@@ -117,6 +117,9 @@ TRAILER_IDENTITY = re.compile(
 # mid-sentence -- but a blockquote renders as visibly as a code fence, and the
 # fenced form is already a must-fail here.
 TRAILER_MARKER = re.compile(r"^[>\-*+\s]*")
+# What a trailer's value looks like when the line is quoted or bulleted: a name
+# and an address, or a bare address. Prose does not.
+IDENTITY_VALUE = re.compile(r"^(?:[^<>]*<[^<>@\s]+@[^<>\s]+>|[^<>@\s]+@[^<>\s]+)$")
 TRAILER_LINE = re.compile(
     r"^(?P<key>[A-Za-z][A-Za-z-]*-(?:by|with)):[ \t]*(?P<value>.+?)[ \t]*$",
     re.IGNORECASE,
@@ -220,7 +223,17 @@ def attribution_problems(text, where):
     # ships, and reading only the last paragraph is how one earlier in the
     # message went uninspected.
     for line in full.splitlines():
-        match = TRAILER_LINE.match(TRAILER_MARKER.sub("", line))
+        stripped = TRAILER_MARKER.sub("", line)
+        # A line beginning the key at column zero is a trailer by git's own
+        # rules, whatever its value. Behind a `>` or a `-` it is a trailer only
+        # if it carries an identity -- otherwise a bullet of prose ABOUT the
+        # rule reads as a breach of it, which is the same over-reach anchoring
+        # the footer branch was meant to end. A commit message describing this
+        # very change was rejected by the unqualified form.
+        marked = stripped != line.rstrip()
+        match = TRAILER_LINE.match(stripped)
+        if match and marked and not IDENTITY_VALUE.match(match.group("value")):
+            continue
         if not match:
             continue
         key, value = match.group("key"), match.group("value")

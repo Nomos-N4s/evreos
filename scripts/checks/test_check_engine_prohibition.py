@@ -650,6 +650,24 @@ for label, source, caught in (
      '#![cfg_attr(all(feature = "a", feature = "b"), feature(never_type))]\n', True),
     ("a cfg that gates nothing on nightly",
      '#![cfg(feature = "x")]\npub fn f() {}\n', False),
+    # The window is blanked by the shared Rust scanner, and this check depends
+    # on every rule that scanner has. A second, weaker copy lived here with no
+    # char-literal rule and no escape handling; it both rejected compliant
+    # crate roots and blanked away a genuine gate. These cases fail if the
+    # engine check stops using the shared scanner, and the crate-policy suite
+    # fails if the scanner itself loses a rule.
+    ("a doc attribute with an escaped quote, beside a method named feature",
+     '#![forbid(unsafe_code)]\n#![doc = "pass \\" to quote an argument"]\n'
+     'pub fn configure(b: &mut B) { b.feature("html") }\n', False),
+    ("a char literal beside a decoy and a function named feature",
+     'fn doc(c: char) -> &str { if c == \'"\' { "#![" } else { "" } }\n'
+     'fn feature(n: u32) -> u32 { n }\n', False),
+    ("an escaped quote inside a decoy string",
+     'const MSG: &str = "he said \\"#![";\npub fn feature(n: u32) -> u32 { n }\n', False),
+    ("a real gate after a doc string holding an escaped quote",
+     '#![cfg_attr(docsrs, doc = "needs \\" quoting", feature(doc_cfg))]\n', True),
+    ("a real gate after a char literal holding a quote",
+     'fn q(c: char) -> bool { c == \'"\' }\n#![feature(let_chains)]\n', True),
     ("the word in prose", "// this feature (of the API) is stable\npub fn f() {}\n", False),
     ("ordinary source", "pub fn f() {}\n", False),
 ):

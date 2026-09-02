@@ -92,6 +92,45 @@ ATTRIBUTION_MUST_FAIL = (
     + [("the canonical footer with a valid message around it", VALID + FOOTER)]
 )
 
+# The Conventional-Commits and issue-reference rules. CLAUDE.md names both as
+# gated for every commit whose subject does not begin `Merge `, `Revert "`,
+# `fixup! ` or `squash! `, and neither had a test that could fail: every fixture
+# in the lists above carries a valid subject AND a valid issue reference, so
+# both rules could be deleted with the suite staying green. ISSUE_REF was
+# exercised only as a bare regex, which passes with the rule that uses it gone.
+SUBJECT_MUST_FAIL = [
+    ("no type", "add a thing\n\nCloses #1"),
+    ("unknown type", "improve(x): a thing\n\nCloses #1"),
+    ("no colon", "feat(x) a thing\n\nCloses #1"),
+    ("capitalised subject", "feat(x): Add a thing\n\nCloses #1"),
+    ("empty subject", "feat(x): \n\nCloses #1"),
+    ("scope with a space", "feat(the ui): a thing\n\nCloses #1"),
+]
+SUBJECT_MUST_PASS = [
+    ("plain type", "feat: a thing\n\nCloses #1"),
+    ("type and scope", "feat(ui): a thing\n\nCloses #1"),
+    ("breaking marker", "feat(ui)!: a thing\n\nCloses #1"),
+    ("scope with a slash", "ci(github/workflows): a thing\n\nCloses #1"),
+    # Exempt by subject prefix, so neither rule applies and both are absent.
+    ("a merge subject", "Merge pull request #7 from x/y"),
+    ("a revert subject", 'Revert "feat(x): a thing"'),
+    ("a fixup subject", "fixup! feat(x): a thing"),
+]
+ISSUE_MUST_FAIL = [
+    ("no reference at all", "feat(x): a thing\n\nA body with no link."),
+    ("a bare number", "feat(x): a thing\n\nSee the ticket 42."),
+    ("a colour, not an issue", "feat(x): a thing\n\nTweak the palette to #000000."),
+    ("a URL fragment", "feat(x): a thing\n\nhttps://example.com/guide#2-setup"),
+    ("a reference only inside a code fence",
+     "feat(x): a thing\n\n```\nCloses #1\n```"),
+]
+ISSUE_MUST_PASS = [
+    ("Closes", "feat(x): a thing\n\nCloses #1"),
+    ("Refs", "feat(x): a thing\n\nRefs #1"),
+    ("Fixes", "feat(x): a thing\n\nFixes #1"),
+    ("See", "feat(x): a thing\n\nSee #1"),
+]
+
 ATTRIBUTION_MUST_PASS = [
     ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
     ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
@@ -107,6 +146,14 @@ ATTRIBUTION_MUST_PASS = [
     # must not make one of it.
     ("a bulleted prose line naming an integrated tool",
      VALID + "- the Claude Code integration lives in .claude/"),
+    # Behind a marker, a trailer-shaped line whose value is prose is prose.
+    # Without this the marker stripping turned a bullet describing the rule
+    # into a breach of it -- and a commit message describing that very change
+    # was rejected by it.
+    ("a bulleted sentence beginning with the key",
+     VALID + "- Co-authored-by: in a bulleted list is read as the trailer it is."),
+    ("a blockquoted sentence beginning with the key",
+     VALID + "> Co-authored-by: is rejected however it is spelled."),
     ("prose quoting the canonical footer mid-sentence",
      "docs(x): explain the rule\n\nTooling appends a footer reading "
      "\u201cGenerated with a tool\u201d to the body.\n\nRefs #1"),
@@ -128,6 +175,10 @@ ATTRIBUTION_MUST_FAIL_EXTRA = [
      VALID + "- Co-authored-by: Copilot <b@github.com>"),
     ("an indented co-authorship trailer",
      VALID + "    Co-Authored-By: A Human <a@b.c>"),
+    ("a bare-address trailer behind a bullet",
+     VALID + "- Co-authored-by: bot@github.com"),
+    ("a diff line removing a trailer",
+     VALID + "-Co-authored-by: A Human <a@b.c>"),
 ]
 
 FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
@@ -340,6 +391,26 @@ def main():
         if found:
             failures.append(f"{label}: expected no attribution problem, got {found}")
 
+    def problems_of(text):
+        found = []
+        hygiene.check_message(text, "t", found)
+        return found
+
+    for label, text in SUBJECT_MUST_FAIL:
+        if not any("Conventional Commit" in p for p in problems_of(text)):
+            failures.append(f"subject {label}: expected a Conventional Commit problem")
+    for label, text in SUBJECT_MUST_PASS:
+        found = [p for p in problems_of(text) if "Conventional Commit" in p]
+        if found:
+            failures.append(f"subject {label}: expected none, got {found}")
+    for label, text in ISSUE_MUST_FAIL:
+        if not any("issue" in p for p in problems_of(text)):
+            failures.append(f"issue {label}: expected an issue-reference problem")
+    for label, text in ISSUE_MUST_PASS:
+        found = [p for p in problems_of(text) if "issue" in p]
+        if found:
+            failures.append(f"issue {label}: expected none, got {found}")
+
     for text, should_match in [
         ("Closes #7", True), ("Refs #7", True), ("See #7", True),
         ("tweak the palette to #000000", False),
@@ -356,6 +427,8 @@ def main():
     total = (len(MUST_FAIL) + len(MUST_PASS)
              + len(ATTRIBUTION_MUST_FAIL) + len(ATTRIBUTION_MUST_FAIL_EXTRA)
              + len(ATTRIBUTION_MUST_PASS)
+             + len(SUBJECT_MUST_FAIL) + len(SUBJECT_MUST_PASS)
+             + len(ISSUE_MUST_FAIL) + len(ISSUE_MUST_PASS)
              + 5 + 6 + signature_cases)
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0

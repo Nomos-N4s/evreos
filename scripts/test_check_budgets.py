@@ -1322,6 +1322,37 @@ lengths = main_gate_lengths(Path(__file__).resolve().parent.parent / "budgets.to
 check("main() leaves blocking and tags in step",
       bool(lengths) and all(b == t for b, t in lengths.values()))
 
+# The unmeasured branch's own undeclared-tier case, which had no test at all:
+# reverting the branch left the whole suite green. An entry on a tier the file
+# does not declare is BLOCKING-unmeasured, where one on a declared-but-unpinned
+# tier is deferrable.
+b = budget_file()
+del b["runners"]["tier2"]
+_, _, unmeasured = budgets.run_gates(b, {}, host=None)
+macos = [row for row in unmeasured
+         if "SC-004" in row[0] and "macos" in row[0]]
+check("an unmeasured entry on an undeclared tier is blocking",
+      bool(macos) and macos[0][2] is True)
+check("...and says the tier is not declared",
+      bool(macos) and "not declared" in macos[0][0])
+
+b = budget_file(runner={"identity": "", "runner_label": "", "os_version": "",
+                        "memory": "", "display_refresh": 0})
+_, _, unmeasured = budgets.run_gates(b, {}, host=None)
+windows = [row for row in unmeasured
+           if "SC-004" in row[0] and "windows" in row[0]]
+check("an unmeasured entry on a declared-but-unpinned tier is deferrable",
+      bool(windows) and windows[0][2] is False)
+
+# A platform no tier maps must not produce a message naming a tier called None.
+b = budget_file()
+b["entry"].append({**stated_entry(*DEFAULT), "criterion": "SC-004",
+                   "name": "ten-tab memory", "platform": "linux"})
+_, _, unmeasured = budgets.run_gates(b, {}, host=None)
+linux = [row for row in unmeasured if "linux" in row[0]]
+check("an unmapped platform names no tier called None",
+      bool(linux) and "None" not in linux[0][0])
+
 # The isinstance guards in run_gates: a misread file must reach a verdict
 # rather than a traceback. Nothing exercised run_gates with a non-table.
 b = budget_file()
