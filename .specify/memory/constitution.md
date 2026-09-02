@@ -1,6 +1,29 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 → 1.1.0
+Version change: 1.1.0 → 2.0.0
+
+Amendment 1.1.0 → 2.0.0 (2026-09-02), MAJOR — Principle I narrowed by a recorded
+  exception:
+  - Classified MAJOR, not MINOR. The versioning policy scopes MAJOR to a principle being
+    redefined in a backward-incompatible way, and an exception to a prohibition is a
+    partial removal of what it prohibits: a review record that breached Principle I before
+    this amendment complies after it. The exception is narrow, which is a reason to state
+    it precisely and not a reason to classify it down.
+  - What changed: Principle I gains one exception, that the attribution footer the posting
+    tool appends server-side to every pull request comment is accepted on review records.
+    Recorded at `decisions/0003`, which carries the evidence, the two rejected alternatives
+    and the condition that reopens it.
+  - What replaces the discipline removed, as the amendment procedure requires: nothing is
+    withdrawn from `scripts/check-commit-hygiene.py`, which never read comments and reads
+    everything it read before — commit messages, the pull request title and the pull
+    request body all still refuse the footer. What is withdrawn is a review obligation over
+    one surface, replaced by a record naming the mechanism, so the exception cannot be
+    invoked for a footer anyone could have omitted.
+  - Why it was needed: the Development Workflow requires each review round to be recorded
+    as a comment on the pull request and blocks the merge until it is. The posting tool
+    supplies the footer whether or not it is written, so both requirements could not be met
+    at once. Established by posting three comments without one and finding the footer on
+    all three.
 
 Ratification 1.0.0 (2026-08-29):
   Modified principles: none (scaffold replaced; no prior principles existed)
@@ -111,7 +134,21 @@ MUST be signed. Nothing anywhere in this repository may attribute authorship or
 assistance to an AI or generator tool: no attribution trailers, and no such attribution in
 commit messages, pull request titles or bodies, issues, comments, code comments,
 documentation, or generated files. Naming a tool the project integrates with, or recording
-that a review ran, is description rather than attribution and is permitted. Commit messages
+that a review ran, is description rather than attribution and is permitted.
+
+One exception, recorded as a founder decision at `decisions/0003` rather than claimed as
+a reading of the rule above. The tool that posts review records to a pull request appends
+an attribution footer server-side, to every comment, with no way to suppress it: comments
+written without one arrive carrying one. The prohibition therefore cannot be met on that
+surface by anyone posting through it, and the founder has accepted the footer there rather
+than move the records or stop posting them. The exception is exactly that mechanism and
+nothing else: a footer any author could have omitted is a breach as before, and the
+exception reaches no commit message, no pull request title or body, and no file in the
+tree, all of which the hygiene check reads and refuses. It is recorded here because an
+unstated exception to a NON-NEGOTIABLE principle is indistinguishable from the rule not
+holding.
+
+Commit messages
 MUST follow Conventional Commits and reference the issue they serve. One pull request per
 issue; nothing lands directly on `main`. Authorship and the absence of AI attribution MUST
 be enforced mechanically by the same commit-msg hook and server-side commit-hygiene CI
@@ -314,4 +351,4 @@ release blockers, as is any client-side money logic prohibited by Principle V.
 Complexity that appears to conflict with Principle II or Principle III MUST be justified in
 the pull request that introduces it, or removed.
 
-**Version**: 1.1.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-08-30
+**Version**: 2.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-02
