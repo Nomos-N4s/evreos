@@ -400,6 +400,85 @@ with tempfile.TemporaryDirectory() as tmp:
     check("...and its missing forbid is reported",
           any("src/lib.rs: omits" in problem for problem in found))
 
+
+# --- the paths that report nothing rather than a breach ----------------------
+# Four ways the check can find no workspace to read. Each returns early, and
+# each could be made silent with the suite green -- a check that reads nothing
+# and says so is a verdict; one that reads nothing and says nothing is a pass on
+# no evidence, which is the shape of every gate defect on this branch.
+def workspace_at(build):
+    """Run check_workspace over a tree this function builds, with an empty
+    allowlist beside it."""
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        build(root)
+        allowlist = root / "allow.txt"
+        if not allowlist.exists():
+            allowlist.write_text("")
+        return policy.check_workspace(root, allowlist)
+
+
+def member(root, name="a", manifest=None, source="#![forbid(unsafe_code)]\n"):
+    directory = root / "crates" / name
+    (directory / "src").mkdir(parents=True)
+    (directory / "Cargo.toml").write_text(manifest if manifest is not None else (
+        f'[package]\nname = "{name}"\nversion = "0.0.0"\nedition = "2021"\n'
+        "[lints]\nworkspace = true\n"))
+    (directory / "src" / "lib.rs").write_text(source)
+    return directory
+
+
+WORKSPACE_ROOT = ('[workspace]\nmembers = ["crates/a"]\nresolver = "2"\n'
+                  '[workspace.lints.rust]\nunsafe_code = "forbid"\n')
+
+for label, build, fragment in (
+    ("no Cargo.toml at the root", lambda r: None, "no Cargo.toml"),
+    ("a root manifest that does not parse",
+     lambda r: (r / "Cargo.toml").write_text("[workspace\n"), "Cargo.toml"),
+    ("a root with no [workspace] table",
+     lambda r: (r / "Cargo.toml").write_text(
+         '[package]\nname = "x"\nversion = "0.0.0"\n'), "no [workspace] table"),
+    ("a member manifest that does not parse",
+     lambda r: ((r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+                member(r, manifest="[package\n")), "crates/a/Cargo.toml"),
+    ("a member with no package name",
+     lambda r: ((r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+                member(r, manifest='[package]\nversion = "0.0.0"\n')),
+     "no [package] name"),
+):
+    found, _, _ = workspace_at(build)
+    check(f"{label} is reported", bool(found))
+    check(f"...naming what it could not read: {label}",
+          any(fragment in problem for problem in found))
+
+# The dedup in workspace_members is what terminates a cyclic path-dependency
+# graph. Two crates depending on each other is legal in Cargo for dev
+# dependencies, and without the dedup the walk does not return.
+def cyclic(root):
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/a", "crates/b"]\nresolver = "2"\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n')
+    for name, other in (("a", "b"), ("b", "a")):
+        member(root, name, manifest=(
+            f'[package]\nname = "{name}"\nversion = "0.0.0"\nedition = "2021"\n'
+            "[lints]\nworkspace = true\n"
+            f'[dev-dependencies]\n{other} = {{ path = "../{other}" }}\n'))
+
+
+found, crates, _ = workspace_at(cyclic)
+check("a cyclic path-dependency graph terminates and is checked once each",
+      crates == 2 and found == [])
+
+# `is True`, not truthiness: `workspace = "yes"` is not inheritance, and Cargo
+# would reject it. A truthy test would read it as the line that carries the
+# workspace lints in.
+found, _, _ = workspace_at(lambda r: (
+    (r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+    member(r, manifest='[package]\nname = "a"\nversion = "0.0.0"\nedition = "2021"\n'
+                       '[lints]\nworkspace = "yes"\n')))
+check("a non-boolean workspace lints value is not inheritance",
+      any("lifts unsafe_code" in problem for problem in found))
+
 # --- a crate reached only through [workspace.dependencies] ------------------
 # `cargo metadata` reports it in workspace_members and `cargo build -p` builds
 # it, so it is a member and is bound by all three clauses. It was reached by no
