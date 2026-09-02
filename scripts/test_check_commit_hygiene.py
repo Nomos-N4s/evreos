@@ -96,6 +96,25 @@ ATTRIBUTION_MUST_PASS = [
     ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
     ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
     ("prose naming an integrated tool", VALID + "Note: the Claude Code integration lives in .claude/"),
+    # A message explaining what this check refuses must itself pass. The
+    # unanchored form of the co-authorship branch rejected exactly that, which
+    # is the over-reach CLAUDE.md records as issue #25: a descriptive sentence
+    # is not an attribution, and Principle I's carve-out permits it in terms.
+    ("prose quoting a co-authorship trailer mid-sentence",
+     "fix(x): close a gap\n\nA `Co-Authored-By: GitHub Copilot <c@g.com>` trailer\n"
+     "passed, which is the mechanical case this check exists for.\n\nRefs #1"),
+    ("prose quoting the canonical footer mid-sentence",
+     "docs(x): explain the rule\n\nTooling appends a footer reading "
+     "\u201cGenerated with a tool\u201d to the body.\n\nRefs #1"),
+]
+
+# The same trailer at the start of a line IS a trailer, wherever it sits --
+# including inside a code fence, which still renders as a visible attribution.
+ATTRIBUTION_MUST_FAIL_EXTRA = [
+    ("a co-authorship trailer inside a code fence",
+     VALID + "```\nCo-authored-by: Copilot <b@github.com>\n```"),
+    ("a co-authorship trailer as the only body line",
+     "fix(x): a thing\n\nRefs #1\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
 ]
 
 FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
@@ -300,7 +319,7 @@ def main():
 
     # The attribution matcher on its own, so a case cannot be satisfied by the
     # subject or issue-reference rule firing instead.
-    for label, text in ATTRIBUTION_MUST_FAIL:
+    for label, text in ATTRIBUTION_MUST_FAIL + ATTRIBUTION_MUST_FAIL_EXTRA:
         if not hygiene.attribution_problems(text, "t"):
             failures.append(f"{label}: expected an ATTRIBUTION problem, got none")
     for label, text in ATTRIBUTION_MUST_PASS:
@@ -322,7 +341,8 @@ def main():
     for failure in failures:
         print(f"FAIL  {failure}")
     total = (len(MUST_FAIL) + len(MUST_PASS)
-             + len(ATTRIBUTION_MUST_FAIL) + len(ATTRIBUTION_MUST_PASS)
+             + len(ATTRIBUTION_MUST_FAIL) + len(ATTRIBUTION_MUST_FAIL_EXTRA)
+             + len(ATTRIBUTION_MUST_PASS)
              + 5 + 6 + signature_cases)
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0

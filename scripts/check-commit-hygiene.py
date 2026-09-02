@@ -136,7 +136,15 @@ CANONICAL_FOOTER = re.compile(
     r"🤖\s*generated"
     r"|generated\s+(?:with|by)\s+\[?(?:claude|copilot|chatgpt|codex|cursor|gemini|devin)\b"
     r"|noreply@anthropic\.com"
-    r"|co-authored-by:[^\n]*?(?:claude|copilot|chatgpt|codex|cursor|gemini|devin)\b",
+    # Anchored to the start of a line: a co-authorship TRAILER begins one, and
+    # prose describing the rule quotes it mid-sentence. Unanchored, this branch
+    # rejected a commit message explaining what the check refuses -- exactly the
+    # over-reach CLAUDE.md records as issue #25, where "a plainly descriptive
+    # sentence naming a tool this project does integrate with" is rejected
+    # though Principle I's carve-out permits it. A real trailer is still caught
+    # here, and CO_AUTHORSHIP_KEY catches every one of them again by key,
+    # whoever it names, so nothing rests on this branch alone.
+    r"|(?m:^co-authored-by:)[^\n]*?(?:claude|copilot|chatgpt|codex|cursor|gemini|devin)\b",
     re.IGNORECASE,
 )
 
