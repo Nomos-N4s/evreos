@@ -34,8 +34,8 @@
     name, `Carlos Pinto <capintobe@gmail.com>`, is an accepted author and
     committer alongside `xcoder-es <capintobe@gmail.com>`: two spellings of one
     identity, bound by the one address Principle I names, so sole authorship is
-    unaffected and no second author exists. The nine merge commits on `main`
-    authored that way are compliant, the account is not renamed, and
+    unaffected and no second author exists. The merge commits on `main` authored
+    that way are compliant, the account is not renamed, and
     `FOUNDER_AUTHORS` cites that record. A commit under either name with any
     other address is refused exactly as before.
   - `scripts/check-commit-hygiene.py` checks, on every pull request: author and

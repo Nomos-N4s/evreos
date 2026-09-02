@@ -65,7 +65,7 @@ Follow-up TODOs (status as of 1.1.0):
     `.github/workflows/commit-hygiene.yml`.
   - DONE — ADR-0001, the engine decision the Development Workflow section requires, is
     recorded at `docs/adr/0001-rendering-engine.md`.
-  - CLOSED by `decisions/0002` — nine merge commits on `main` are authored with the
+  - CLOSED by `decisions/0002` — the merge commits on `main` are authored with the
     founder's GitHub account display name, `Carlos Pinto`, rather than
     `xcoder-es <capintobe@gmail.com>`. The founder has accepted that name as an author
     and a committer alongside the canonical one: the two spellings denote one person and

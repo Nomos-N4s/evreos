@@ -91,3 +91,19 @@ itself is unaffected; all three are about what else the repository said.
   from `FOUNDER_AUTHORS` and is served by this decision, so the entry is right
   about what the decision reaches and was wrong only about the citation. The
   citation is added rather than the claim withdrawn.
+
+**2026-09-02** — This record says "nine merge commits on `main`" in three places.
+The number was right when it was first written into the constitution's follow-up
+list on 2026-08-30 and had drifted to sixteen by the day this record landed; it
+goes on drifting with every merge, so it was wrong here on arrival and would be
+wrong again by any date it was corrected to.
+
+The decision does not turn on it. What it fixes is which author strings satisfy
+Principle I, and that reaches every commit carrying one of them, past and future
+— a set, not a list. The count was scene-setting that read as a scope.
+
+The three documents that carried it alongside this one drop the number in the
+change appending this entry, keeping the description that stays true. The number
+is not restated here with a date, because a dated count in a record nobody
+recomputes is the same trap one turn later; `git log origin/main --merges
+--format='%an'` answers it whenever the answer is wanted.
