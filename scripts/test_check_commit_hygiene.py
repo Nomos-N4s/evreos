@@ -107,6 +107,12 @@ SUBJECT_MUST_FAIL = [
     ("scope with a space", "feat(the ui): a thing\n\nCloses #1"),
 ]
 SUBJECT_MUST_PASS = [
+    # Every type the rule admits. Five of the eleven -- revert, style, perf,
+    # test, build -- were exercised by no fixture, so each could be dropped
+    # from the pattern unnoticed.
+    *[(f"the {kind} type", f"{kind}(x): a thing\n\nCloses #1")
+      for kind in ("feat", "fix", "docs", "style", "refactor", "perf",
+                   "test", "build", "ci", "chore", "revert")],
     ("plain type", "feat: a thing\n\nCloses #1"),
     ("type and scope", "feat(ui): a thing\n\nCloses #1"),
     ("breaking marker", "feat(ui)!: a thing\n\nCloses #1"),
@@ -227,8 +233,18 @@ ATTRIBUTION_MUST_FAIL_EXTRA = [
      VALID + "* Co-authored-by: Copilot <copilot@github.com>"),
     ("a co-authorship trailer behind a plus bullet",
      VALID + "+ Co-authored-by: Copilot <copilot@github.com>"),
-    ("an identity split by a zero-width character",
-     VALID + "Co-Authored-By: Cl\u200baude Bot <a@b.example>"),
+    # Under a NON-co-authorship key, so the identity test is the only thing
+    # that can fire. Written with `Co-Authored-By:` these prove nothing: that
+    # key is refused whatever its value, so the unicode folding never has to
+    # work -- which is how the whole of `normalise()` came to have no test.
+    ("an identity behind a fullwidth letter",
+     VALID + "Reviewed-by: \uff23laude <a@b.example>"),
+    ("an identity split by a zero-width space",
+     VALID + "Reviewed-by: Cl\u200baude <a@b.example>"),
+    ("an identity split by a soft hyphen",
+     VALID + "Reviewed-by: Cl\u00adaude <a@b.example>"),
+    ("an identity split by a combining grapheme joiner",
+     VALID + "Reviewed-by: Cl\u034faude <a@b.example>"),
     ("a column-zero trailer ending in exotic whitespace",
      VALID + "Co-Authored-By: nobody in particular\u1680"),
 ]
