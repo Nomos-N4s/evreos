@@ -40,12 +40,27 @@ name: Benchmarks
 # after it. `workflow_dispatch`, so a run can be started by hand: to re-measure
 # after an engine runtime update, or to exercise a freshly pinned machine.
 #
-# The hardware-dependent jobs will run on self-hosted machines and this
-# repository is public, so anyone who can fork it and open a pull request could
-# otherwise run code on the machine that holds a tier's baseline series. The
-# procurement task restricts every hardware-dependent job to non-fork pull
-# requests when it pins the first machine. Today nothing here runs on a
-# self-hosted machine, so the `pull_request` trigger is safe as declared.
+# FORK RESTRICTION. The hardware-dependent jobs run on self-hosted machines and
+# this repository is public, so anyone who can fork it and open a pull request
+# could otherwise run their code on the machine that holds a tier's baseline
+# series -- and a machine whose durable identity is compromised has to be
+# reimaged, which restarts every baseline on that tier. Every job here that
+# resolves a `runner_label` therefore carries
+#
+#   if: github.event.pull_request.head.repo.full_name == github.repository
+#
+# so a job from a fork never reaches a pinned machine. The condition is written
+# on the job rather than on the workflow, because the guard below must keep
+# running on every pull request including a fork's: it is what proves this file
+# parses, and a workflow that produces no job on a fork's pull request reports
+# nothing rather than reporting that it was skipped.
+#
+# Today no job here runs on a self-hosted machine, so nothing yet carries the
+# condition. It is stated now rather than when the first machine is pinned,
+# because the first job to register must carry it from its first commit: a job
+# that reaches a pinned machine once from a fork has already spent the machine.
+# docs/benchmarks/runner-procurement.md records what a compromised identity
+# costs.
 
 on:
   pull_request:
