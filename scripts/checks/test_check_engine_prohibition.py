@@ -132,6 +132,19 @@ with tempfile.TemporaryDirectory() as tmp:
     except engine.CheckError:
         check("a missing deny-list is a CheckError", True)
 
+# A workspace with no members is a check over nothing, which is not a pass.
+# Nothing pinned that guard, so removing it turned an empty metadata set into
+# "0 crates, 0 packages ... passed".
+try:
+    engine.check_repository(
+        REPO, HERE / "prohibited-engines.txt",
+        metadata={"workspace_members": [], "packages": []}
+    )
+    check("a workspace with no members is a CheckError", False)
+except engine.CheckError as error:
+    check("a workspace with no members is a CheckError",
+          "not a pass" in str(error))
+
 # --- DEPENDENCY ---------------------------------------------------------------
 
 DENY = ["cef", "cef-dll-sys", "chromiumoxide", "headless-chrome", "electron"]
@@ -302,6 +315,19 @@ check("a matrix under the key version fails",
 check("a matrix include entry naming nightly fails",
       nightly_problems(lambda r: wf(r, "matrix:\n  include:\n    - rust: nightly\n      os: ubuntu-latest\n")))
 # Nightly behaviour under a stable toolchain.
+# Each of the five below was the sole exercise of a branch nothing pinned:
+# mutating that branch left the suite green.
+check("an unstable flag in RUSTDOCFLAGS fails",
+      nightly_problems(lambda r: wf(r, 'env:\n  RUSTDOCFLAGS: "-Z unstable-options"\n')))
+check("a channel key in a workflow fails",
+      nightly_problems(lambda r: wf(r, "jobs:\n  b:\n    steps:\n      - uses: x\n        with:\n          channel: nightly\n")))
+check("a doubled colon is not a key and passes",
+      nightly_problems(lambda r: wf(r, "jobs:\n  b:\n    steps:\n      - run: |\n          channel:: nightly\n")) == [])
+check("a sibling list item is not the previous key's value",
+      nightly_problems(lambda r: wf(r, "matrix:\n  - rust: stable\n  - nightly\n")) == [])
+check("a hyphen-prefixed value is not the nightly channel",
+      nightly_problems(lambda r: wf(r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain: pre-beta\n")) == [])
+
 check("RUSTC_BOOTSTRAP in a workflow fails",
       nightly_problems(lambda r: wf(r, "env:\n  RUSTC_BOOTSTRAP: 1\n")))
 check("a CARGO_UNSTABLE_ variable fails",
@@ -356,6 +382,23 @@ def acquisition_problems(build, members=("evreos-shell",)):
 
 
 check("a clean workspace passes the acquisition clause", acquisition_problems(lambda r: None) == [])
+
+# `.lock` is excluded because it is generated and restates manifests the
+# dependency clause already judges from the resolved graph. Nothing pinned that
+# exclusion, so removing it would have silently widened the clause.
+check("a lockfile is not read by the acquisition clause",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/src/Cargo.lock",
+          'url = "https://example.com/chromium.zip"\n')) == [])
+
+# An engine embedded by an include macro, with no archive extension and no
+# vendor path beside it, so that branch is the only thing that can catch it.
+# The two existing include_bytes! fixtures also carry `.zip` AND `vendor/`, so
+# it was never the sole matcher.
+check("an engine embedded by include_bytes! alone fails",
+      acquisition_problems(lambda r: rs(r, 'static E: &[u8] = include_bytes!("chromium.pak");\n')))
+check("a chromium blob included by include_flate alone fails",
+      acquisition_problems(lambda r: rs(r, 'include_flate!(static CEF from "libcef.bin");\n')))
 
 # The failing side: a vendored or fetched engine, however spelled.
 check("a build script downloading a CEF archive fails",

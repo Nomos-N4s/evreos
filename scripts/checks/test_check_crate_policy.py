@@ -296,7 +296,11 @@ check("a members pattern matching nothing fails", mentions(problems, "'extra/*' 
 
 problems, crates, _ = scenario(
     [crate("a"), crate("vendored", lints="", files={"src/lib.rs": UNSAFE_LIB})],
-    members=["crates/a"],
+    # LISTED as a member as well as excluded. Without that the directory is
+    # unreachable whether or not `exclude` is honoured, so the assertion held
+    # with the clause deleted -- it proved only that an unlisted directory is
+    # not a member, which is a different rule.
+    members=["crates/a", "crates/vendored"],
     exclude=["crates/vendored"],
 )
 check("an excluded directory is not a member", problems == [] and crates == 1)
@@ -513,6 +517,16 @@ for label, source, forbids in (
     # a real behavioural choice and nothing pinned it.
     ("an attribute mid-statement does not count",
      "let x = 1; #![forbid(unsafe_code)]\n", False),
+    # The raw-string hash count must match exactly. With `r##"..."##`, a `"#`
+    # inside the body does not close it -- counting one hash instead of the
+    # opener's own count ends the string early and leaves the rest as code.
+    ("a raw string with two hashes holding a quote-hash",
+     'pub const S: &str = r##"a "# b"##;\n#![forbid(unsafe_code)]\n', True),
+    # A raw string takes no escapes, so a trailing backslash does not extend
+    # it. Read as a plain string, the backslash escapes the closing quote and
+    # everything after it is swallowed.
+    ("a raw string ending in a backslash",
+     'pub const P: &str = r"C:\\dir\\";\n#![forbid(unsafe_code)]\n', True),
     ("a lifetime is not a char literal",
      "pub fn f<'a>(s: &'a str) -> &'a str { s }\n#![forbid(unsafe_code)]\n", True),
     # A line comment ends at the newline, so an unpaired opener inside prose

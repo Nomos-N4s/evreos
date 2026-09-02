@@ -118,6 +118,11 @@ SUBJECT_MUST_PASS = [
 ]
 ISSUE_MUST_FAIL = [
     ("no reference at all", "feat(x): a thing\n\nA body with no link."),
+    # A reference inside an inline code span is a quotation, not a link. The
+    # fenced form was covered and the inline form was not, so the span half of
+    # the stripping pattern was never the sole reason a message failed.
+    ("a reference only inside an inline code span",
+     "feat(x): a thing\n\nSee `Closes #12` in the documentation."),
     ("a bare number", "feat(x): a thing\n\nSee the ticket 42."),
     ("a colour, not an issue", "feat(x): a thing\n\nTweak the palette to #000000."),
     ("a URL fragment", "feat(x): a thing\n\nhttps://example.com/guide#2-setup"),
@@ -156,6 +161,10 @@ ATTRIBUTION_MUST_PASS = [
      VALID + "> Co-authored-by: is rejected however it is spelled."),
     ("a bulleted key with a name but no address",
      VALID + "- Co-authored-by: nobody in particular here"),
+    # A signature block QUOTED in a message body is not a signature: the kind
+    # is read from the object header, not from anywhere in the text.
+    ("a message quoting a signature block",
+     VALID + "```\n-----BEGIN SSH SIGNATURE-----\n-----END SSH SIGNATURE-----\n```"),
     ("prose quoting the canonical footer mid-sentence",
      "docs(x): explain the rule\n\nTooling appends a footer reading "
      "\u201cGenerated with a tool\u201d to the body.\n\nRefs #1"),
@@ -208,6 +217,18 @@ ATTRIBUTION_MUST_FAIL_EXTRA = [
     # against a TRAILING strip made any line ending in whitespace read as
     # marked, so such a line was then skipped for want of one. U+1680 is
     # whitespace that survives normalise(), splitlines() and the value strip.
+    # Each of the six below was the sole catcher of a rule no fixture pinned:
+    # mutating that rule left the suite green.
+    ("a cursor identity in a non-co-authorship trailer",
+     VALID + "Reviewed-by: cursor <a@b.example>"),
+    ("the anthropic no-reply address in prose",
+     VALID + "Mail went to noreply@anthropic.com yesterday."),
+    ("a co-authorship trailer behind a star bullet",
+     VALID + "* Co-authored-by: Copilot <copilot@github.com>"),
+    ("a co-authorship trailer behind a plus bullet",
+     VALID + "+ Co-authored-by: Copilot <copilot@github.com>"),
+    ("an identity split by a zero-width character",
+     VALID + "Co-Authored-By: Cl\u200baude Bot <a@b.example>"),
     ("a column-zero trailer ending in exotic whitespace",
      VALID + "Co-Authored-By: nobody in particular\u1680"),
 ]
@@ -396,6 +417,33 @@ def signatures(failures):
              check("--allowed-signers-file", str(tmp / "missing")), 2, "does not exist")
         case("a pasted .pub line has no principal and is an error",
              check("--allowed-signers-file", str(pasted_pub)), 2, "no principal")
+
+        # Every key type OpenSSH writes, not just `ssh-`. A hardware-backed or
+        # ECDSA public key pasted without a principal must be refused for the
+        # same reason, and only the `ssh-` prefix was fixtured.
+        for label, line in (
+            ("a pasted sk- hardware key", "sk-ssh-ed25519@openssh.com AAAAtest"),
+            ("a pasted ecdsa key", "ecdsa-sha2-nistp256 AAAAtest"),
+        ):
+            pasted = tmp / f"pasted-{label.split()[-2]}.txt"
+            pasted.write_text(line + "\n")
+            case(f"{label} has no principal and is an error",
+                 check("--allowed-signers-file", str(pasted)), 2, "no principal")
+
+        # A signature block quoted in the MESSAGE is not a signature. The kind
+        # is read from the object header, before the first blank line, and
+        # nothing pinned that: reading the whole object instead made this
+        # commit look ssh-signed.
+        commit("feat(q): quotes a signature block\n\nCloses #9\n\n"
+               "-----BEGIN SSH SIGNATURE-----\n-----END SSH SIGNATURE-----")
+        # The substring must be unique to the unsigned verdict. Both verdicts
+        # contain "is not signed" -- the mutant's reads "signature by key
+        # (unknown) does not verify ... the commit is not signed" -- so the
+        # first version of this case passed whether the header was read or the
+        # whole object was.
+        case("a message quoting a signature block is still unsigned",
+             check("--allowed-signers-file", str(allowed)), 1,
+             "is not signed; Principle I requires a signature")
 
         commit("feat(b): unsigned\n\nCloses #3")
         case("an unsigned commit", check("--allowed-signers-file", str(allowed)), 1, "is not signed")

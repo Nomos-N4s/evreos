@@ -273,6 +273,12 @@ COMMENT_STYLE = {
     ".cfg": "hash", ".ini": "hash", ".in": "hash", ".mk": "hash", ".cmake": "hash",
 }
 HASH_NAMED = {"Makefile", "justfile", "Justfile"}
+# Not read by the acquisition clause. `.md` and `.txt` are prose: a design
+# note describing a rejected engine is not an acquisition. `.lock` is
+# GENERATED -- its contents restate the manifests the dependency clause already
+# reads from the resolved graph, so a URL there is a consequence of a
+# dependency that clause has already judged, and reading it would report the
+# same engine twice under a weaker rule.
 NOT_READ = {".md", ".txt", ".lock"}
 
 
