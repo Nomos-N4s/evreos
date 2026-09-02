@@ -117,9 +117,15 @@ TRAILER_IDENTITY = re.compile(
 # mid-sentence -- but a blockquote renders as visibly as a code fence, and the
 # fenced form is already a must-fail here.
 TRAILER_MARKER = re.compile(r"^[>\-*+\s]*")
-# What a trailer's value looks like when the line is quoted or bulleted: a name
-# and an address, or a bare address. Prose does not.
-IDENTITY_VALUE = re.compile(r"^(?:[^<>]*<[^<>@\s]+@[^<>\s]+>|[^<>@\s]+@[^<>\s]+)$")
+# What a trailer's value carries when the line is quoted or bulleted: an
+# address, somewhere in it. Prose does not.
+#
+# SEARCHED, not matched end to end. Anchoring the whole value meant a trailing
+# full stop, a parenthetical after the address, a second co-author on the same
+# line, or a name with no address at all all failed the test -- and a failed
+# test skips the line, so a genuine attribution passed. A trailer decorated in
+# any of those ways is still a trailer.
+IDENTITY_VALUE = re.compile(r"<[^<>@\s]+@[^<>\s]+>|(?:^|\s)[^<>@\s]+@[^<>\s]+")
 TRAILER_LINE = re.compile(
     r"^(?P<key>[A-Za-z][A-Za-z-]*-(?:by|with)):[ \t]*(?P<value>.+?)[ \t]*$",
     re.IGNORECASE,
@@ -230,9 +236,13 @@ def attribution_problems(text, where):
         # rule reads as a breach of it, which is the same over-reach anchoring
         # the footer branch was meant to end. A commit message describing this
         # very change was rejected by the unqualified form.
-        marked = stripped != line.rstrip()
+        # Compared against the line itself, not against `line.rstrip()`: those
+        # strip opposite ends, so any line ending in whitespace read as marked
+        # even with no marker on it -- and a column-zero trailer, which needs
+        # no identity, was then skipped for want of one.
+        marked = stripped != line
         match = TRAILER_LINE.match(stripped)
-        if match and marked and not IDENTITY_VALUE.match(match.group("value")):
+        if match and marked and not IDENTITY_VALUE.search(match.group("value")):
             continue
         if not match:
             continue

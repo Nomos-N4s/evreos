@@ -498,6 +498,21 @@ for label, source, forbids in (
      '#![forbid(unsafe_code)]\n"\n}\n', False),
     ("a byte char literal holding a quote",
      'pub const Q: u8 = b\'"\';\npub fn f() {\n"\n#![forbid(unsafe_code)]\n"\n}\n', False),
+    # `blank()` must keep newlines. It is what "keeping every offset" means,
+    # and destroying them merges a blanked comment into the line after it, so a
+    # crate root carrying its forbid on the next line reads as omitting it.
+    # `blank()` must keep newlines. It is what "keeping every offset" means:
+    # here the newline INSIDE the comment is the one that puts the attribute at
+    # a line start, so destroying it merges the two lines and the anchored
+    # pattern stops matching -- a compliant crate root read as omitting its
+    # forbid.
+    ("an attribute after a block comment that spans the newline",
+     "pub fn f() {} /* c\n*/ #![forbid(unsafe_code)]\n", True),
+    # FORBID is anchored to the line start. Unanchored it would read an
+    # attribute mid-statement, which rustc rejects anyway -- but the anchor is
+    # a real behavioural choice and nothing pinned it.
+    ("an attribute mid-statement does not count",
+     "let x = 1; #![forbid(unsafe_code)]\n", False),
     ("a lifetime is not a char literal",
      "pub fn f<'a>(s: &'a str) -> &'a str { s }\n#![forbid(unsafe_code)]\n", True),
     # A line comment ends at the newline, so an unpaired opener inside prose

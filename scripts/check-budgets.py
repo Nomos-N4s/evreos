@@ -904,6 +904,13 @@ def run_gates(budgets, measurements, host=None):
                     f"#{exemption['pull_request']} is establishing this figure, "
                     "and a build carrying the exemption is not released or tagged)"
                 )
+            elif hardware and tier is None:
+                # The mirror of the unmeasured branch. Naming a tier called
+                # "None" was fixed there and not here, which is the very
+                # asymmetry the comment beside that fix warns against.
+                absolute.block(
+                    f"{message}; platform {entry['platform']!r} maps to no tier"
+                )
             elif hardware and not declared:
                 absolute.block(
                     f"{message}; {tier} is not declared in this file, so there "

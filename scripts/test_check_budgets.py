@@ -1352,6 +1352,21 @@ _, _, unmeasured = budgets.run_gates(b, {}, host=None)
 linux = [row for row in unmeasured if "linux" in row[0]]
 check("an unmapped platform names no tier called None",
       bool(linux) and "None" not in linux[0][0])
+# The message was asserted and the verdict was not, so flipping the branch's
+# blocking flag left the suite green -- and that flag is what main() reads to
+# decide whether the run fails.
+check("...and the entry still blocks", bool(linux) and linux[0][2] is True)
+
+# The measured branch mirrors the unmeasured one, including on the message.
+b = budget_file()
+b["entry"].append({**stated_entry(*DEFAULT), "criterion": "SC-004",
+                   "name": "ten-tab memory", "platform": "linux", "figure": 150})
+absolute, _, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "linux"): 999.0}, host=None
+)
+check("a breach on an unmapped platform blocks", absolute.failed)
+check("...and names no tier called None",
+      not any("None" in message for message in absolute.blocking))
 
 # The isinstance guards in run_gates: a misread file must reach a verdict
 # rather than a traceback. Nothing exercised run_gates with a non-table.
