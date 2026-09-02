@@ -465,9 +465,15 @@ strings, Conventional Commits subjects and issue references on each commit, plus
 attribution on the pull request title and body. The constitution's own Sync
 Impact Report records both as landed.
 
-**Not satisfied, and this plan does not close it**: nothing checks signatures
-and `main` carries no branch protection, so Principle I's signing requirement is
-currently unenforced; and nine merge commits on `main` are authored with the
+**Partly closed, in Phase 1 setup.** `scripts/check-commit-hygiene.py` now
+verifies each commit's signature against `.github/allowed-signers`, and CI
+passes it the base branch's copy of that file so a pull request cannot authorise
+its own key. Enforcement is still inert and the conclusion is unchanged: the
+file lists no key, so the check reports that signing is not enabled and skips,
+and only the founder can add one. `main` carries no branch protection, which is
+the only thing that can gate what lands rather than what is proposed;
+`docs/governance/branch-protection.md` records the settings it must have. And
+nine merge commits on `main` are authored with the
 GitHub account's display name rather than `xcoder-es <capintobe@gmail.com>`,
 escaping the check because it runs over `origin/<base>..HEAD`, which never
 contains the merge commit being created. The remedy for the second is a
@@ -493,29 +499,25 @@ regression gate — and by `.github/workflows/build.yml`, which runs it twice:
 once for a full informational report and once blocking. An undeclared tolerance
 is zero, not unbounded, and an unmeasured entry is not a pass.
 
-It implements a **subset** of the budget-file gate, and saying otherwise would
-be the plan passing itself on work not done. `check_budget_file` today checks
-that runners are declared and carry a durable identity, that no `(criterion,
-name, platform)` key is duplicated, that status is `ratified` or `provisional`,
-that a figure and baseline are present, that no baseline stands above its stated
-figure, and that no tolerance is negative or above the 5% cap. The preamble's
-gate additionally fails on four conditions the script does not yet test: an
-entry a criterion states that is **missing** from the file; an entry recorded
-ratified that **names no founder decision**; a cross-check margin over its
-limit; and an upward baseline reset that names no recorded founder decision.
-Three of the four need a schema the file does not carry yet. Closing that gap is
-task **T-BUD-2**, and until it closes the budget-file gate is narrower than the
-rule it enforces.
+It implemented a **subset** of the budget-file gate when this plan was
+written, and the four conditions it did not test are the four Phase 1 setup
+closed: an entry a criterion states that is **missing** from the file; an entry
+recorded ratified that **names no founder decision**; a cross-check margin over
+its limit; and an upward baseline reset that names no recorded founder decision.
+Three of the four needed a schema the file did not carry, which the same phase
+added. The gate now enforces the rule rather than a subset of it, and the wake
+enumeration and the spike-exemption semantics landed with it. This paragraph
+stays as the record of what was owed and of what paid it.
 
-**Not satisfied today**, in four ways the plan schedules. (a) The file carries
-four of eighteen entries: SC-002 warm and cold, SC-004 ten-tab, SC-005 window
-and wake-free sample, and SC-006 tab switch and keystroke are missing on both
-platforms. (b) The schema is `figure_mb`/`baseline_mb` throughout with no unit,
-while SC-002 and SC-006 are milliseconds and SC-005 is a percentage of one core
-plus two processor-time bounds; it carries no `founder_decision` on ratified
-entries, no `cross_check_margin` for SC-004, no spike-exemption field, no SC-005
-wake enumeration and no display refresh in the runner blocks — each of which the
-preamble names as a budget-file-gate failure condition. (c) Both runner
+**Satisfied in two of the four ways this plan scheduled, and outstanding in
+two.** (a) **Closed**: the file carries all eighteen entries the preamble states
+— SC-002 warm and cold, SC-004 ten-tab, SC-005 window and wake-free sample, and
+SC-006 tab switch and keystroke, on both platforms. (b) **Closed**: the schema
+carries `figure`/`baseline` with a required `unit` of MB, ms or percent-of-core;
+`founder_decision` on every ratified entry; `cross_check_margin` on both SC-004
+entries; the spike-exemption and baseline-reset fields; the SC-005 wake
+enumeration; and display refresh, runner label, operating-system version and
+memory configuration in the runner blocks. (c) **Outstanding**: both runner
 identities are empty and every baseline is `0.0`, so the regression half of the
 four SC-001 entries is inert until a first measurement writes a baseline; the
 blocking workflow step suppresses two budget-file clauses with
@@ -931,8 +933,8 @@ unenumerated wake a compile error.
 
 | Violation | Why Needed | Simpler Alternative Rejected Because |
 |-----------|------------|-------------------------------------|
-| **Principle I: commit signing is unenforced and nine merge commits on `main` are mis-authored.** Nothing checks signatures, `main` carries no branch protection, and the hygiene check runs over `origin/<base>..HEAD`, which never contains the merge commit being created. | Both are pre-existing repository state recorded in the constitution's own Sync Impact Report and in `CLAUDE.md` as issue #26. Closing the author half is a display-name change on the founder's forge account, outside this plan's diff; closing the signing half requires branch protection this plan does not configure. | Rewriting the nine merge commits was rejected: it rewrites `main`'s history for a defect whose remedy is a one-line account setting, and every subsequent branch would need rebasing. Widening the check's range to include the merge commit is not available to a check that runs before the merge exists. |
-| **Principle II: `budgets.toml` carries four of eighteen entries and lacks six fields the preamble's budget-file gate is defined to fail on** — unit, `founder_decision`, `cross_check_margin`, spike exemption, the SC-005 wake enumeration, and display refresh — while both runner identities are empty and every baseline is `0.0`. | The budget-file gate is unconditional from M0 and is specifically what bounds the advisory period on the two measuring gates, so an incomplete file is a gate that cannot fail. The schema and the fourteen missing entries therefore land **before** any measurement, and the commit that first measures an entry also writes its baseline. | Adding entries as each measurement lands was rejected: it leaves the gate unable to fail for exactly as long as the measurements are missing, which is the period the gate exists to cover. Encoding milliseconds in a `figure_mb` field was rejected: it makes the tolerance arithmetic silently wrong across units. |
+| **Principle I: commit signing is unenforced and nine merge commits on `main` are mis-authored.** A signature check landed in Phase 1 setup and verifies against the base branch's `.github/allowed-signers`, but no key is listed so it reports signing not enabled and skips; `main` carries no branch protection, and the hygiene check runs over `origin/<base>..HEAD`, which never contains the merge commit being created. | Both are pre-existing repository state recorded in the constitution's own Sync Impact Report and in `CLAUDE.md` as issue #26. Closing the author half is a display-name change on the founder's forge account, outside this plan's diff; closing the signing half requires branch protection this plan does not configure. | Rewriting the nine merge commits was rejected: it rewrites `main`'s history for a defect whose remedy is a one-line account setting, and every subsequent branch would need rebasing. Widening the check's range to include the merge commit is not available to a check that runs before the merge exists. |
+| **Principle II, resolved for the file and the gate: `budgets.toml` carried four of eighteen entries and lacked six fields the preamble's budget-file gate is defined to fail on** — unit, `founder_decision`, `cross_check_margin`, spike exemption, the SC-005 wake enumeration, and display refresh — while both runner identities were empty and every baseline was `0.0`. The file now carries all eighteen entries and every one of those fields, and the gate tests every clause the preamble states. The identities and the baselines stay outstanding: both wait on hardware, which no change in this repository can supply. | The budget-file gate is unconditional from M0 and is specifically what bounds the advisory period on the two measuring gates, so an incomplete file is a gate that cannot fail. The schema and the fourteen missing entries therefore land **before** any measurement, and the commit that first measures an entry also writes its baseline. | Adding entries as each measurement lands was rejected: it leaves the gate unable to fail for exactly as long as the measurements are missing, which is the period the gate exists to cover. Encoding milliseconds in a `figure_mb` field was rejected: it makes the tolerance arithmetic silently wrong across units. |
 | **Principle II, resolved: the download-size measurement compared one Linux ELF against both platform entries.** `measure_download_size()` read `target/release/evreos-shell` and `run_gates` keyed measurements on `(criterion, name)` with no platform. Linux is the deferred platform, and neither entry's stated condition — "the installer artefact CI publishes" — was met by it. | Recorded here when the plan was written as a confirmed defect in a merged gate, and fixed in Phase 1 setup rather than held for the first installer: measurements are keyed on `(criterion, name, platform)`, the download size is read from the platform's own published installer artefact on the host that builds it and declared for that platform, and each download-size entry stands unmeasured with that reason until its installer exists. The row stays as the record that the violation existed and of what closed it. | Holding the fix for the first installer, as this row first proposed, was rejected: the key was a gate defect independent of any artefact — a gate that compares one platform's number against another platform's entry is wrong whatever it measures — and the fix needs no installer to land. Deleting the measurement until an installer exists was rejected: an unmeasured entry blocks the budget-file gate, and a deferral that is stated (`--allow-unmeasured`, with what satisfies it named in the workflow) is auditable where a silently removed measurement is not. |
 | **Principle III's neighbourhood: `evreos-engine-webview` lifts the workspace `unsafe_code = "forbid"`.** Every call a real backend must make — `Navigate`, `add_NavigationCompleted`, `add_ServerCertificateErrorDetected`, `setNavigationDelegate`, `addContentRuleList` — is `pub unsafe fn`, so a backend is not buildable in this workspace today. | The exception must be narrow, named and reviewable, and exactly one manifest differing is what makes it so. It lands with the first FFI line rather than after, because retrofitting means arguing about an `allow` already in the tree, which typically ends as a blanket allow on whichever crate hit it first. Nothing in the constitution forbids `unsafe`; Principle III constrains nightly features. | Relaxing the lint workspace-wide to `deny` was rejected: it spreads the exception to crates that will never need it. Splitting the unsafe into a `-sys`-style crate below the backend was rejected: the unsafe *is* the backend, so the split produces a boundary with nothing on one side. Driving the platform APIs through an out-of-process helper was rejected on SC-001 and SC-004, and it invents an IPC surface the seam exists to avoid. |
 | **Principle V: the wallet may be unbuildable as specified.** FR-026 forbids the client aggregating any amount even where the arithmetic would be correct, so every total the wallet shows must be a field the service sent — and whether the Apivo API supplies per-state totals and a payable amount is unverified. | Recorded rather than resolved because Principle V places the answer outside this repository. If the API returns entries only, the resolution is either an API change or an amendment to FR-026, and both are decisions rather than implementation. | Computing the totals in the client "because the arithmetic is correct" was rejected by FR-026's own words and by Principle V's rationale: a client that computes money will eventually disagree with the ledger, and the member will believe the client. Hiding a state whose total cannot be shown was rejected by FR-026, which names dropping declined and reversed as the failure. |

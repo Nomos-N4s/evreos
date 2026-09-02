@@ -285,18 +285,38 @@ def entry_label(entry):
 def runner_missing(runner):
     """What a runner block still lacks before it is pinned; empty once it is.
 
-    Pinned means all three recorded: a durable identity, without which no
-    figure measured on it is reproducible under SC-013; a runner label,
-    without which no workflow job can resolve it; and the display refresh,
-    without which SC-006's stated condition is unverifiable on it. All three
-    are written when the machine is procured, so until then a runner fails the
-    budget-file gate for the same reason three times over, reported once.
+    Pinned means five things recorded. FR-043's own sentence names three of
+    them -- the budget file MUST record both machines "by model,
+    operating-system version, memory configuration and a durable machine
+    identifier" -- so an absent `os_version` or `memory` is a requirement
+    unmet, not a convenience missing. `os_floor` does not stand in for
+    `os_version`: the floor is what the tier admits, the version is what a
+    figure was measured on, and an operating-system update moves a figure
+    without touching the floor. The other two are what the gate itself needs:
+    a runner label, without which no workflow job can resolve the machine, and
+    the display refresh, without which SC-006's stated condition is
+    unverifiable on it.
+
+    `os_build`, `storage` and `latency_rig` are recorded in the runner block
+    for SC-013 reproducibility and are deliberately NOT tested here, because
+    FR-043's list does not name them and this gate enforces the requirement
+    rather than a preference. The rig in particular is shared across tiers and
+    its absence is a stated limitation of the SC-006 figures, not an unpinned
+    runner.
+
+    All five are written when the machine is procured, so until then a runner
+    fails the budget-file gate for the same reason five times over, reported
+    once.
     """
     missing = []
     if not is_text(runner.get("identity", "")):
         missing.append("no durable identity")
     if not is_text(runner.get("runner_label", "")):
         missing.append("no runner_label")
+    if not is_text(runner.get("os_version", "")):
+        missing.append("no operating-system version, which FR-043 requires")
+    if not is_text(runner.get("memory", "")):
+        missing.append("no memory configuration, which FR-043 requires")
     if not is_positive_number(runner.get("display_refresh", 0)):
         missing.append("display_refresh not recorded")
     return missing

@@ -74,13 +74,29 @@ def stated_entry(criterion, name, platform):
 
 
 def pinned_runner(tier, platform):
+    """A runner with every field the budget-file gate requires of a pinned one.
+
+    `os_version` and `memory` are here because FR-043 names them: a runner
+    recording neither is not pinned however much else it records.
+    """
     return {
         "platform": platform,
         "model": "a laptop",
+        "os_version": "some release",
+        "memory": "8 GB",
         "display_refresh": 60,
         "runner_label": f"evreos-{tier}",
         "identity": f"{tier}-abc123",
     }
+
+
+# FR-043 names the operating-system version and the memory configuration, so a
+# runner recording neither is not pinned. Placed with the helper above because
+# they are about what `pinned_runner` must carry to earn its name.
+def unpinned_without(field):
+    runner = pinned_runner("tier1", "windows")
+    runner.pop(field)
+    return budgets.runner_missing(runner)
 
 
 def identity(entry):
@@ -303,9 +319,13 @@ check("the retired baseline_mb field fails",
       file_gate(budget_file(entry={"baseline_mb": 0.0})).failed)
 
 # --- the runner block -------------------------------------------------------
-# Pinned means identity, runner_label and display_refresh all recorded. They
-# are written together when the machine is procured, so any of them missing
-# is the same unpinned state, reported once and deferred by one flag.
+# Pinned means five things recorded: identity, runner_label, os_version, memory
+# and display_refresh. FR-043's own sentence names three of them -- model,
+# operating-system version, memory configuration, durable identifier -- so an
+# absent os_version or memory is a requirement unmet rather than a convenience
+# missing. All five are written together when the machine is procured, so any
+# of them missing is the same unpinned state, reported once and deferred by one
+# flag.
 
 check("a runner with no runner_label is not pinned",
       file_gate(budget_file(runner={"runner_label": ""})).failed)
@@ -313,14 +333,37 @@ check("a runner with no runner_label is not pinned",
 check("a runner with display_refresh 0 is not pinned",
       file_gate(budget_file(runner={"display_refresh": 0})).failed)
 
+check("a runner with no operating-system version is not pinned",
+      file_gate(budget_file(runner={"os_version": ""})).failed)
+
+check("a runner with no memory configuration is not pinned",
+      file_gate(budget_file(runner={"memory": ""})).failed)
+
+# The floor is not the version. A tier declares what it admits; a figure is
+# measured on one release, and an update moves the figure without touching the
+# floor, so os_floor cannot stand in for os_version.
+check("os_floor does not satisfy the operating-system version requirement",
+      "no operating-system version" in " ".join(
+          unpinned_without("os_version")))
+check("a runner recording no memory says which requirement is unmet",
+      "FR-043 requires" in " ".join(unpinned_without("memory")))
+
+# The three fields recorded for reproducibility rather than gated: FR-043's
+# list does not name them, and this gate enforces the requirement rather than a
+# preference.
+for ungated in ("os_build", "storage", "latency_rig"):
+    check(f"{ungated} absent does not make a runner unpinned",
+          budgets.runner_missing(pinned_runner("tier1", "windows")) == [])
+
 b = budget_file()
 del b["runners"]["tier1"]["runner_label"]
 del b["runners"]["tier1"]["display_refresh"]
 check("a runner block without the two fields is not pinned", file_gate(b).failed)
 
-unprocured = {"identity": "", "runner_label": "", "display_refresh": 0}
+unprocured = {"identity": "", "runner_label": "", "os_version": "",
+              "memory": "", "display_refresh": 0}
 g = file_gate(budget_file(runner=unprocured))
-check("a runner missing all three is reported once, not three times",
+check("a runner missing all five is reported once, not five times",
       len(g.blocking) == 1 and budgets.UNPINNED in g.blocking[0])
 
 check("a negative display_refresh fails",

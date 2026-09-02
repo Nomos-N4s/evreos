@@ -112,25 +112,45 @@ spec = "specs/001-evreos-v1/spec.md"
 # memory, held as that tier's pinned benchmark runner of stable identity. The
 # rule binds and the models follow from it.
 #
-# Neither runner is procured yet. Until each is, its `identity` and
-# `runner_label` stay empty and its `display_refresh` stays 0, and the
-# budget-file gate fails on it.
+# Neither runner is procured yet. Until each is, its `identity`,
+# `runner_label`, `os_version` and `memory` stay empty and its
+# `display_refresh` stays 0, and the budget-file gate fails on it.
+#
+# `os_version` and `memory` are here because FR-043's own sentence names them:
+# the budget file MUST record both machines "by model, operating-system
+# version, memory configuration and a durable machine identifier". `os_floor`
+# is the tier's declared floor and is not that -- it is what the tier admits,
+# not what a figure was measured on, and an operating-system update moves a
+# figure without changing the floor. `os_build` and `storage` are recorded for
+# SC-013 reproducibility rather than gated, because FR-043's list does not name
+# them; `latency_rig` likewise, since the rig is shared across tiers and its
+# absence is a stated limitation of SC-006 rather than an unpinned runner.
 
 [runners.tier1]
 platform = "windows"
 os_floor = "Windows 11"
 model = "8th-generation Intel i3/i5 laptop, 8 GB"
+os_version = ""       # the release measured on, not the floor -- set when procured
+os_build = ""         # the exact build of that release -- set when procured
+memory = ""           # the memory configuration -- set when procured
+storage = ""          # storage type; it moves start-up figures -- set when procured
 display_refresh = 0   # Hz the display is driven at -- set when procured
 runner_label = ""     # what `runs-on` resolves -- set when procured
 identity = ""         # durable machine identifier -- set when procured
+latency_rig = ""      # photodiode and capture device, and the published design
 
 [runners.tier2]
 platform = "macos"
 os_floor = "macOS 13"
 model = "MacBook Pro (2017), 8 GB"
+os_version = ""       # the release measured on, not the floor -- set when procured
+os_build = ""         # the exact build of that release -- set when procured
+memory = ""           # the memory configuration -- set when procured
+storage = ""          # storage type; it moves start-up figures -- set when procured
 display_refresh = 0   # Hz the display is driven at -- set when procured
 runner_label = ""     # what `runs-on` resolves -- set when procured
 identity = ""         # durable machine identifier -- set when procured
+latency_rig = ""      # photodiode and capture device, and the published design
 
 # --- SC-001: size. Measured from build output and from the disk delta after
 # first run completes. Not hardware-dependent, so both gates block from M0.

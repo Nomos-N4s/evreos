@@ -30,10 +30,10 @@ name: Benchmarks
 # runner and no other. The README writes the shape out.
 #
 # WHAT IS NOT HERE YET, stated rather than left to be discovered. budgets.toml
-# has no `runner_label` field: the schema task adds it and the procurement task
-# fills it, both after this workflow. So no job is bound to a label, the
-# resolver that would read one is not here, and the only job is the guard
-# below. The resolver lands with the first job that needs it.
+# carries `runner_label` on both tiers, but both are empty until each machine
+# is procured. So no job is bound to a label, the resolver that would read one
+# is not here, and the only job is the guard below. The resolver lands with the
+# first job that needs it, and it skips a tier whose label is still empty.
 #
 # TRIGGERS. `pull_request`, because the regression gate compares every change
 # against its baseline and a gate blocks a merge on the pull request, not

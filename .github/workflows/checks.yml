@@ -45,9 +45,9 @@ jobs:
 
       - name: Every check's own tests
         # Every file runs to completion even after one fails, so one red file
-        # does not hide another; the step fails at the end. With no check
-        # landed yet the glob is empty and the step passes, which is what lets
-        # this harness land before its first check.
+        # does not hide another; the step fails at the end. An empty glob
+        # passes, which is what let this harness land before its first check;
+        # checks have since landed, so the step runs them.
         run: |
           shopt -s nullglob
           files=(scripts/checks/test_*.py)

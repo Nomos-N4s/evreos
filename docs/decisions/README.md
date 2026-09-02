@@ -7,10 +7,10 @@ Principle II of the constitution lets a budget move only by recorded founder
 decision. The Success Criteria preamble of `specs/001-evreos-v1/spec.md` makes
 an entry's status *ratified* only when a recorded founder decision sets it, and
 has the budget-file gate fail an entry recorded ratified that names none. The
-constitution's amendment procedure requires a recorded founder decision too. At
-the time of writing `budgets.toml` carries four ratified entries and no field
-for the decision they rest on; the gate does not yet check that clause. When
-the field and the clause land, this register is what those entries name.
+constitution's amendment procedure requires a recorded founder decision too.
+`budgets.toml` carries thirteen ratified entries, each naming `decisions/0001`
+in its `founder_decision` field, and the gate fails a ratified entry that names
+none. This register is what those entries name.
 
 ## What is recorded here
 

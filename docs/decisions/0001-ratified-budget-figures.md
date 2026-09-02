@@ -165,4 +165,14 @@ an edit to this one.
 
 ## Corrections
 
-None.
+- **2026-09-02** — the Evidence section describes the budget file as it stood
+  when this decision was recorded: "the file carries SC-001's four entries,
+  ratified, and no `founder_decision` field", with the gate's missing clause
+  named as the task that would fail a ratified entry lacking one. Both were
+  true then and neither is true now. The file carries all eighteen entries the
+  Success Criteria preamble states, thirteen of them ratified and each naming
+  `decisions/0001`, and the budget-file gate fails a ratified entry that names
+  no founder decision. The decision itself is unchanged and the text above is
+  left as it was written, which is what this register's no-edit rule requires:
+  a record says what was decided and what it rested on at the time, and a
+  correction says what has since moved.

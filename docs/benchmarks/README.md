@@ -129,9 +129,10 @@ hosted machine and does nothing.
 
 One job, `guard`, a no-op on a hosted runner whose passing proves the file
 parses. No hardware-dependent job is registered, because none can be:
-`budgets.toml` has no `runner_label` field yet — the schema task adds it and the
-procurement task fills it, both after the workflow — so there is no label to
-bind a job to, and the resolver above is not in the workflow yet either,
+`budgets.toml` carries a `runner_label` field on both tiers, added by the
+schema task, but both are empty until each machine is procured — so there is no
+machine to bind a job to, and the resolver above is not in the workflow yet
+either,
 because a resolver with nothing to resolve is a job that runs on every pull
 request for no one. It lands with the first job that needs it, in the shape
 above. The two runners themselves are not procured; the `identity` fields in
