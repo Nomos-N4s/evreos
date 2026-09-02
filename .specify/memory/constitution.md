@@ -81,9 +81,16 @@ Follow-up TODOs (status as of 1.1.0):
     preamble's CI requirement is scoped to principles and Development Workflow is not
     one, so this is a gap worth closing rather than one the preamble compels. Tracked as
     issue #27, which also notes the record has no defined syntax to parse.
-  - OPEN — the budget file and CI gates required by Principle II are not yet present.
-    They are ratified here as a requirement, not described as current state, and land
-    with milestone M0.
+  - DONE — the budget file and CI gates required by Principle II are present.
+    `budgets.toml` carries the eighteen entries the Success Criteria preamble closes
+    over, plus the SC-005 wake enumeration; `scripts/check-budgets.py` implements the
+    budget-file, absolute and regression gates; `.github/workflows/build.yml` runs
+    them on every pull request and refuses to publish a release from a commit
+    carrying an unretired spike exemption. Two clauses stay inert until the founder
+    acts, and neither is a gate that is missing: the absolute gate is advisory on
+    hardware-dependent entries while `--allow-unpinned-runners` stands, and every
+    baseline is zero, which the regression gate reads as no baseline yet rather than
+    as a ceiling.
 -->
 
 # Evreos Constitution
