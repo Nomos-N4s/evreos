@@ -231,7 +231,7 @@ def normalise(text):
     folded = unicodedata.normalize("NFKC", text)
     return "".join(
         ch for ch in folded
-        if unicodedata.category(ch) != "Cf" and ch not in "­͏"
+        if unicodedata.category(ch) != "Cf" and ch not in "͏"
     )
 
 
