@@ -204,8 +204,11 @@ Three consequences of trusting the base branch's copy:
 - The pull request that adds the first key is checked against no key, and
   passes as not yet enabled. Enforcement begins with the next pull request
   after it merges. This is what makes enabling the check immediately safe
-  rather than a flag day: commits before it are unsigned and stay that way,
-  and the range the check reads only ever contains commits made after it.
+  rather than a flag day: the range the check reads only ever contains commits
+  made after it, so whatever earlier history carries is out of its reach. Most
+  of that history is in fact signed already — the signatures exist and always
+  have; what has been missing is the key that makes one verifiable against an
+  authorised identity, which is precisely what this file supplies.
 - A key rotation is two pull requests: one adding the new key, signed with the
   old; one removing the old key, signed with the new.
 - A lost key cannot be replaced by a pull request, because the replacement

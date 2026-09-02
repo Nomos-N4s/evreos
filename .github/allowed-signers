@@ -13,9 +13,13 @@
 #
 # THE FOUNDER'S PUBLIC KEY GOES HERE. Until a key is listed, the check reports
 # that signing is not yet enabled and skips, so nothing is enforced yet. Only
-# the founder can change that, because only the founder holds the key: add the
-# public key below in a signed commit, and sign every commit from then on. On
-# the founder's machine, once per clone:
+# the founder can change that, because only the founder holds the key.
+#
+# What is missing is the key, not the signing. Commits here already carry SSH
+# signatures; without a key to check them against, a signature is a claim
+# nobody can verify. Listing the public key below is what turns it into one
+# this repository can check. Add it in a signed commit and keep signing. On the
+# founder's machine, once per clone:
 #
 #   git config gpg.format ssh
 #   git config user.signingkey ~/.ssh/id_ed25519.pub
