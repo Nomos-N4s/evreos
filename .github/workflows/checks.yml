@@ -25,19 +25,27 @@ jobs:
           rustup default stable
           cargo --version
 
-      - name: Every check has its tests
-        # One check_<name>.py beside one test_check_<name>.py, the convention
+      - name: Every module has its tests
+        # One <name>.py beside one test_<name>.py, the convention
         # scripts/checks/README.md states. A check with no tests is a gate
         # whose own behaviour nobody has proved, so the pair is enforced here
         # rather than asked for in review. The rule is one-way: a test file
-        # with no check is not an error.
+        # with no module is not an error.
+        #
+        # Every module, not every check_*.py. rustlex.py is production logic
+        # both checks read Rust through, and while this loop keyed on the
+        # check_ prefix it was the one file here the rule could not reach --
+        # so the module that had already caused two checks to be wrong at once
+        # was also the module nothing required tests for.
         run: |
           shopt -s nullglob
           missing=0
-          for check in scripts/checks/check_*.py; do
-            expected="scripts/checks/test_$(basename "$check")"
+          for module in scripts/checks/*.py; do
+            name="$(basename "$module")"
+            case "$name" in test_*) continue;; esac
+            expected="scripts/checks/test_$name"
             if [ ! -f "$expected" ]; then
-              echo "MISSING  $expected, the tests for $check" >&2
+              echo "MISSING  $expected, the tests for $module" >&2
               missing=1
             fi
           done

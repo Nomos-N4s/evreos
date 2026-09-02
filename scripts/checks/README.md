@@ -40,6 +40,15 @@ One check is two files, and the names are fixed by the workflow's globs:
 | --- | --- |
 | `check_<name>.py` | the check; exits non-zero when the tree breaks its rule |
 | `test_check_<name>.py` | its tests; exit non-zero when the check misbehaves |
+| `<name>.py` | a module two or more checks share, with `test_<name>.py` beside it |
+
+The third row is `rustlex.py`, the one Rust scanner, and it is here because two
+of them was the defect: a second, weaker copy grew up beside the first and made
+two checks wrong at once. A shared module is production logic that reaches every
+check importing it, so it carries tests on the same terms a check does. The
+workflow enforces that pairing over every module here, not over the `check_`
+prefix — while it keyed on the prefix, the one file that had already broken two
+checks was the one file nothing required tests for.
 
 - **Underscores, not hyphens.** The workflow runs
   `python3 scripts/checks/test_check_<name>.py`, which puts this directory
@@ -75,6 +84,11 @@ One check is two files, and the names are fixed by the workflow's globs:
   enforces has a failing case and a passing case, and the failing cases are
   the ones that matter: a check whose tests only prove it passes good input
   has not been shown to fail bad input.
+- **A shared module is a last resort, not a layer.** Extract one only when a
+  second check needs the identical logic and a second copy would be a defect
+  rather than a duplication — which is what happened here. It is not a home for
+  helpers one check finds convenient: a check reads as one file for a reason,
+  and the further its logic sits from its rule, the harder the rule is to audit.
 - **A committed list lives beside its check.** A check that needs an
   allowlist or a deny-list keeps it in this directory as a plain-text file —
   one entry per line, `#` starting a comment, blank lines ignored — read by
@@ -91,11 +105,12 @@ Its steps, in order:
 1. **Install the stable toolchain**, minimal profile, so a check that reads
    `cargo metadata` reads the graph one named toolchain resolves rather than
    whatever the runner image happens to carry. Nothing is compiled.
-2. **Every check has its tests.** For each `check_<name>.py`, the file
-   `test_check_<name>.py` must exist. A check with no tests is a gate whose
-   own behaviour nobody has proved, so the pair is enforced here rather than
-   asked for in review. The rule is one-way: a test file with no check is
-   not an error.
+2. **Every module has its tests.** For each `<name>.py` that is not itself a
+   `test_` file, `test_<name>.py` must exist. A check with no tests is a gate
+   whose own behaviour nobody has proved, and a shared module with none is
+   worse, because it is wrong in every check at once. The pair is enforced here
+   rather than asked for in review. The rule is one-way: a test file with no
+   module is not an error.
 3. **Every check's own tests**, `python3 scripts/checks/test_*.py`, each run
    to completion; then
 4. **Every check**, `python3 scripts/checks/check_*.py`, each run to
