@@ -3,8 +3,8 @@
 its own behaviour is checked rather than assumed."""
 import datetime
 import importlib.util
-import io
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -698,29 +698,37 @@ check("the committed budget file records no unretired spike exemption",
 
 b = single_entry()
 absolute, regression, unmeasured = budgets.run_gates(
-    b, {("SC-001", "download size"): 25.0}
+    b, {("SC-001", "download size", "windows"): 25.0}
 )
 check("exceeding a non-hardware figure blocks the absolute gate", absolute.failed)
 check("...and the verdict is stated in the entry's unit",
       "25.000 MB exceeds 20 MB" in absolute.blocking[0])
 
 b = single_entry()
-absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 1.0}
+)
 check("meeting the figure passes the absolute gate", not absolute.failed)
 
 # An undeclared tolerance is zero, not unbounded: the opposite reading lets an
 # entry disable its own regression gate by omitting a field.
 b = single_entry()
 del b["entry"][0]["tolerance_pct"]
-absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.001})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 1.001}
+)
 check("an undeclared tolerance is zero, not unbounded", regression.failed)
 
 b = single_entry(entry={"tolerance_pct": 5.0})
-absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.04})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 1.04}
+)
 check("a regression inside the declared tolerance passes", not regression.failed)
 
 b = single_entry(entry={"tolerance_pct": 5.0})
-absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.06})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 1.06}
+)
 check("a regression outside the declared tolerance blocks", regression.failed)
 check("...stated in the entry's unit",
       "1.060 MB is worse than baseline 1.0 MB" in regression.blocking[0])
@@ -730,7 +738,9 @@ b = single_entry(
     entry={"criterion": "SC-002", "name": "warm start", "figure": 800, "unit": "ms",
            "baseline": 700.0, "tolerance_pct": 0.0},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-002", "warm start"): 900.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-002", "warm start", "windows"): 900.0}
+)
 check("a millisecond breach blocks on a pinned runner",
       absolute.failed and regression.failed)
 check("...and is stated in ms", "900.000 ms exceeds 800 ms" in absolute.blocking[0])
@@ -738,7 +748,7 @@ check("...and is stated in ms", "900.000 ms exceeds 800 ms" in absolute.blocking
 # An entry the budget-file gate has already refused is not compared: a
 # measurement in the criterion's unit against a figure in another is two
 # quantities, and a verdict over them would be a verdict on nothing.
-over = {("SC-001", "download size"): 25.0}
+over = {("SC-001", "download size", "windows"): 25.0}
 b = single_entry(entry={"unit": "ms"})
 absolute, regression, unmeasured = budgets.run_gates(b, over)
 check("a figure in a unit its criterion does not state gets no verdict",
@@ -756,7 +766,9 @@ b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": ""},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 200.0}
+)
 check("an unpinned hardware entry's absolute breach is advisory", not absolute.failed)
 check("...and is still reported", len(absolute.advisory) == 1)
 
@@ -764,7 +776,9 @@ b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"runner_label": ""},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 200.0}
+)
 check("a runner with no label is unpinned for the absolute gate too",
       not absolute.failed)
 
@@ -772,7 +786,9 @@ b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": "pinned-1"},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 200.0}
+)
 check("a pinned hardware entry's absolute breach blocks", absolute.failed)
 
 b = single_entry(
@@ -785,7 +801,9 @@ b = single_entry(
     },
     runner={"identity": ""},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 120.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 120.0}
+)
 check("regression blocks even on an unpinned runner", regression.failed)
 
 # An unmeasured entry is not a pass.
@@ -798,9 +816,10 @@ check("an unmeasured entry is reported, not silently passed", len(unmeasured) ==
 # case where getting it wrong is silently permissive.
 
 b = single_entry()
-absolute, regression, unmeasured = budgets.run_gates(b, {})
-check("a non-hardware entry with no measurement is marked BLOCKING",
-      unmeasured == [("SC-001 download size (windows)", "BLOCKING")])
+absolute, regression, unmeasured = budgets.run_gates(b, {}, host="windows")
+check("a non-hardware entry with no measurement is blocking, with the reason",
+      unmeasured == [("SC-001 download size (windows)",
+                      "no measurement was produced", True)])
 
 b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
@@ -808,7 +827,8 @@ b = single_entry(
 )
 absolute, regression, unmeasured = budgets.run_gates(b, {})
 check("an unmeasured hardware entry with no pinned runner is not blocking",
-      unmeasured and unmeasured[0][1] != "BLOCKING")
+      unmeasured and not unmeasured[0][2]
+      and unmeasured[0][1] == "no pinned runner for this tier")
 
 b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
@@ -816,13 +836,176 @@ b = single_entry(
 )
 absolute, regression, unmeasured = budgets.run_gates(b, {})
 check("an unmeasured hardware entry WITH a pinned runner is blocking",
-      unmeasured and unmeasured[0][1] == "BLOCKING")
+      unmeasured and unmeasured[0][2])
 
 b = single_entry()
 absolute, regression, unmeasured = budgets.run_gates(
-    b, {("SC-001", "download size"): 1.0}
+    b, {("SC-001", "download size", "windows"): 1.0}
 )
 check("a measured entry is not reported unmeasured", unmeasured == [])
+
+# --- the measurement key -----------------------------------------------------
+# A measurement is keyed on (criterion, name, platform), an entry's whole
+# identity. What these prove against is the defect the merged gate had: one
+# Linux binary, keyed on (criterion, name) alone, was compared against both
+# download-size entries, and neither entry's condition -- the installer
+# artefact CI publishes -- was met by it. A host now measures the artefact it
+# builds, declares the platform, and satisfies that platform's entry alone.
+
+WIN = ("SC-001", "download size", "windows")
+MAC = ("SC-001", "download size", "macos")
+MiB = 1024 * 1024
+TREES = []  # every packaging_tree() made, removed once the run is over
+
+
+def both_platforms():
+    """The download-size entry on both platforms, baseline 1.0, both runners
+    pinned: the measuring gates' two-entry fixture."""
+    b = single_entry()
+    b["entry"].append({**stated_entry(*MAC), "baseline": 1.0})
+    b["runners"]["tier2"] = pinned_runner("tier2", "macos")
+    return b
+
+
+def packaging_tree(**artefacts):
+    """A repository root carrying the named installer artefacts, each of the
+    size in bytes given, where its platform's build publishes it."""
+    root = Path(tempfile.mkdtemp())
+    TREES.append(root)
+    for name, size in artefacts.items():
+        platform = "windows" if name.endswith(".msi") else "macos"
+        directory = root / budgets.INSTALLER_ARTEFACT[platform][0]
+        directory.mkdir(parents=True, exist_ok=True)
+        (directory / name).write_bytes(b"\0" * size)
+    return root
+
+
+def labels(unmeasured):
+    return [label for label, _, _ in unmeasured]
+
+
+# The host declares the tier it builds for, and no other.
+check("a Windows host builds the tier-1 artefact",
+      budgets.host_platform("win32") == "windows")
+check("a macOS host builds the tier-2 artefact",
+      budgets.host_platform("darwin") == "macos")
+check("a Linux host builds no tier's artefact, Linux being the deferred platform",
+      budgets.host_platform("linux") is None)
+check("each tier's artefact is read where its own build publishes it: WiX's .msi "
+      "on tier 1, productbuild's .pkg on tier 2",
+      set(budgets.INSTALLER_ARTEFACT) == set(PLATFORMS)
+      and budgets.INSTALLER_ARTEFACT["windows"][1] == ".msi"
+      and budgets.INSTALLER_ARTEFACT["macos"][1] == ".pkg"
+      and len({d for d, _ in budgets.INSTALLER_ARTEFACT.values()}) == 2)
+
+# measure_download_size() reads the host's own artefact and declares the host.
+tree = packaging_tree(**{"a.msi": 12 * MiB, "b.pkg": 15 * MiB})
+
+measured = budgets.measure_download_size("windows", tree)
+check("a Windows host measures the .msi, in MB, and declares windows",
+      measured.platform == "windows" and measured.megabytes == 12.0
+      and measured.reason is None)
+
+measured = budgets.measure_download_size("macos", tree)
+check("a macOS host measures the .pkg and declares macos, not the .msi beside it",
+      measured.platform == "macos" and measured.megabytes == 15.0)
+
+measured = budgets.measure_download_size(None, tree)
+check("a host of no tier measures nothing, though both artefacts stand on its disk",
+      measured.platform is None and measured.megabytes is None
+      and "builds no tier's installer artefact" in measured.reason)
+
+measured = budgets.measure_download_size("windows", packaging_tree())
+check("a tier's host with no artefact measures nothing and says the installer is "
+      "not built yet",
+      measured.platform == "windows" and measured.megabytes is None
+      and ".msi" in measured.reason and "not built yet" in measured.reason)
+
+measured = budgets.measure_download_size(
+    "windows", packaging_tree(**{"a.msi": MiB, "b.msi": MiB})
+)
+check("two artefacts where exactly one is served to everyone are reported, not "
+      "picked between",
+      measured.megabytes is None and "exactly one" in measured.reason
+      and "a.msi" in measured.reason and "b.msi" in measured.reason)
+
+tree = packaging_tree()
+(tree / "target" / "release").mkdir(parents=True)
+(tree / "target" / "release" / "evreos-shell").write_bytes(b"\0" * MiB)
+check("the release binary is not read: a host with only that on its disk "
+      "measures nothing, whatever tier it is",
+      all(budgets.measure_download_size(host, tree).megabytes is None
+          for host in ("windows", "macos", None)))
+
+# One host's artefact no longer satisfies both platform entries.
+measured = budgets.measure_download_size("windows", packaging_tree(**{"a.msi": MiB}))
+absolute, regression, unmeasured = budgets.run_gates(
+    both_platforms(),
+    {("SC-001", "download size", measured.platform): measured.megabytes},
+    host=measured.platform,
+)
+check("one host's artefact satisfies its own platform's entry...",
+      not absolute.failed and not regression.failed and len(unmeasured) == 1)
+check("...and leaves the other platform's entry unmeasured, with the reason",
+      labels(unmeasured) == ["SC-001 download size (macos)"]
+      and "a macos figure is measured on a macos host" in unmeasured[0][1]
+      and "this is the windows host" in unmeasured[0][1])
+check("...which blocks: an unmeasured entry is not a pass, and another platform's "
+      "artefact is no measurement of it",
+      unmeasured[0][2] is True)
+
+absolute, regression, unmeasured = budgets.run_gates(
+    both_platforms(), {WIN: 25.0}, host="windows"
+)
+check("a windows breach fails the windows entry alone",
+      absolute.failed and len(absolute.blocking) == 1
+      and "(windows)" in absolute.blocking[0]
+      and labels(unmeasured) == ["SC-001 download size (macos)"])
+
+absolute, regression, unmeasured = budgets.run_gates(
+    both_platforms(), {MAC: 25.0}, host="macos"
+)
+check("...and a macos breach the macos entry alone",
+      absolute.failed and len(absolute.blocking) == 1
+      and "(macos)" in absolute.blocking[0]
+      and labels(unmeasured) == ["SC-001 download size (windows)"])
+
+# A measurement for one platform never satisfies another platform's entry.
+absolute, regression, unmeasured = budgets.run_gates(single_entry(), {MAC: 1.0})
+check("a macos measurement inside the figure does not pass the windows entry",
+      not absolute.failed and labels(unmeasured) == ["SC-001 download size (windows)"])
+
+absolute, regression, unmeasured = budgets.run_gates(single_entry(), {MAC: 25.0})
+check("...and one over the figure does not fail it either, being no measurement "
+      "of it",
+      not absolute.failed and not absolute.advisory and not regression.failed
+      and len(unmeasured) == 1)
+
+absolute, regression, unmeasured = budgets.run_gates(
+    single_entry(), {("SC-001", "download size"): 1.0}
+)
+check("a measurement keyed with no platform, the old key, satisfies nothing",
+      not absolute.failed and len(unmeasured) == 1)
+
+# A host of no tier, which is what the build job runs on today.
+absolute, regression, unmeasured = budgets.run_gates(both_platforms(), {}, host=None)
+check("on a host of no tier both download-size entries are unmeasured, each with "
+      "the reason",
+      labels(unmeasured) == ["SC-001 download size (windows)",
+                             "SC-001 download size (macos)"]
+      and all("this host builds no tier's artefact" in reason
+              for _, reason, _ in unmeasured)
+      and all(f"a {p} figure is measured on a {p} host" in reason
+              for (_, reason, _), p in zip(unmeasured, PLATFORMS)))
+check("...and both block", all(blocking for _, _, blocking in unmeasured))
+
+# A harness figure is the pinned runner's, not the host's.
+b = single_entry(entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150})
+absolute, regression, unmeasured = budgets.run_gates(b, {}, host="macos")
+check("an unmeasured hardware entry on a pinned runner is blocking whatever host "
+      "runs the gate, its figure being the runner's",
+      unmeasured == [("SC-004 ten-tab memory (windows)",
+                      "no measurement was produced", True)])
 
 # --- the spike exemption under the measuring gates ---------------------------
 # It lifts that one entry's absolute gate and nothing else: never the
@@ -843,7 +1026,8 @@ b = single_entry(entry=EXEMPT)
 b["entry"].append({**stated_entry("SC-001", "installed footprint", "windows"),
                    "baseline": 1.0})
 absolute, regression, _ = budgets.run_gates(
-    b, {("SC-001", "download size"): 25.0, ("SC-001", "installed footprint"): 70.0}
+    b, {("SC-001", "download size", "windows"): 25.0,
+        ("SC-001", "installed footprint", "windows"): 70.0}
 )
 check("...and never another entry: the breach beside it blocks",
       absolute.failed and len(absolute.blocking) == 1
@@ -860,17 +1044,20 @@ check("a spike exemption naming another entry's figure lifts nothing",
       absolute.failed)
 
 b = single_entry(entry=EXEMPT)
-absolute, regression, unmeasured = budgets.run_gates(b, {})
+absolute, regression, unmeasured = budgets.run_gates(b, {}, host="windows")
 check("an exempt entry with no measurement is still unmeasured and blocking, the "
       "unmeasured clause being the budget-file gate's",
-      unmeasured == [("SC-001 download size (windows)", "BLOCKING")])
+      unmeasured == [("SC-001 download size (windows)",
+                      "no measurement was produced", True)])
 
 b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150,
            "spike_exemption": {"pull_request": 57, "figure": "ten-tab memory"}},
     runner={"identity": ""},
 )
-absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 200.0}
+)
 check("an exempt hardware entry on an unpinned runner is advised once, as exempt",
       not absolute.failed and len(absolute.advisory) == 1
       and "exempt" in absolute.advisory[0])
@@ -937,6 +1124,52 @@ result = subprocess.run(
     [sys.executable, str(SCRIPT), "--refuse-exemptions"], capture_output=True, text=True
 )
 check("...and on the committed budget file", result.returncode == 0)
+
+# --- the committed state, end to end ----------------------------------------
+# The script as the workflow's blocking step runs it, on this host. Neither
+# installer exists, so no download-size entry is measured on any host: an entry
+# of this host's own platform reports that no measurement was produced, and one
+# of the other platform that it is measured where its artefact is built. Both
+# stand unmeasured with that reason until the installer each condition names is
+# built, deferred by --allow-unmeasured and by nothing else.
+
+host = budgets.host_platform()
+here = budgets.measure_download_size(host)
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--allow-unpinned-runners", "--allow-unmeasured"],
+    capture_output=True, text=True,
+)
+check("the workflow's blocking step passes on the committed file",
+      result.returncode == 0)
+if here.megabytes is None:
+    check("...measuring nothing, no installer artefact existing on this host",
+          "measured: nothing on this" in result.stdout
+          and here.reason in result.stdout)
+for platform in PLATFORMS:
+    line = next((each for each in result.stdout.splitlines()
+                 if f"SC-001 download size ({platform})" in each), "")
+    if platform == host and here.megabytes is not None:
+        continue
+    if platform == host:
+        reason = "no measurement was produced"
+    else:
+        reason = f"a {platform} figure is measured on a {platform} host"
+    check(f"...and the {platform} download-size entry is unmeasured with its "
+          "reason, deferred",
+          reason in line and "deferred by --allow-unmeasured" in line)
+
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--allow-unpinned-runners"],
+    capture_output=True, text=True,
+)
+check("without --allow-unmeasured the same file fails on them, an unmeasured "
+      "entry not being a pass",
+      result.returncode == 1
+      and all(f"SC-001 download size ({p})" in result.stderr
+              for p in PLATFORMS if p != host or here.megabytes is None))
+
+for tree in TREES:
+    shutil.rmtree(tree, ignore_errors=True)
 
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

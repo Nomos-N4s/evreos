@@ -88,18 +88,37 @@ unit and never against one a different criterion states. This script's own
 measurement is in MB, for SC-001; the harness figures arrive in the unit their
 criterion states.
 
+A MEASUREMENT IS ONE PLATFORM'S, and satisfies that platform's entry alone.
+Measurements are keyed on (criterion, name, platform), an entry's whole
+identity, because a figure stated per platform is one entry per platform and a
+number measured for one platform is no measurement of the other. This script's
+own measurement, SC-001's download size, is the size of the installer artefact
+the host it runs on builds -- what the entry's condition names, "the installer
+artefact CI publishes" -- read from where that platform's packaging build
+publishes it and declared for that platform. A host of no tier builds no such
+artefact and measures nothing: the hosted Linux runner the build job runs on
+is one, Linux being the deferred platform, and the release binary it does
+build is a Linux ELF that meets neither entry's condition, so it is not read.
+An entry whose platform is not the measuring host's is reported unmeasured
+with that reason rather than compared against another platform's artefact.
+Neither installer exists yet, so both download-size entries stand unmeasured
+with that reason until the installer each entry's condition names is built.
+
 This script measures only what it can measure honestly on the machine it runs
-on. SC-001's download and installed-footprint entries are build output and are
-measured here. The hardware-dependent entries -- SC-002, SC-004, SC-005, SC-006
--- are measured by the benchmark harness on a pinned runner, and this script
-reports them as unmeasured rather than inventing a number. An unmeasured entry
-is not a pass.
+on: SC-001's download size, on the host that builds the artefact. SC-001's
+installed footprint is the disk delta after first run completes and needs an
+installed artefact, and the hardware-dependent entries -- SC-002, SC-004,
+SC-005, SC-006 -- are measured by the benchmark harness on a pinned runner;
+this script reports each as unmeasured, with the reason, rather than inventing
+a number. An unmeasured entry is not a pass: it blocks unless
+--allow-unmeasured defers it, the one exception being a hardware-dependent
+entry whose tier has no pinned runner, which the budget-file gate already
+reports.
 """
 import argparse
+import collections
 import datetime
-import os
 import re
-import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -594,19 +613,91 @@ def defer_unpinned_runners(gate):
     gate.advisory.extend(moved)
 
 
-def measure_download_size():
-    """The size of the artefact a release would ship, in MB, SC-001's unit.
+# Where each tier's packaging build publishes its installer artefact, relative
+# to the repository root, and the kind of artefact it is: the .msi WiX builds
+# from packaging/windows/evreos.wxs, and the .pkg productbuild assembles from
+# packaging/macos/Distribution.xml. The directory is this gate's contract with
+# those builds -- under cargo's target/, beside the release binary and cleaned
+# with it -- so that "the installer artefact CI publishes", which SC-001's
+# condition names, is read from one place the build and the gate agree on.
+# Exactly one artefact is served to everyone: the packaging decision research
+# §10.3 records, which rests on FR-033 -- attribution for a partner referral
+# comes only from a code the member scans or types and is never inferred from
+# the installation, so there is no per-partner and no per-campaign build. So
+# exactly one is expected: none is the state before that platform's installer
+# is built.
+INSTALLER_ARTEFACT = {
+    "windows": ("target/packaging/windows", ".msi"),
+    "macos": ("target/packaging/macos", ".pkg"),
+}
 
-    At M0 there is no installer, so this is the release binary. That is a floor
-    rather than the eventual figure, and it is reported as what it is.
+# What measure_download_size() reports: the platform the artefact was built
+# for, its size in MB, and -- where nothing was measured, megabytes being None
+# -- the reason.
+DownloadSize = collections.namedtuple("DownloadSize", "platform megabytes reason")
+
+
+def host_platform(system=sys.platform):
+    """The tier this host builds an installer artefact for: windows on a
+    Windows host, macos on a macOS host, None on any other. The hosted Linux
+    runner the build job runs on is a host of no tier, Linux being the
+    deferred platform: it builds a release binary, but that is a Linux ELF that
+    meets neither download-size entry's condition, and it is not read."""
+    return {"win32": "windows", "darwin": "macos"}.get(system)
+
+
+def installer_artefacts(platform, repo=REPO):
+    """Every file of the platform's artefact kind where its build publishes."""
+    directory, suffix = INSTALLER_ARTEFACT[platform]
+    return sorted((repo / directory).glob(f"*{suffix}"))
+
+
+def measure_download_size(host, repo=REPO):
+    """The size of the installer artefact this host builds, in MB, SC-001's
+    unit, declared for the platform it was built for.
+
+    The declaration is what keeps one platform's artefact from satisfying
+    another platform's entry: the figure is keyed by the platform returned
+    here, and run_gates compares it against that entry alone. A host of no
+    tier measures nothing, rather than measuring what it can build and calling
+    it a figure for a platform it is not. On a tier's host with no artefact
+    the installer is not built yet, and the reason says so; with more than one
+    the gate does not pick, since exactly one artefact is served to everyone
+    -- FR-033's consequence, recorded at research §10.3 -- and two is a state
+    to report rather than resolve.
     """
-    binary = REPO / "target" / "release" / "evreos-shell"
-    if not binary.exists():
-        return None
-    return binary.stat().st_size / (1024 * 1024)
+    if host is None:
+        return DownloadSize(None, None, "this host builds no tier's installer artefact")
+    directory, suffix = INSTALLER_ARTEFACT[host]
+    artefacts = installer_artefacts(host, repo)
+    if not artefacts:
+        return DownloadSize(
+            host, None,
+            f"no {suffix} artefact under {directory}; the {host} installer is not "
+            "built yet",
+        )
+    if len(artefacts) > 1:
+        names = ", ".join(path.name for path in artefacts)
+        return DownloadSize(
+            host, None,
+            f"{len(artefacts)} {suffix} artefacts under {directory} ({names}) where "
+            "exactly one is served to everyone",
+        )
+    return DownloadSize(host, artefacts[0].stat().st_size / (1024 * 1024), None)
 
 
-def run_gates(budgets, measurements):
+def run_gates(budgets, measurements, host=None):
+    """The absolute and regression gates over every entry, and what is unmeasured.
+
+    `measurements` is keyed on (criterion, name, platform), an entry's whole
+    identity, so a figure for one platform is compared against that platform's
+    entry and no other. `host` is the tier this run measures for, as
+    host_platform() reports it, None on a host of no tier; it is what an entry
+    no measurement covers is explained against, since SC-001's figures are
+    measured on a host of the entry's platform -- the download size where the
+    artefact is built, the installed footprint where it is installed. The
+    unmeasured list carries (label, reason, blocking).
+    """
     absolute = Gate("absolute")
     regression = Gate("regression")
     unmeasured = []
@@ -630,7 +721,8 @@ def run_gates(budgets, measurements):
             # quantities, so none is made; the budget-file gate reports it.
             continue
 
-        measured = measurements.get((entry["criterion"], entry["name"]))
+        platform = entry["platform"]
+        measured = measurements.get((entry["criterion"], entry["name"], platform))
         if measured is None:
             # An unmeasured entry is not a pass. The one honest exception is a
             # hardware-dependent entry whose tier has no pinned runner: there is
@@ -639,11 +731,28 @@ def run_gates(budgets, measurements):
             # exist does not, and a gate that passes it is a gate that certifies
             # a number nobody produced.
             hardware = entry["criterion"] in HARDWARE_DEPENDENT
-            tier = tier_of.get(entry["platform"])
+            tier = tier_of.get(platform)
             if hardware and not pinned.get(tier, False):
-                unmeasured.append((label, "no pinned runner for this tier"))
+                unmeasured.append((label, "no pinned runner for this tier", False))
+            elif not hardware and platform != host:
+                # SC-001's figures are measured on a host of the entry's
+                # platform -- the download size where the artefact is built,
+                # the installed footprint where it is installed -- and this
+                # host is another platform's, or no tier's. The entry is
+                # unmeasured here for that reason, and it still blocks:
+                # nothing this run can see says it was measured anywhere, and
+                # another platform's artefact is not a measurement of it.
+                if host is None:
+                    this = "this host builds no tier's artefact"
+                else:
+                    this = f"this is the {host} host"
+                unmeasured.append((
+                    label,
+                    f"a {platform} figure is measured on a {platform} host; {this}",
+                    True,
+                ))
             else:
-                unmeasured.append((label, "BLOCKING"))
+                unmeasured.append((label, "no measurement was produced", True))
             continue
 
         tolerance = entry.get("tolerance_pct", 0.0)
@@ -774,12 +883,17 @@ def main():
     if args.allow_unpinned_runners:
         defer_unpinned_runners(file_gate)
 
+    # The one measurement this script makes: the installer artefact this host
+    # builds, keyed for the platform it declares, so that it is compared against
+    # that platform's entry and no other.
+    host = host_platform()
     measurements = {}
-    download = measure_download_size()
-    if download is not None:
-        measurements[("SC-001", "download size")] = download
+    download = measure_download_size(host)
+    if download.megabytes is not None:
+        key = ("SC-001", "download size", download.platform)
+        measurements[key] = download.megabytes
 
-    absolute, regression, unmeasured = run_gates(budgets, measurements)
+    absolute, regression, unmeasured = run_gates(budgets, measurements, host)
 
     for gate in (file_gate, regression, absolute):
         for message in gate.advisory:
@@ -787,29 +901,33 @@ def main():
         for message in gate.blocking:
             print(f"  FAIL     [{gate.name}] {message}", file=sys.stderr)
 
-    blocking_unmeasured = [label for label, why in unmeasured if why == "BLOCKING"]
+    blocking_unmeasured = [
+        (label, reason) for label, reason, blocking in unmeasured if blocking
+    ]
     if unmeasured:
         print(f"  unmeasured on this machine: {len(unmeasured)} entries")
-        for label, why in unmeasured:
-            if why != "BLOCKING":
-                note = f"  ({why})"
-            elif args.allow_unmeasured:
-                note = "  (deferred by --allow-unmeasured)"
-            else:
-                note = "  (no measurement produced)"
-            print(f"    - {label}{note}")
+        for label, reason, blocking in unmeasured:
+            deferred = ""
+            if blocking and args.allow_unmeasured:
+                deferred = "; deferred by --allow-unmeasured"
+            print(f"    - {label}  ({reason}{deferred})")
 
     if blocking_unmeasured and not args.allow_unmeasured:
-        for label in blocking_unmeasured:
+        for label, reason in blocking_unmeasured:
             print(
-                f"  FAIL     [budget file] {label}: no measurement was produced; "
-                "an unmeasured entry is not a pass",
+                f"  FAIL     [budget file] {label}: {reason}; an unmeasured entry "
+                "is not a pass",
                 file=sys.stderr,
             )
-        file_gate.blocking.extend(blocking_unmeasured)
+        file_gate.blocking.extend(label for label, _ in blocking_unmeasured)
 
-    if download is not None:
-        print(f"  measured: download size {download:.3f} MB")
+    if download.megabytes is not None:
+        print(
+            f"  measured: download size ({download.platform}) "
+            f"{download.megabytes:.3f} MB"
+        )
+    else:
+        print(f"  measured: nothing on this {sys.platform} host; {download.reason}")
 
     failed = [g.name for g in (file_gate, regression, absolute) if g.failed]
     if failed:
