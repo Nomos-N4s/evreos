@@ -2085,14 +2085,16 @@ implementer's call.
 
 ### 7.4 Repository state that must change before measurement lands
 
-28. **budgets.toml carries four of eighteen entries**, has no unit field, no
-    `cross_check_margin`, no `founder_decision`, no `spike_exemption`, no wake
-    enumeration and no display refresh in the runner blocks; both runner
-    identities are empty; every baseline is zero, so the regression half of the
-    SC-001 entries is inert until a first measurement writes one. The schema
-    lands before the measurements do, and the commit that first measures also
-    sets the baseline.
-29. **`scripts/check-budgets.py` compares one Linux binary size against both the
-    Windows and the macOS download-size entries**, keying measurements on
-    `(criterion, name)` with no platform. Linux is the deferred platform and
-    neither entry's stated condition is met by it.
+28. **The budget schema is landed.** `budgets.toml` carried four of eighteen
+    entries with no unit field, no `cross_check_margin`, no `founder_decision`,
+    no `spike_exemption`, no wake enumeration and no display refresh in the
+    runner blocks. Phase 1 setup lands all eighteen and every field. What
+    remains is not schema and cannot be written from inside this repository:
+    both runner identities are empty until the machines are procured, and every
+    baseline is zero, which the regression gate reads as no baseline yet rather
+    than as a ceiling. The commit that first measures also sets the baseline.
+29. **The measurement key is fixed.** `scripts/check-budgets.py` compared one
+    Linux binary size against both the Windows and the macOS download-size
+    entries, keying on `(criterion, name)` with no platform. It keys on the
+    platform now, and measures nothing on a host of no tier, which Linux is:
+    the deferred platform meets neither entry's stated condition.
