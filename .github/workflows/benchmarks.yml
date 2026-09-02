@@ -1,0 +1,72 @@
+name: Benchmarks
+
+# The home of every job that needs a pinned machine. Such a job lands here and
+# never in build.yml, because build.yml runs on hosted runners and the Success
+# Criteria preamble disqualifies those for measurement: a fungible hosted
+# machine is not a pinned runner, since neighbour noise on shared cloud machines
+# moves memory and latency by more than a real regression does. A figure
+# produced there cannot be recorded in budgets.toml, published under SC-013,
+# used to reset a baseline or reported as met on reference hardware, so a
+# hardware-dependent job in build.yml would be a measurement of nothing.
+# docs/benchmarks/README.md states the rule in full and how a job registers.
+#
+# RUNNER CONVENTION. A job here never names a machine. It resolves its runner
+# from the `runner_label` the budget file records in that tier's [runners.*]
+# block -- the one place that already records which machine a figure is
+# measured on, by model, operating-system version, memory and durable identity.
+# A literal label in a workflow would be a second record of the same fact, and
+# the two would part on the day a machine is swapped: the identity changes,
+# every baseline series on that tier restarts, and a label kept here would
+# have to change in a second file in the same commit or the job would measure
+# on a machine the budget file does not name.
+#
+# A job's `runs-on` is decided before the job runs, so no job can read the file
+# for itself. One job on a hosted runner reads budgets.toml and exposes one
+# output per tier; every hardware-dependent job `needs` it and sets
+#
+#   runs-on: ${{ needs.runner-labels.outputs.tier1 }}
+#
+# or tier2 -- one job per tier, because a figure is reported against its tier's
+# runner and no other. The README writes the shape out.
+#
+# WHAT IS NOT HERE YET, stated rather than left to be discovered. budgets.toml
+# has no `runner_label` field: the schema task adds it and the procurement task
+# fills it, both after this workflow. So no job is bound to a label, the
+# resolver that would read one is not here, and the only job is the guard
+# below. The resolver lands with the first job that needs it.
+#
+# TRIGGERS. `pull_request`, because the regression gate compares every change
+# against its baseline and a gate blocks a merge on the pull request, not
+# after it. `workflow_dispatch`, so a run can be started by hand: to re-measure
+# after an engine runtime update, or to exercise a freshly pinned machine.
+#
+# The hardware-dependent jobs will run on self-hosted machines and this
+# repository is public, so anyone who can fork it and open a pull request could
+# otherwise run code on the machine that holds a tier's baseline series. The
+# procurement task restricts every hardware-dependent job to non-fork pull
+# requests when it pins the first machine. Today nothing here runs on a
+# self-hosted machine, so the `pull_request` trigger is safe as declared.
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege, stated in the file rather than inherited from a repository
+# setting the file cannot show, because the jobs that register here run on the
+# machines that hold the baseline series. A job that needs more raises it on
+# the job, not here.
+permissions:
+  contents: read
+
+jobs:
+  guard:
+    name: Workflow parses
+    runs-on: ubuntu-latest
+    steps:
+      - name: No-op
+        # A workflow file GitHub cannot parse produces no job, only an error on
+        # the run. This job existing and passing is the proof that the file
+        # parses. It stays when jobs register: it is the one job here that
+        # needs no pinned machine, so a pull request gets a run from this
+        # workflow whether or not a runner is online.
+        run: echo "benchmarks.yml parsed"
