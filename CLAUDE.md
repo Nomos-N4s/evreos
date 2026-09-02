@@ -18,8 +18,10 @@
   - NO `Co-Authored-By` trailer of any kind, including one naming a human.
     Principle I forbids trailers that attribute to an AI or generator tool; this
     file goes further and forbids co-authorship trailers outright, because sole
-    authorship is the point. Nothing mechanical enforces this yet — the checker
-    matches AI identities only — so it is a review obligation.
+    authorship is the point. This IS enforced mechanically now: the checker
+    rejects every co-authorship trailer whoever it names, human included, and
+    its fixtures include one naming a human. It is no longer a review
+    obligation.
   - Before committing, verify `git config user.name` is `xcoder-es` and
     `git config user.email` is `capintobe@gmail.com`.
   - Merge commits created by the forge record the forge as committer AND the
@@ -53,21 +55,29 @@
       prefix passes. The script has no carve-out; such a mention must be phrased
       around the footer list. Tracked as #25.
     - It makes no attempt at general free-English attribution detection, so
-      phrasings outside that list pass. The trailer check is narrower still: it
-      reads only the message's trailing paragraph, and only keys whose suffix is
-      the exact lowercase `-by` or `-with`. An AI trailer earlier in the message,
-      one under a key like `Assisted:`, and one under the canonical capitalised
-      `Co-Authored-By:` are all uninspected by it — the last is caught only when
-      its own text hits the footer list. Principle I's prose prohibition rests on
-      review, not on the script.
+      phrasings outside that list pass. The trailer check reads EVERY line of
+      the message, not only the trailing paragraph, and matches a key whose
+      suffix is `-by` or `-with` in any case — so a trailer above a later
+      paragraph and the canonical capitalised `Co-Authored-By:` are both
+      inspected. A key like `Assisted:`, with no such suffix, still is not.
+      Behind a quote or a bullet a trailer is read as one only when its value
+      begins with an address, so a bulleted sentence about the rule is not
+      mistaken for a breach of it. Principle I's PROSE prohibition — attribution
+      in ordinary sentences — still rests on review, not on the script.
     - Subjects beginning `Merge `, `Revert "`, `fixup! ` or `squash! ` are exempt
       from the subject and issue-reference checks — and the exemption keys on the
       subject string, not on who wrote it, so a hand-written `Merge …` subject
       bypasses both. The merge commits on `main` consequently do not satisfy
       Principle I's Conventional-Commits and issue-reference requirement, and
-      are not caught. Nothing checks signatures, and nothing else does either:
-      `main` carries no branch protection, so Principle I's signing requirement
-      is currently unenforced. Both tracked as #26.
+      are not caught. Signatures ARE checked now, against the founder's public
+      key in `.github/allowed-signers`, verified from the BASE branch's copy so
+      a pull request cannot authorise its own key — and while that file lists no
+      key the check reports signing as not yet enabled and skips, which only the
+      founder can change. What remains unenforced is what lands: the check runs
+      over `origin/<base>..HEAD`, which never contains the merge commit being
+      created, and `main` carries no branch protection, so only the settings
+      recorded at `docs/governance/branch-protection.md` can gate that. Tracked
+      as #26.
 
 ## Branches
 
