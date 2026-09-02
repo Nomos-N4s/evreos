@@ -477,8 +477,8 @@ range is also why the check cannot see the merge commit the forge creates: it
 runs over `origin/<base>..HEAD`, which never contains it. Recorded in the
 constitution's Sync Impact Report and in `CLAUDE.md` as issue #26.
 
-The author half is settled and is no longer part of this gap. The nine merge
-commits on `main` authored with the forge account's display name are compliant:
+The author half is settled and is no longer part of this gap. The merge commits
+on `main` authored with the forge account's display name are compliant:
 `decisions/0002` accepts `Carlos Pinto <capintobe@gmail.com>` as an author and
 committer alongside `xcoder-es <capintobe@gmail.com>`, two spellings of one
 identity bound by the one address Principle I names. The account is not renamed

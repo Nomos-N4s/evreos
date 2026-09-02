@@ -107,3 +107,15 @@ change appending this entry, keeping the description that stays true. The number
 is not restated here with a date, because a dated count in a record nobody
 recomputes is the same trap one turn later; `git log origin/main --merges
 --format='%an'` answers it whenever the answer is wanted.
+
+**2026-09-02** — The entry above says the three other documents drop the number
+in the change that appends it. `specs/001-evreos-v1/plan.md` carried it in TWO
+places -- the Constitution Check narrative and the Complexity Tracking row --
+and that change edited only the row, so the narrative kept the count and this
+record was wrong about the repository from the moment it landed.
+
+Which is the failure the entry above was written to end, one turn later and in
+the entry itself. Correcting a claim in a record is worth nothing if the
+correction is not checked the same way the original should have been: `grep -rn`
+for the stale text across the tree, not a memory of which files were edited.
+The narrative is corrected in the change appending this entry.
