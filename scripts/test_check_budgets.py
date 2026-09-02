@@ -839,6 +839,59 @@ absolute, regression, _ = budgets.run_gates(
 check("a runner with no label is unpinned for the absolute gate too",
       not absolute.failed)
 
+# The other half of that rule, and the one the deferral turns on. Only a
+# HARDWARE-dependent entry waits on a pinned runner. SC-001 is measured from the
+# release artefact and means the same on any machine, so an unpinned tier is no
+# reason to soften its breach -- and dropping the `hardware and` qualifier from
+# that branch is a loosening the suite could not see, on the one figure this
+# script actually measures.
+b = single_entry(entry={"figure": 10}, runner={"identity": ""})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 500.0}
+)
+check("a non-hardware breach blocks even on an unpinned runner", absolute.failed)
+check("...and is not filed as advisory", not absolute.advisory)
+
+# Every criterion the deferral covers, not just the one that was fixtured. Each
+# could be dropped from HARDWARE_DEPENDENT and the entry's breach would go from
+# advisory to blocking -- a stricter verdict, so no assertion about failing
+# caught it.
+for criterion, name, figure, measured in (
+    ("SC-002", "warm start", 800, 5000.0),
+    ("SC-005", "60-minute window", 2, 50.0),
+    ("SC-006", "tab switch", 50, 900.0),
+):
+    b = single_entry(
+        entry={"criterion": criterion, "name": name, "figure": figure,
+               "unit": budgets.UNIT_OF[criterion]},
+        runner={"identity": ""},
+    )
+    absolute, _, _ = budgets.run_gates(b, {(criterion, name, "windows"): measured})
+    check(f"{criterion} is hardware-dependent, so its unpinned breach is advisory",
+          not absolute.failed and len(absolute.advisory) == 1)
+
+# Both gates compare with a strict `>`, so a figure met exactly is met. Relaxing
+# either to `>=` blocks a release that is inside its budget, and nothing sat on
+# the boundary to notice.
+b = single_entry(entry={"figure": 20})
+absolute, _, _ = budgets.run_gates(b, {("SC-001", "download size", "windows"): 20.0})
+check("a measurement equal to the figure passes the absolute gate",
+      not absolute.failed and not absolute.advisory)
+
+b = single_entry(entry={"tolerance_pct": 5.0})
+_, regression, _ = budgets.run_gates(b, {("SC-001", "download size", "windows"): 1.05})
+check("a measurement exactly at the tolerance passes the regression gate",
+      not regression.failed)
+
+# `baseline > 0` is what makes an unmeasured entry silent rather than a ceiling
+# at zero. Every entry in the committed file carries baseline 0.0, so without
+# this guard the regression gate would block the first measurement of all
+# eighteen -- the gate exists to compare a machine against itself, and there is
+# nothing yet to compare against.
+b = single_entry(entry={"baseline": 0.0, "tolerance_pct": 0.0})
+_, regression, _ = budgets.run_gates(b, {("SC-001", "download size", "windows"): 5.0})
+check("a zero baseline is no baseline yet, not a ceiling", not regression.failed)
+
 b = single_entry(
     entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": "pinned-1"},
