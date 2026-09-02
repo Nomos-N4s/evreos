@@ -383,6 +383,41 @@ with tempfile.TemporaryDirectory() as tmp:
         '[workspace.dependencies]\nshared = { path = "lib/shared" }\n'
     )
     for name, lints, source in (
+        # The inheriting table is what makes `shared` a member. Without it
+        # cargo omits the crate from workspace_members entirely.
+        ("crates/app",
+         "[lints]\nworkspace = true\n[dependencies]\nshared = { workspace = true }\n",
+         "#![forbid(unsafe_code)]\n"),
+        ("lib/shared", "", "pub unsafe fn boom() {}\n"),
+    ):
+        directory = root / name
+        (directory / "src").mkdir(parents=True)
+        (directory / "Cargo.toml").write_text(
+            f'[package]\nname = "{name.split("/")[-1]}"\nversion = "0.0.0"\n'
+            f'edition = "2021"\n{lints}'
+        )
+        (directory / "src" / "lib.rs").write_text(source)
+    allowlist = root / "allow.txt"
+    allowlist.write_text("")
+    found, crates, _ = policy.check_workspace(root, allowlist)
+    check("an INHERITED [workspace.dependencies] path crate is a member", crates == 2)
+    check("...and its lifted lint is reported",
+          any("lifts unsafe_code" in problem for problem in found))
+    check("...and its missing forbid is reported",
+          any("omits #![forbid(unsafe_code)]" in problem for problem in found))
+
+# ...and one no member inherits is NOT a member. cargo omits it from
+# workspace_members and `cargo build -p` reports no such package, so following
+# the declaration alone failed workspaces cargo builds cleanly. This fixture is
+# the previous one with the inheriting [dependencies] table removed.
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/app"]\nresolver = "2"\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n'
+        '[workspace.dependencies]\nshared = { path = "lib/shared" }\n'
+    )
+    for name, lints, source in (
         ("crates/app", "[lints]\nworkspace = true\n", "#![forbid(unsafe_code)]\n"),
         ("lib/shared", "", "pub unsafe fn boom() {}\n"),
     ):
@@ -396,11 +431,9 @@ with tempfile.TemporaryDirectory() as tmp:
     allowlist = root / "allow.txt"
     allowlist.write_text("")
     found, crates, _ = policy.check_workspace(root, allowlist)
-    check("a [workspace.dependencies] path crate is a member", crates == 2)
-    check("...and its lifted lint is reported",
-          any("lifts unsafe_code" in problem for problem in found))
-    check("...and its missing forbid is reported",
-          any("omits #![forbid(unsafe_code)]" in problem for problem in found))
+    check("an UNINHERITED [workspace.dependencies] path crate is not a member",
+          crates == 1)
+    check("...and nothing is reported against it", found == [])
 
 # --- where a forbid attribute does and does not bind ------------------------
 # Commenting the attribute out to try `unsafe`, then forgetting to restore it,
@@ -411,7 +444,24 @@ for label, source, forbids in (
     ("one after a closed function", "pub fn f() {}\n#![forbid(unsafe_code)]\n", True),
     ("a multi-lint attribute", "#![forbid(unsafe_code, missing_docs)]\n", True),
     ("one inside a block comment", "/*\n#![forbid(unsafe_code)]\n*/\n", False),
-    ("one inside a nested block comment", "/* /* #![forbid(unsafe_code)] */ */\n", False),
+    # The nested case must put the attribute at a line start INSIDE the outer
+    # comment; `/* /* #![...] */ */` never matched anyway, because the pattern
+    # is anchored to the start of a line, so it proved nothing about nesting.
+    ("one inside a nested block comment", "/* /* */\n#![forbid(unsafe_code)]\n*/\n", False),
+    ("one inside an ordinary string", 'const H: &str = "\n#![forbid(unsafe_code)]\n";\n', False),
+    ("one commented out with a line comment",
+     "// #![forbid(unsafe_code)] -- while I try unsafe\npub fn f() {}\n", False),
+    # A line comment ends at the newline, so an unpaired opener inside prose
+    # opens nothing. Reading these as real openers blanked the rest of the file
+    # and reported a crate that plainly complies as omitting its forbid.
+    ("a doc comment holding an unpaired /*",
+     "//! a `/*` that never closes\n\n#![forbid(unsafe_code)]\n", True),
+    ("a doc comment holding an unpaired raw-string opener",
+     '//! opens with r" and closes on the matching quote\n\n#![forbid(unsafe_code)]\n', True),
+    ("a doc comment holding an unbalanced brace",
+     "//! a block `{ ... }` with an unclosed {\n\n#![forbid(unsafe_code)]\n", True),
+    ("a brace supplied by a line comment inside a body",
+     "pub fn f() {\n    // closing }\n    #![forbid(unsafe_code)]\n}\n", False),
     ("one inside a raw string", 'const S: &str = r#"\n#![forbid(unsafe_code)]\n"#;\n', False),
     ("one inside a function body", "pub fn f() {\n    #![forbid(unsafe_code)]\n}\n", False),
     ("one in a doc comment", "//! #![forbid(unsafe_code)]\n", False),

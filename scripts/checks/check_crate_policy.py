@@ -86,19 +86,35 @@ def lint_level(table, name):
 
 
 def strip_non_code(source):
-    """`source` with block comments and raw strings blanked, newlines kept.
+    """`source` with every non-code region blanked, newlines kept.
 
-    An inner attribute inside `/* ... */` or inside `r#"..."#` is not an
-    attribute -- it is text the compiler never reads -- and one written inside a
-    function body is block-scoped rather than crate-scoped, so none of the three
-    forbids anything. Matching them let a crate pass by commenting its own
-    forbid out, which is the realistic way in: comment it, try `unsafe`, forget
-    to restore it. Line comments are left alone; the pattern is anchored to the
-    line start, so `//! #![forbid(...)]` never matched anyway.
+    An inner attribute inside a comment or a string is not an attribute -- it
+    is text the compiler never reads -- and one inside a function body is
+    block-scoped rather than crate-scoped, so none of them forbids anything.
+    Matching them let a crate pass by commenting its own forbid out, which is
+    the realistic way in: comment it, try `unsafe`, forget to restore it.
+
+    This is a scanner rather than a set of patterns because the regions nest
+    and interleave. Line comments come FIRST: Rust's lexer ends one at the
+    newline, so a `/*` or an `r"` written inside prose opens nothing. Reading
+    those as real openers blanked everything to the end of the file, and a
+    crate root that plainly carried its forbid was reported as omitting it --
+    one character in a doc comment away from failing a build over a compliant
+    file.
     """
     out, i, n = [], 0, len(source)
+
+    def blank(text):
+        return "".join(character if character == "\n" else " " for character in text)
+
     while i < n:
-        if source.startswith("/*", i):
+        rest = source[i:]
+        if rest.startswith("//"):
+            end = source.find("\n", i)
+            end = n if end == -1 else end
+            out.append(blank(source[i:end]))
+            i = end
+        elif rest.startswith("/*"):
             depth, j = 1, i + 2          # Rust block comments nest
             while j < n and depth:
                 if source.startswith("/*", j):
@@ -107,23 +123,29 @@ def strip_non_code(source):
                     depth, j = depth - 1, j + 2
                 else:
                     j += 1
-            out.append("".join(c if c == "\n" else " " for c in source[i:j]))
+            out.append(blank(source[i:j]))
             i = j
-        elif source.startswith("r#", i) or source.startswith('r"', i):
-            j = i + 1
-            hashes = 0
-            while j < n and source[j] == "#":
-                hashes, j = hashes + 1, j + 1
-            if j < n and source[j] == '"':
-                close = '"' + "#" * hashes
-                end = source.find(close, j + 1)
-                end = n if end == -1 else end + len(close)
-                out.append("".join(c if c == "\n" else " " for c in source[i:end]))
-                i = end
-            else:
-                out.append(source[i]); i += 1
         else:
-            out.append(source[i]); i += 1
+            raw = re.match(r'(?:b|br|rb|r)(#*)"', rest)
+            if raw and ("r" in raw.group(0)):
+                hashes = raw.group(1)
+                close = '"' + hashes
+                end = source.find(close, i + raw.end())
+                end = n if end == -1 else end + len(close)
+                out.append(blank(source[i:end]))
+                i = end
+                continue
+            plain = re.match(r'b?"', rest)
+            if plain:
+                j = i + plain.end()
+                while j < n and source[j] != '"':
+                    j += 2 if source[j] == "\\" else 1
+                j = min(j + 1, n)
+                out.append(blank(source[i:j]))
+                i = j
+                continue
+            out.append(source[i])
+            i += 1
     return "".join(out)
 
 
@@ -173,18 +195,13 @@ def relative(root, path):
 def path_dependencies(manifest):
     """Every `path = ...` a manifest declares, from every table Cargo reads.
 
-    `[workspace.dependencies]` is one of them. A path dependency declared there
-    and inherited by a member with `foo = { workspace = true }` is a workspace
-    member as surely as one listed in `members`: `cargo metadata` reports it in
-    `workspace_members` and `cargo build -p` builds it. Reading only the
-    per-crate tables left such a crate unchecked by all three clauses at once
-    -- no inherited lint, no forbid attribute, no allowlist entry -- which is
-    the retrofit the carve-out clause exists to make visible.
+    `[workspace.dependencies]` is deliberately NOT one of them; see
+    `inherited_workspace_paths`. Declaring a path there does not make the crate
+    a member -- cargo reports it in `workspace_members` and builds it with
+    `-p` only once some member inherits it -- so following it unconditionally
+    failed workspaces that cargo builds cleanly.
     """
     tables = [manifest.get(table, {}) for table in DEPENDENCY_TABLES]
-    workspace = manifest.get("workspace")
-    if isinstance(workspace, dict):
-        tables.extend(workspace.get(table, {}) for table in DEPENDENCY_TABLES)
     for target in manifest.get("target", {}).values():
         if not isinstance(target, dict):
             continue
@@ -195,6 +212,33 @@ def path_dependencies(manifest):
         for dependency in table.values():
             if isinstance(dependency, dict) and "path" in dependency:
                 yield dependency["path"]
+
+
+def inherited_workspace_paths(root_manifest, member_manifest):
+    """Path dependencies this member inherits from [workspace.dependencies].
+
+    Cargo makes such a crate a member only when a member actually inherits it.
+    The declaration alone does not: `cargo metadata` omits it from
+    `workspace_members` and `cargo build -p` reports no such package.
+    """
+    workspace = root_manifest.get("workspace")
+    if not isinstance(workspace, dict):
+        return
+    declared = {}
+    for table in DEPENDENCY_TABLES:
+        entries = workspace.get(table, {})
+        if isinstance(entries, dict):
+            declared.update(entries)
+    for table in DEPENDENCY_TABLES:
+        entries = member_manifest.get(table, {})
+        if not isinstance(entries, dict):
+            continue
+        for name, spec in entries.items():
+            if not (isinstance(spec, dict) and spec.get("workspace") is True):
+                continue
+            source = declared.get(name)
+            if isinstance(source, dict) and "path" in source:
+                yield source["path"]
 
 
 def workspace_members(root, manifest, problems):
@@ -223,21 +267,24 @@ def workspace_members(root, manifest, problems):
             member = load_toml(manifest_path)
         except tomllib.TOMLDecodeError:
             return  # reported when the member itself is checked
-        for path in path_dependencies(member):
-            dependency = (directory / path).resolve()
+        # A crate's own `path = ...` is relative to that crate's directory.
+        followed = [(directory, path) for path in path_dependencies(member)]
+        # A path declared in the root's [workspace.dependencies] and INHERITED
+        # here with `foo = { workspace = true }` is a member: cargo reports it
+        # in workspace_members and `-p` builds it. Uninherited it is not, and
+        # following it regardless failed workspaces cargo builds cleanly -- so
+        # the inheritance is what is followed, not the declaration. That path
+        # is written relative to the WORKSPACE ROOT, where it is declared, not
+        # to the member that inherits it.
+        followed += [(root, path)
+                     for path in inherited_workspace_paths(manifest, member)]
+        for base, path in followed:
+            dependency = (base / path).resolve()
             if dependency.is_relative_to(root):
                 add(dependency, relative(root, manifest_path))
 
     if "package" in manifest:
         add(root, "Cargo.toml")
-    # A path dependency declared in the ROOT manifest's [workspace.dependencies]
-    # is a member too, and in a virtual workspace -- one whose root is not
-    # itself a package, which is this repository's shape -- nothing above walks
-    # the root manifest, so such a crate was reached by no path at all.
-    for path in path_dependencies(manifest):
-        dependency = (root / path).resolve()
-        if dependency.is_relative_to(root):
-            add(dependency, "Cargo.toml")
     for pattern in workspace.get("members", []):
         if any(character in pattern for character in "*?["):
             matches = sorted(path for path in root.glob(pattern) if path.is_dir())

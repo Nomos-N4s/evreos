@@ -157,7 +157,12 @@ UNSTABLE_VALUE = re.compile(r"(?<![\w-])(?:nightly|beta)\b", re.IGNORECASE)
 # attribute behind a switch, `#![cfg_attr(..., feature(...))]`. The paren is
 # what separates it from `#![cfg(feature = "x")]`, which is a Cargo feature and
 # stable.
-FEATURE_ATTRIBUTE = re.compile(r"#!\[[^\]]*\bfeature\s*\(")
+# Bounded so the joined window cannot carry `#![` from one line to an unrelated
+# `feature(` several lines later: no `"` and no `;` may fall between them, and
+# neither appears inside a real attribute head. Without the bound, a string
+# constant holding "#![" beside a function named `feature` read as a nightly
+# feature gate.
+FEATURE_ATTRIBUTE = re.compile(r'#!\[[^\]";]*\bfeature\s*\(')
 
 # What a workflow does, on a command line or in a variable, to put the release
 # path on a non-stable toolchain. The rustup forms accept any flags and values
@@ -548,13 +553,23 @@ def check_toolchain_file(root, path, problems):
     # first line as a channel yields the literal "[toolchain]", which matches
     # no channel pattern -- so the single file that most directly puts the
     # release path on nightly was read and then silently misparsed.
-    stripped = text.strip()
-    if stripped.startswith("[toolchain]") or path.suffix == ".toml":
-        try:
-            toolchain = load_toml(path).get("toolchain", {})
-        except tomllib.TOMLDecodeError as error:
-            problems.append(f"{where}: {error}")
-            return
+    # Parse as TOML and fall back to the legacy one-line reading only when the
+    # file is not TOML at all. A prefix comparison is not content
+    # discrimination: a comment line above the header -- the ordinary way a
+    # human writes this file -- and the equally valid `[ toolchain ]`, a UTF-8
+    # BOM, and the dotted `toolchain.channel = ...` all fell through it to the
+    # legacy reading, which takes line one as a channel and so matched nothing.
+    # Parsed from the decoded text with any byte-order mark removed, not from
+    # the file handle: tomllib rejects a BOM, so a BOM'd file fell through to
+    # the legacy reading and its first line read as "\ufeff[toolchain]", which
+    # matches no channel. An editor that writes one is not a way past this.
+    stripped = text.lstrip("\ufeff").strip()
+    try:
+        parsed = tomllib.loads(stripped)
+    except tomllib.TOMLDecodeError:
+        parsed = None
+    if parsed is not None and "toolchain" in parsed:
+        toolchain = parsed["toolchain"]
         if not isinstance(toolchain, dict):
             problems.append(
                 f"{where}: [toolchain] is {type(toolchain).__name__}, not a table; "
@@ -567,8 +582,13 @@ def check_toolchain_file(root, path, problems):
                 f"{where}: selects a custom toolchain at {toolchain['path']!r}; the release "
                 "path builds on the stable channel and nothing this check can classify"
             )
-    else:
+    elif parsed is None:
+        # Not TOML: the legacy form, whose whole content is a channel name.
         channel = stripped.splitlines()[0] if stripped else ""
+    else:
+        # Valid TOML with no [toolchain] table. rustup honours neither, so
+        # there is no channel here to judge.
+        channel = ""
     if UNSTABLE_CHANNEL.match(channel):
         problems.append(
             f"{where}: selects the {channel.strip()!r} toolchain; Principle III requires stable "

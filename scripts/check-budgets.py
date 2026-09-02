@@ -796,7 +796,14 @@ def run_gates(budgets, measurements, host=None):
     unmeasured = []
 
     runners = budgets.get("runners", {})
-    pinned = {tier: not runner_missing(runner) for tier, runner in runners.items()}
+    if not isinstance(runners, dict):
+        runners = {}
+    # The same guard check_budget_file carries. Without it a misread file died
+    # here before that gate's verdict was ever printed, so the guard's whole
+    # stated purpose -- that a verdict over a misread file is a verdict on
+    # nothing -- was not delivered: the traceback replaced the message.
+    pinned = {tier: not runner_missing(runner)
+              for tier, runner in runners.items() if isinstance(runner, dict)}
 
     for entry in budgets.get("entry", []):
         label = entry_label(entry)
@@ -851,6 +858,14 @@ def run_gates(budgets, measurements, host=None):
 
         hardware = entry["criterion"] in HARDWARE_DEPENDENT
         tier = TIER_OF.get(entry["platform"])
+        # An ABSENT tier is not an unpinned one. Unpinned is a stated,
+        # deferrable state -- the machine is not bought yet -- and a breach on
+        # it is advisory by design. A tier the file does not declare at all is
+        # a file defect, and treating the two alike let a measurement many
+        # times its figure pass as advisory. The file gate refuses such a file,
+        # but a gate that also reports the breach correctly is one that does
+        # not depend on another gate running first.
+        declared = tier in runners
         runner_pinned = pinned.get(tier, False)
         exemption = spike_exemption_of(entry)
 
@@ -865,6 +880,12 @@ def run_gates(budgets, measurements, host=None):
                     f"{message} (exempt: the spike in pull request "
                     f"#{exemption['pull_request']} is establishing this figure, "
                     "and a build carrying the exemption is not released or tagged)"
+                )
+            elif hardware and not declared:
+                absolute.block(
+                    f"{message}; {tier} is not declared in this file, so there "
+                    "is no runner to defer to -- an absent tier is a file "
+                    "defect, not a machine waiting to be bought"
                 )
             elif hardware and not runner_pinned:
                 absolute.advise(f"{message} (advisory: {tier} runner not pinned)")
@@ -1011,7 +1032,14 @@ def main():
                 "is not a pass",
                 file=sys.stderr,
             )
-        file_gate.blocking.extend(label for label, _ in blocking_unmeasured)
+        # Through Gate.block, never by appending to `blocking` directly: the
+        # tags list must stay the same length, or defer_unpinned_runners' zip
+        # truncates to the shorter one and the surplus failures land in neither
+        # blocking nor advisory. Nothing was lost live -- this ran after the
+        # only deferral -- but it was one reordering away from silent loss, in
+        # the function rewritten to be trustworthy.
+        for label, _ in blocking_unmeasured:
+            file_gate.block(label)
 
     if download.megabytes is not None:
         print(

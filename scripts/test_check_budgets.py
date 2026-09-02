@@ -351,9 +351,23 @@ check("a runner recording no memory says which requirement is unmet",
 # The three fields recorded for reproducibility rather than gated: FR-043's
 # list does not name them, and this gate enforces the requirement rather than a
 # preference.
+# These named a field and then never removed it -- the same trivially-true
+# assertion three times, which would have passed had the field been gated.
+# `unpinned_without` is the helper written for exactly this.
 for ungated in ("os_build", "storage", "latency_rig"):
-    check(f"{ungated} absent does not make a runner unpinned",
-          budgets.runner_missing(pinned_runner("tier1", "windows")) == [])
+    runner = pinned_runner("tier1", "windows")
+    runner[ungated] = ""
+    check(f"{ungated} recorded empty does not make a runner unpinned",
+          budgets.runner_missing(runner) == [])
+    runner.pop(ungated)
+    check(f"{ungated} absent entirely does not make a runner unpinned",
+          budgets.runner_missing(runner) == [])
+
+# ...while each gated field, removed, does. Without these the gating is
+# asserted only in the direction that already held.
+for gated in ("identity", "runner_label", "os_version", "memory"):
+    check(f"{gated} absent makes a runner unpinned",
+          unpinned_without(gated) != [])
 
 b = budget_file()
 del b["runners"]["tier1"]["runner_label"]
@@ -1227,13 +1241,40 @@ check("an absent tier is refused", g.failed)
 check("...and the failure names it",
       any("tier2 is not declared" in message for message in g.blocking))
 
+# `X or True` is unconditionally true. This is the assertion that guarded the
+# headline blocker, and it could not fail -- while the behaviour it named was
+# still wrong: run_gates resolved an absent tier through the same
+# `pinned.get(tier, False)` as an unpinned one and advised the breach.
 b = budget_file()
 del b["runners"]["tier2"]
 absolute, _, _ = budgets.run_gates(
     b, {("SC-004", "ten-tab memory", "macos"): 9999.0}, host=None
 )
-check("a breach on an undeclared tier is not silently advisory",
-      absolute.failed or True)  # the file gate refuses the file first
+check("a breach on an undeclared tier blocks", absolute.failed)
+check("...and says the tier is undeclared, not unpinned",
+      any("is not declared" in message for message in absolute.blocking))
+check("...and is not merely advisory", not absolute.advisory)
+
+# The contrast that gives the case its meaning: a tier that IS declared and is
+# merely unpinned still defers, because that is a machine not yet bought.
+b = budget_file(runner={"identity": "", "runner_label": "", "os_version": "",
+                        "memory": "", "display_refresh": 0})
+absolute, _, _ = budgets.run_gates(
+    b, {("SC-004", "ten-tab memory", "windows"): 9999.0}, host=None
+)
+check("a breach on a declared-but-unpinned tier stays advisory",
+      not absolute.failed and bool(absolute.advisory))
+
+# Gate.tags must stay the same length as Gate.blocking on every path that
+# mutates either, or defer_unpinned_runners' zip truncates to the shorter and
+# the surplus lands in neither list.
+g = budgets.Gate("x")
+g.block("plain")
+g.block("unpinned", tag=budgets.UNPINNED_TAG)
+check("tags stay in step with blocking", len(g.blocking) == len(g.tags))
+budgets.defer_unpinned_runners(g)
+check("...and stay in step after a deferral", len(g.blocking) == len(g.tags))
+check("...with the untagged failure kept", g.blocking == ["plain"])
 
 # --- a negative baseline is a disabled regression gate, not a tight one -------
 b = budget_file(entry={"criterion": "SC-004", "name": "ten-tab memory",
@@ -1243,10 +1284,18 @@ check("a negative baseline is refused", g.failed)
 check("...and the failure says why",
       any("is negative" in message for message in g.blocking))
 
-b = budget_file(entry={"figure": 0})
-check("a figure of zero is refused", file_gate(b).failed)
-b = budget_file(entry={"figure": -5})
-check("a negative figure is refused", file_gate(b).failed)
+# A figure of zero with a baseline of zero isolates the figure clause: the
+# negative-baseline clause does not fire, and `baseline > figure` is false, so
+# only the new clause can reject it. A figure of -5 with baseline 0.0 -- the
+# case first written here -- tripped the pre-existing "baseline above its
+# stated figure" clause instead, and so proved nothing about the new one.
+b = budget_file(entry={"figure": 0, "baseline": 0.0})
+g = file_gate(b)
+check("a figure of zero is refused", g.failed)
+check("...by the figure clause specifically",
+      any("is not positive" in message for message in g.blocking))
+check("a negative figure is refused",
+      file_gate(budget_file(entry={"figure": -5, "baseline": -5})).failed)
 
 # --- a deferral flag selects on a tag, never on the file's own text -----------
 # --allow-unpinned-runners once moved every failure whose MESSAGE contained

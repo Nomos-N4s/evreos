@@ -579,6 +579,22 @@ for label, name, body, caught in (
     ("TOML in the .toml file", "rust-toolchain.toml",
      '[toolchain]\nchannel = "nightly"\n', True),
     ("the legacy plain form", "rust-toolchain", "nightly\n", True),
+    # Each of these is TOML rustup honours, and each fell through the literal
+    # `[toolchain]` prefix test to the legacy line-one-as-channel reading,
+    # which matched nothing. A comment above the header is the ordinary way a
+    # human writes this file.
+    ("a comment above the header", "rust-toolchain",
+     '# pinned for the release path\n[toolchain]\nchannel = "nightly"\n', True),
+    ("a spaced header", "rust-toolchain",
+     '[ toolchain ]\nchannel = "nightly"\n', True),
+    ("a UTF-8 byte-order mark", "rust-toolchain",
+     '\ufeff[toolchain]\nchannel = "nightly"\n', True),
+    ("a dotted key", "rust-toolchain",
+     'toolchain.channel = "nightly"\n', True),
+    ("the beta channel", "rust-toolchain",
+     '[toolchain]\nchannel = "beta"\n', True),
+    ("a comment above a legacy channel name", "rust-toolchain",
+     "# why we pin\nnightly\n", False),
     ("a custom toolchain path", "rust-toolchain",
      '[toolchain]\npath = "/opt/rust-nightly"\n', True),
     ("a pinned stable release", "rust-toolchain",
@@ -603,6 +619,10 @@ for label, source, caught in (
     ("split by rustfmt", "#![cfg_attr(\n    nightly,\n    feature(let_chains)\n)]\n", True),
     ("a split bare attribute", "#![\n    feature(let_chains)\n]\n", True),
     ("a split argument list", "#![feature(\n    let_chains\n)]\n", True),
+    # The joined window must not carry `#![` from one line to an unrelated
+    # `feature(` several lines below it.
+    ("a string decoy beside a function named feature",
+     'const OPEN: &str = "#![";\npub fn feature(n: u32) -> u32 { n }\n', False),
     ("the word in prose", "// this feature (of the API) is stable\npub fn f() {}\n", False),
     ("ordinary source", "pub fn f() {}\n", False),
 ):
