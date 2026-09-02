@@ -121,6 +121,10 @@ SUBJECT_MUST_PASS = [
     ("a merge subject", "Merge pull request #7 from x/y"),
     ("a revert subject", 'Revert "feat(x): a thing"'),
     ("a fixup subject", "fixup! feat(x): a thing"),
+    # git writes both; only `fixup! ` was fixtured, so the other could be
+    # dropped from the exemption and a message git itself produced would be
+    # refused for the shape git gives it.
+    ("a squash subject", "squash! feat(x): a thing"),
 ]
 ISSUE_MUST_FAIL = [
     ("no reference at all", "feat(x): a thing\n\nA body with no link."),
@@ -134,12 +138,26 @@ ISSUE_MUST_FAIL = [
     ("a URL fragment", "feat(x): a thing\n\nhttps://example.com/guide#2-setup"),
     ("a reference only inside a code fence",
      "feat(x): a thing\n\n```\nCloses #1\n```"),
+    # The keyword and the number are separated by whitespace, and the keyword
+    # starts a word. Both bounds are what keep the pattern from reading an
+    # issue link out of text that has none, and neither was pinned.
+    ("a keyword run into the number", "feat(x): a thing\n\nCloses#12"),
+    ("a keyword inside a longer word", "feat(x): a thing\n\nThe autocloses #12 path."),
+    ("refs inside a longer word", "feat(x): a thing\n\nIt unrefs #3 on drop."),
 ]
 ISSUE_MUST_PASS = [
     ("Closes", "feat(x): a thing\n\nCloses #1"),
     ("Refs", "feat(x): a thing\n\nRefs #1"),
     ("Fixes", "feat(x): a thing\n\nFixes #1"),
     ("See", "feat(x): a thing\n\nSee #1"),
+    # The singular and past forms the pattern admits. Four of the linking
+    # keywords GitHub accepts were exercised by no fixture, so each could be
+    # dropped and a legitimate message would be refused for having no link.
+    ("Close", "feat(x): a thing\n\nClose #1"),
+    ("Fixed", "feat(x): a thing\n\nFixed #1"),
+    ("Resolves", "feat(x): a thing\n\nResolves #1"),
+    ("Resolve", "feat(x): a thing\n\nResolve #1"),
+    ("Ref", "feat(x): a thing\n\nRef #1"),
 ]
 
 ATTRIBUTION_MUST_PASS = [
@@ -167,6 +185,16 @@ ATTRIBUTION_MUST_PASS = [
      VALID + "> Co-authored-by: is rejected however it is spelled."),
     ("a bulleted key with a name but no address",
      VALID + "- Co-authored-by: nobody in particular here"),
+    # The identity a marked line must carry is anchored to the FRONT of the
+    # value: a real trailer names its author first, and prose does not. Both
+    # anchors carry the whole of that distinction, and nothing held them --
+    # unanchored, any bulleted sentence that happens to cite an address
+    # anywhere in it is read as a trailer, which is the over-reach the marked
+    # cases above exist to prevent.
+    ("a bulleted sentence citing an address at the end",
+     VALID + "- Reviewed-by: the checker rejects claude; write to me@example.com"),
+    ("a bulleted sentence citing an address mid-line",
+     VALID + "- Co-authored-by: a line like a@b.example is prose, not a trailer."),
     # A signature block QUOTED in a message body is not a signature: the kind
     # is read from the object header, not from anywhere in the text.
     ("a message quoting a signature block",
@@ -179,6 +207,21 @@ ATTRIBUTION_MUST_PASS = [
 # The same trailer at the start of a line IS a trailer, wherever it sits --
 # including inside a code fence, which still renders as a visible attribution.
 ATTRIBUTION_MUST_FAIL_EXTRA = [
+    # Two identity lists whose members were mostly reached by some other
+    # branch. Deleting either name leaves the suite green and the identity
+    # unrecognised, which is a false pass in the check's whole subject.
+    ("a generator footer naming cursor",
+     VALID + "\n\nGenerated with Cursor"),
+    ("an AI identity in a non-co-authorship trailer, gemini",
+     VALID + "Reviewed-by: Gemini <g@example.com>"),
+    # The footer branch admits a linked tool name and any run of whitespace
+    # after the verb, which is what a wrapped or bulleted footer looks like.
+    ("a generator footer with the tool name linked",
+     VALID + "\n\nGenerated with [Claude Code](https://claude.com/claude-code)"),
+    ("a generator footer with doubled spacing",
+     VALID + "\n\nGenerated  with Claude Code"),
+    ("a generator footer wrapped onto the next line",
+     VALID + "\n\nGenerated\nwith Claude Code"),
     ("a co-authorship trailer inside a code fence",
      VALID + "```\nCo-authored-by: Copilot <b@github.com>\n```"),
     ("a co-authorship trailer as the only body line",
