@@ -831,7 +831,17 @@ def run_gates(budgets, measurements, host=None):
             # a number nobody produced.
             hardware = entry["criterion"] in HARDWARE_DEPENDENT
             tier = TIER_OF.get(platform)
-            if hardware and not pinned.get(tier, False):
+            if hardware and tier not in pinned:
+                # Not "unpinned": the file declares no usable runner for this
+                # tier at all, so there is nothing to defer to. The measured
+                # branch below draws the same distinction; drawing it in one
+                # place and not the other is how an absent tier stayed
+                # non-blocking here after it began blocking there.
+                unmeasured.append(
+                    (f"{label}: {tier} is not declared as a usable runner in "
+                     "this file", "no runner declared for this tier", True)
+                )
+            elif hardware and not pinned.get(tier, False):
                 unmeasured.append((label, "no pinned runner for this tier", False))
             elif not hardware and platform != host:
                 # SC-001's figures are measured on a host of the entry's
@@ -865,7 +875,11 @@ def run_gates(budgets, measurements, host=None):
         # times its figure pass as advisory. The file gate refuses such a file,
         # but a gate that also reports the breach correctly is one that does
         # not depend on another gate running first.
-        declared = tier in runners
+        # `tier in pinned`, not `tier in runners`: a tier declared as
+        # something other than a table is kept out of `pinned` by the guard
+        # above, and treating the bare key as a declaration let its breach fall
+        # to the unpinned branch and read as advisory.
+        declared = tier in pinned
         runner_pinned = pinned.get(tier, False)
         exemption = spike_exemption_of(entry)
 

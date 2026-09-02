@@ -85,6 +85,17 @@ def lint_level(table, name):
     return value
 
 
+# A char literal: one character, or one escape. `'a'` and `'\''` are literals;
+# `'a` in `&'a str` is a lifetime and opens nothing. The distinction matters
+# because a literal may CONTAIN a quote -- `'"'` -- and reading that quote as a
+# string opener desynchronises everything after it.
+CHAR_LITERAL = re.compile(r"'(?:\\.|[^'\\])'")
+# A raw string opener, with its hash count captured so the matching close can
+# be found: r"..", r#".."#, b"..", br#".."#, rb#".."#.
+RAW_OPENER = re.compile(r'(?:br|rb|r)(#*)"')
+PLAIN_OPENER = re.compile(r'b?"')
+
+
 def strip_non_code(source):
     """`source` with every non-code region blanked, newlines kept.
 
@@ -95,12 +106,21 @@ def strip_non_code(source):
     the realistic way in: comment it, try `unsafe`, forget to restore it.
 
     This is a scanner rather than a set of patterns because the regions nest
-    and interleave. Line comments come FIRST: Rust's lexer ends one at the
-    newline, so a `/*` or an `r"` written inside prose opens nothing. Reading
-    those as real openers blanked everything to the end of the file, and a
-    crate root that plainly carried its forbid was reported as omitting it --
-    one character in a doc comment away from failing a build over a compliant
-    file.
+    and interleave, and the order below is the order Rust's lexer uses:
+
+    - Line comments FIRST. A `//` comment ends at the newline, so a `/*` or an
+      `r"` written inside prose opens nothing. Reading those as real openers
+      blanked everything to the end of the file, and a crate root that plainly
+      carried its forbid was reported as omitting it.
+    - Char literals BEFORE strings. A literal may contain a quote -- `'"'` --
+      and reading that quote as a string opener opened a phantom string that
+      ran to the next quote in the file, blanking real code and leaving a
+      genuine string to be scanned as code. A crate with no forbid at all then
+      passed. A lifetime (`&'a str`) is not a literal and is left alone.
+
+    Indices are passed to the matchers rather than slicing, so the scan is
+    linear: slicing the remainder at every character made it quadratic, which
+    is invisible on a hand-written crate root and not on a generated one.
     """
     out, i, n = [], 0, len(source)
 
@@ -108,13 +128,12 @@ def strip_non_code(source):
         return "".join(character if character == "\n" else " " for character in text)
 
     while i < n:
-        rest = source[i:]
-        if rest.startswith("//"):
+        if source.startswith("//", i):
             end = source.find("\n", i)
             end = n if end == -1 else end
             out.append(blank(source[i:end]))
             i = end
-        elif rest.startswith("/*"):
+        elif source.startswith("/*", i):
             depth, j = 1, i + 2          # Rust block comments nest
             while j < n and depth:
                 if source.startswith("/*", j):
@@ -125,25 +144,23 @@ def strip_non_code(source):
                     j += 1
             out.append(blank(source[i:j]))
             i = j
+        elif (literal := CHAR_LITERAL.match(source, i)) is not None:
+            out.append(blank(literal.group(0)))
+            i = literal.end()
+        elif (raw := RAW_OPENER.match(source, i)) is not None:
+            close = '"' + raw.group(1)
+            end = source.find(close, raw.end())
+            end = n if end == -1 else end + len(close)
+            out.append(blank(source[i:end]))
+            i = end
+        elif (plain := PLAIN_OPENER.match(source, i)) is not None:
+            j = plain.end()
+            while j < n and source[j] != '"':
+                j += 2 if source[j] == "\\" else 1
+            j = min(j + 1, n)
+            out.append(blank(source[i:j]))
+            i = j
         else:
-            raw = re.match(r'(?:b|br|rb|r)(#*)"', rest)
-            if raw and ("r" in raw.group(0)):
-                hashes = raw.group(1)
-                close = '"' + hashes
-                end = source.find(close, i + raw.end())
-                end = n if end == -1 else end + len(close)
-                out.append(blank(source[i:end]))
-                i = end
-                continue
-            plain = re.match(r'b?"', rest)
-            if plain:
-                j = i + plain.end()
-                while j < n and source[j] != '"':
-                    j += 2 if source[j] == "\\" else 1
-                j = min(j + 1, n)
-                out.append(blank(source[i:j]))
-                i = j
-                continue
             out.append(source[i])
             i += 1
     return "".join(out)
@@ -229,8 +246,16 @@ def inherited_workspace_paths(root_manifest, member_manifest):
         entries = workspace.get(table, {})
         if isinstance(entries, dict):
             declared.update(entries)
-    for table in DEPENDENCY_TABLES:
-        entries = member_manifest.get(table, {})
+    # Every table the member can inherit through, including those under a
+    # `[target.<cfg>]` block. Reading only the top-level three let a crate
+    # inherited under `[target.'cfg(unix)'.dependencies]` escape all three
+    # clauses, though cargo reports it in workspace_members and builds it --
+    # the same omission `path_dependencies` beside this already avoids.
+    member_tables = [member_manifest.get(table, {}) for table in DEPENDENCY_TABLES]
+    for target in member_manifest.get("target", {}).values():
+        if isinstance(target, dict):
+            member_tables.extend(target.get(table, {}) for table in DEPENDENCY_TABLES)
+    for entries in member_tables:
         if not isinstance(entries, dict):
             continue
         for name, spec in entries.items():

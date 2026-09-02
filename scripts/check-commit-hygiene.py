@@ -111,6 +111,12 @@ TRAILER_IDENTITY = re.compile(
 # IGNORECASE is load-bearing. Without it the `-by` alternative matched only the
 # lowercase spelling, so `Co-Authored-By:` -- the capitalisation git itself
 # writes and every tool emits -- never reached the identity test at all.
+# A leading `>` or `-` is stripped before matching, so a trailer quoted in a
+# pull request body or listed as a bullet is still read as one. Anchoring the
+# footer branch to the line start was right -- prose quotes a trailer
+# mid-sentence -- but a blockquote renders as visibly as a code fence, and the
+# fenced form is already a must-fail here.
+TRAILER_MARKER = re.compile(r"^[>\-*+\s]*")
 TRAILER_LINE = re.compile(
     r"^(?P<key>[A-Za-z][A-Za-z-]*-(?:by|with)):[ \t]*(?P<value>.+?)[ \t]*$",
     re.IGNORECASE,
@@ -214,7 +220,7 @@ def attribution_problems(text, where):
     # ships, and reading only the last paragraph is how one earlier in the
     # message went uninspected.
     for line in full.splitlines():
-        match = TRAILER_LINE.match(line.strip())
+        match = TRAILER_LINE.match(TRAILER_MARKER.sub("", line))
         if not match:
             continue
         key, value = match.group("key"), match.group("value")

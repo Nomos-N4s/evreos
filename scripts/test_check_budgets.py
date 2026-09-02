@@ -1276,6 +1276,73 @@ budgets.defer_unpinned_runners(g)
 check("...and stay in step after a deferral", len(g.blocking) == len(g.tags))
 check("...with the untagged failure kept", g.blocking == ["plain"])
 
+# The invariant above holds of Gate whether or not main() honours it, so it
+# cannot report the defect it was written for: main() appended to `blocking`
+# directly, past Gate.block, and the surplus was dropped by the zip. This runs
+# main() end to end and asserts the pair is still in step afterwards, which is
+# the only place that appending shows.
+def main_gate_lengths(path):
+    """Run main() over a budget file and report each gate's final lengths.
+
+    The gate objects are captured and read AFTER main() returns, not at the
+    deferral. The append this exists to catch happens after the deferral, so
+    measuring at deferral time reports the pair in step and proves nothing --
+    which is what the first version of this test did.
+    """
+    captured = {}
+    original = budgets.defer_unpinned_runners
+
+    def spy(gate):
+        captured[gate.name] = gate
+        original(gate)
+
+    budgets.defer_unpinned_runners = spy
+    argv = sys.argv
+    # WITHOUT --allow-unmeasured: the append this test exists to catch sits
+    # inside `if blocking_unmeasured and not args.allow_unmeasured`, so passing
+    # the flag skips the very branch under test. --allow-unpinned-runners stays,
+    # because the deferral is what the zip runs over.
+    sys.argv = ["check-budgets.py", "--budgets", str(path),
+                "--allow-unpinned-runners"]
+    try:
+        budgets.main()
+    except SystemExit:
+        pass
+    finally:
+        sys.argv = argv
+        budgets.defer_unpinned_runners = original
+    return {name: (len(gate.blocking), len(gate.tags))
+            for name, gate in captured.items()}
+
+
+# Over the repository's own budget file, which is unpinned and unmeasured and
+# so drives every branch that appends: the unpinned-runner failures that get
+# deferred, and the unmeasured entries appended afterwards.
+lengths = main_gate_lengths(Path(__file__).resolve().parent.parent / "budgets.toml")
+check("main() leaves blocking and tags in step",
+      bool(lengths) and all(b == t for b, t in lengths.values()))
+
+# The isinstance guards in run_gates: a misread file must reach a verdict
+# rather than a traceback. Nothing exercised run_gates with a non-table.
+b = budget_file()
+b["runners"] = "not a table"
+try:
+    budgets.run_gates(b, {}, host=None)
+    check("run_gates survives a non-table runners", True)
+except AttributeError:
+    check("run_gates survives a non-table runners", False)
+b = budget_file()
+b["runners"]["tier2"] = "no machine yet"
+try:
+    absolute, _, _ = budgets.run_gates(
+        b, {("SC-004", "ten-tab memory", "macos"): 9999.0}, host=None
+    )
+    check("run_gates survives a non-table runner", True)
+    check("...and a breach on it blocks rather than advising", absolute.failed)
+except AttributeError:
+    check("run_gates survives a non-table runner", False)
+    check("...and a breach on it blocks rather than advising", False)
+
 # --- a negative baseline is a disabled regression gate, not a tight one -------
 b = budget_file(entry={"criterion": "SC-004", "name": "ten-tab memory",
                        "platform": "windows", "baseline": -1.0})

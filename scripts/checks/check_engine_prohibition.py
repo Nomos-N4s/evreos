@@ -157,12 +157,19 @@ UNSTABLE_VALUE = re.compile(r"(?<![\w-])(?:nightly|beta)\b", re.IGNORECASE)
 # attribute behind a switch, `#![cfg_attr(..., feature(...))]`. The paren is
 # what separates it from `#![cfg(feature = "x")]`, which is a Cargo feature and
 # stable.
-# Bounded so the joined window cannot carry `#![` from one line to an unrelated
-# `feature(` several lines later: no `"` and no `;` may fall between them, and
-# neither appears inside a real attribute head. Without the bound, a string
-# constant holding "#![" beside a function named `feature` read as a nightly
-# feature gate.
-FEATURE_ATTRIBUTE = re.compile(r'#!\[[^\]";]*\bfeature\s*\(')
+# The window this is matched over has string literals blanked first, so a
+# constant holding "#![" cannot reach an unrelated `feature(` below it. Bounding
+# the pattern instead -- excluding `"` between the two -- looked equivalent and
+# was not: it dropped `#![cfg_attr(feature = "nightly", feature(let_chains))]`,
+# which is the standard way a crate puts nightly features behind a Cargo
+# feature and so the commonest real gate there is. The `;` exclusion stays:
+# no statement terminator falls inside one attribute head.
+FEATURE_ATTRIBUTE = re.compile(r'#!\[[^\];]*\bfeature\s*\(')
+
+# Enough of Rust's string grammar to blank literals in a joined window. The
+# crate-policy check carries the full scanner; this needs only the quoted forms
+# that could hold an attribute-looking fragment.
+STRING_LITERAL = re.compile(r'(?:br|rb|r)(#*)"|b?"')
 
 # What a workflow does, on a command line or in a variable, to put the release
 # path on a non-stable toolchain. The rustup forms accept any flags and values
@@ -566,8 +573,18 @@ def check_toolchain_file(root, path, problems):
     stripped = text.lstrip("\ufeff").strip()
     try:
         parsed = tomllib.loads(stripped)
-    except tomllib.TOMLDecodeError:
+    except tomllib.TOMLDecodeError as error:
         parsed = None
+        # A `.toml` file that does not parse is a misread file, not a legacy
+        # one. Falling silently through to the one-line reading made an
+        # unparseable file read as the literal "[toolchain]", match no channel,
+        # and be counted as read and clean -- which is the opposite of the rule
+        # this function applies eight lines below to a non-table [toolchain].
+        # The extensionless file has no such guarantee: its legacy form is not
+        # TOML and failing to parse is the normal case there.
+        if path.suffix == ".toml":
+            problems.append(f"{where}: {error}")
+            return
     if parsed is not None and "toolchain" in parsed:
         toolchain = parsed["toolchain"]
         if not isinstance(toolchain, dict):
@@ -706,6 +723,30 @@ def check_workflow_nightly(root, path, problems):
         )
 
 
+def blank_strings(text):
+    """`text` with the contents of string literals replaced by spaces.
+
+    Length is preserved so a caller's offsets stay valid. This is what stops a
+    constant such as `const OPEN: &str = "#![";` reaching an unrelated
+    `feature(` further down the joined window, without narrowing the pattern in
+    a way that loses the real quoted-predicate form of a cfg_attr.
+    """
+    out, i, n = [], 0, len(text)
+    while i < n:
+        match = STRING_LITERAL.match(text, i)
+        if match is None:
+            out.append(text[i])
+            i += 1
+            continue
+        hashes = match.group(1) or ""
+        close = '"' + hashes
+        end = text.find(close, match.end())
+        end = n if end == -1 else end + len(close)
+        out.append(" " * (end - i))
+        i = end
+    return "".join(out)
+
+
 def check_rust_source_nightly(root, path, problems):
     """Feature attributes and RUSTC_BOOTSTRAP in one crate root.
 
@@ -722,7 +763,7 @@ def check_rust_source_nightly(root, path, problems):
     joined, offsets = [], []
     for number, line in lines:
         offsets.append((len("".join(joined)) + len(joined), number))
-        joined.append(line.strip())
+        joined.append(blank_strings(line.strip()))
     window = " ".join(joined)
 
     def line_of(position):

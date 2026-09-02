@@ -103,6 +103,10 @@ ATTRIBUTION_MUST_PASS = [
     ("prose quoting a co-authorship trailer mid-sentence",
      "fix(x): close a gap\n\nA `Co-Authored-By: GitHub Copilot <c@g.com>` trailer\n"
      "passed, which is the mechanical case this check exists for.\n\nRefs #1"),
+    # A bullet of ordinary prose is not a trailer, so stripping the marker
+    # must not make one of it.
+    ("a bulleted prose line naming an integrated tool",
+     VALID + "- the Claude Code integration lives in .claude/"),
     ("prose quoting the canonical footer mid-sentence",
      "docs(x): explain the rule\n\nTooling appends a footer reading "
      "\u201cGenerated with a tool\u201d to the body.\n\nRefs #1"),
@@ -115,6 +119,15 @@ ATTRIBUTION_MUST_FAIL_EXTRA = [
      VALID + "```\nCo-authored-by: Copilot <b@github.com>\n```"),
     ("a co-authorship trailer as the only body line",
      "fix(x): a thing\n\nRefs #1\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
+    # A blockquote renders as visibly as a code fence, and a bullet list is how
+    # a pull request body quotes a commit. Anchoring the footer branch to the
+    # line start was right for prose, and left these two behind.
+    ("a blockquoted co-authorship trailer",
+     VALID + "> Co-authored-by: Copilot <b@github.com>"),
+    ("a bulleted co-authorship trailer",
+     VALID + "- Co-authored-by: Copilot <b@github.com>"),
+    ("an indented co-authorship trailer",
+     VALID + "    Co-Authored-By: A Human <a@b.c>"),
 ]
 
 FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",

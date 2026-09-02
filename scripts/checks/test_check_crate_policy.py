@@ -435,6 +435,41 @@ with tempfile.TemporaryDirectory() as tmp:
           crates == 1)
     check("...and nothing is reported against it", found == [])
 
+# Inheritance through every table cargo reads, including under a [target.<cfg>]
+# block. Reading only the top-level three let such a crate escape all three
+# clauses although cargo reports it in workspace_members and builds it.
+for table in (
+    "[dependencies]",
+    "[dev-dependencies]",
+    "[build-dependencies]",
+    "[target.'cfg(unix)'.dependencies]",
+    "[target.x86_64-unknown-linux-gnu.dependencies]",
+):
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        (root / "Cargo.toml").write_text(
+            '[workspace]\nmembers = ["crates/app"]\nresolver = "2"\n'
+            '[workspace.lints.rust]\nunsafe_code = "forbid"\n'
+            '[workspace.dependencies]\nshared = { path = "lib/shared" }\n'
+        )
+        for name, extra, source in (
+            ("crates/app",
+             "[lints]\nworkspace = true\n" + table + "\nshared = { workspace = true }\n",
+             "#![forbid(unsafe_code)]\n"),
+            ("lib/shared", "", "pub unsafe fn boom() {}\n"),
+        ):
+            directory = root / name
+            (directory / "src").mkdir(parents=True)
+            (directory / "Cargo.toml").write_text(
+                f'[package]\nname = "{name.split("/")[-1]}"\nversion = "0.0.0"\n'
+                f'edition = "2021"\n{extra}'
+            )
+            (directory / "src" / "lib.rs").write_text(source)
+        allowlist = root / "allow.txt"
+        allowlist.write_text("")
+        found, crates, _ = policy.check_workspace(root, allowlist)
+        check(f"inheritance through {table} makes the crate a member", crates == 2)
+
 # --- where a forbid attribute does and does not bind ------------------------
 # Commenting the attribute out to try `unsafe`, then forgetting to restore it,
 # is the realistic way a crate loses its forbid. Each of these read as forbidden
@@ -449,8 +484,22 @@ for label, source, forbids in (
     # is anchored to the start of a line, so it proved nothing about nesting.
     ("one inside a nested block comment", "/* /* */\n#![forbid(unsafe_code)]\n*/\n", False),
     ("one inside an ordinary string", 'const H: &str = "\n#![forbid(unsafe_code)]\n";\n', False),
-    ("one commented out with a line comment",
-     "// #![forbid(unsafe_code)] -- while I try unsafe\npub fn f() {}\n", False),
+    # A line beginning `//` never matched the anchored pattern with or without
+    # line-comment stripping, so this proves nothing; the case that does is a
+    # line comment BEFORE code the stripping must not swallow, below.
+    ("code after a line comment holding an unpaired quote",
+     '// a quote \" in prose\n#![forbid(unsafe_code)]\n', True),
+    # A char literal may contain a quote. Reading that quote as a string opener
+    # opened a phantom string running to the next quote in the file, blanking
+    # real code and leaving a genuine string to be scanned as code -- so a
+    # crate with no crate-level forbid at all read as forbidding.
+    ("a char literal holding a quote does not open a string",
+     'pub const Q: char = \'"\';\n\npub fn s() -> &\'static str {\n    "\n'
+     '#![forbid(unsafe_code)]\n"\n}\n', False),
+    ("a byte char literal holding a quote",
+     'pub const Q: u8 = b\'"\';\npub fn f() {\n"\n#![forbid(unsafe_code)]\n"\n}\n', False),
+    ("a lifetime is not a char literal",
+     "pub fn f<'a>(s: &'a str) -> &'a str { s }\n#![forbid(unsafe_code)]\n", True),
     # A line comment ends at the newline, so an unpaired opener inside prose
     # opens nothing. Reading these as real openers blanked the rest of the file
     # and reported a crate that plainly complies as omitting its forbid.

@@ -595,6 +595,17 @@ for label, name, body, caught in (
      '[toolchain]\nchannel = "beta"\n', True),
     ("a comment above a legacy channel name", "rust-toolchain",
      "# why we pin\nnightly\n", False),
+    # A .toml that does not parse is a MISREAD file, not a legacy one. Falling
+    # through to the one-line reading made it read as the literal "[toolchain]",
+    # match no channel, and be counted as read and clean.
+    ("an unparseable .toml is reported", "rust-toolchain.toml",
+     '[toolchain]\nchannel = nightly\n', True),
+    ("a duplicated table is reported", "rust-toolchain.toml",
+     '[toolchain]\nchannel = "1.85.0"\n[toolchain]\nchannel = "1.85.0"\n', True),
+    # The extensionless file has no such guarantee: its legacy form is not TOML
+    # and failing to parse is the normal case there.
+    ("an extensionless legacy file is not a parse error", "rust-toolchain",
+     "stable-x86_64-unknown-linux-gnu\n", False),
     ("a custom toolchain path", "rust-toolchain",
      '[toolchain]\npath = "/opt/rust-nightly"\n', True),
     ("a pinned stable release", "rust-toolchain",
@@ -621,8 +632,24 @@ for label, source, caught in (
     ("a split argument list", "#![feature(\n    let_chains\n)]\n", True),
     # The joined window must not carry `#![` from one line to an unrelated
     # `feature(` several lines below it.
-    ("a string decoy beside a function named feature",
-     'const OPEN: &str = "#![";\npub fn feature(n: u32) -> u32 { n }\n', False),
+    # No `;` between the decoy and the word, so only string blanking can stop
+    # this reaching `feature(`. With a semicolon the pattern's own bound
+    # catches it and the case proves nothing about blanking.
+    ("a string decoy with no semicolon before the word",
+     'fn doc() -> &str { "#![" }\nfn feature(n: u32) -> u32 { n }\n', False),
+    ("a string decoy in an attribute-shaped constant",
+     'const A: [&str; 2] = ["#![", "feature("]\n', False),
+    # The commonest real gate: nightly features behind a Cargo feature. The
+    # quoted predicate sits between `#![` and `feature(`, so excluding `"` from
+    # the pattern dropped it -- which is why the window blanks strings instead.
+    ("a cfg_attr with a quoted predicate",
+     '#![cfg_attr(feature = "nightly", feature(let_chains))]\n', True),
+    ("the same, split by rustfmt",
+     '#![cfg_attr(\n    feature = "nightly",\n    feature(let_chains)\n)]\n', True),
+    ("an all() of two quoted predicates",
+     '#![cfg_attr(all(feature = "a", feature = "b"), feature(never_type))]\n', True),
+    ("a cfg that gates nothing on nightly",
+     '#![cfg(feature = "x")]\npub fn f() {}\n', False),
     ("the word in prose", "// this feature (of the API) is stable\npub fn f() {}\n", False),
     ("ordinary source", "pub fn f() {}\n", False),
 ):
