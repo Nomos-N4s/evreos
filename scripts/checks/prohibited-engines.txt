@@ -1,0 +1,46 @@
+# Crates that embed, drive or acquire a web engine Evreos is forbidden to ship.
+#
+# Principle III permanently rejects Electron, CEF and any bundled Chromium, and
+# FR-044 extends that to any web engine Evreos itself fetches, unpacks or
+# installs. scripts/checks/check_engine_prohibition.py fails the build when the
+# graph `cargo metadata` resolves reaches a crate named here, directly or
+# through another crate, in any dependency table. One crate name per line; `#`
+# starts a comment; case and the hyphen/underscore distinction are ignored, as
+# crates.io ignores them.
+#
+# This list is never empty. The convention in scripts/checks/README.md lets a
+# committed list be empty so that its first entry lands as a diff to the list;
+# that is the right rule for an allowlist, whose empty state is its strictest.
+# An empty deny-list is the weakest state there is -- a dependency clause over
+# nothing -- and this one is seeded from the day it lands, so the check fails
+# on an empty file rather than passing over it. Its docstring states the
+# narrowing.
+#
+# Absent deliberately. wry, webview2-com and webkit2gtk bind the web runtime
+# the operating system provides and shares, which FR-044 names as the default
+# implementation, and tauri builds on wry. servo is the pure Rust engine
+# Principle III leaves room for as an experimental third backend, compiled in
+# and stated under FR-043 like any other change; it is not bundled Chromium and
+# is not fetched.
+
+# CEF, the Chromium Embedded Framework, and the Rust bindings to it.
+cef
+cef-dll-sys
+cef-sys
+libcef-sys
+# Fetches and unpacks a pre-built CEF archive in build tooling. That is the
+# acquisition FR-044 counts as bundling, one step earlier than at run time.
+download-cef
+
+# Chromium: crates that embed, drive or fetch a Chromium of their own. The two
+# automation crates each carry a feature that downloads a Chromium build and
+# each needs one present to do anything at all. `chromium` is the name an
+# embedding of the engine itself would take, whatever is or is not published
+# under it today; nothing here needs it.
+chromium
+chromiumoxide
+headless_chrome
+
+# Electron: the names a binding to it would take.
+electron
+electron-sys
