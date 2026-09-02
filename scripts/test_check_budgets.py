@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the budget gate. The gate is CI's authority to fail a build, so
 its own behaviour is checked rather than assumed."""
+import datetime
 import importlib.util
 import io
 import sys
@@ -30,60 +31,302 @@ def budget_file(**overrides):
         "criterion": "SC-001",
         "name": "download size",
         "platform": "windows",
-        "figure_mb": 20,
+        "figure": 20,
+        "unit": "MB",
         "status": "ratified",
-        "baseline_mb": 1.0,
+        "baseline": 1.0,
         "tolerance_pct": 0.0,
     }
     entry.update(overrides.pop("entry", {}))
-    runner = {"platform": "windows", "model": "a laptop", "identity": "abc123"}
+    runner = {
+        "platform": "windows",
+        "model": "a laptop",
+        "display_refresh": 60,
+        "runner_label": "evreos-tier1",
+        "identity": "abc123",
+    }
     runner.update(overrides.pop("runner", {}))
-    return {"runners": {"tier1": runner}, "entry": [entry]}
+    return {
+        "runners": {"tier1": runner},
+        "entry": [entry],
+        "wake": overrides.pop("wake", []),
+    }
+
+
+def file_gate(b):
+    g = budgets.Gate("f")
+    budgets.check_budget_file(b, g)
+    return g
+
+
+# Well-formed sub-tables, for the cases that vary one field of each.
+EXEMPTION = {"pull_request": 57, "figure": "cold start"}
+RESET = {
+    "date": datetime.date(2026, 9, 1),
+    "measured_cost": 1.5,
+    "requirement_served": "FR-014",
+    "founder_decision": "decisions/0002",
+}
+WAKE = {
+    "name": "update check",
+    "period": 21600,
+    "processor_time_bound": 50,
+    "justifying_requirement": "FR-014",
+}
 
 
 # --- budget-file gate ---------------------------------------------------------
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(), g)
-check("a complete file passes the budget-file gate", not g.failed)
+check("a complete file passes the budget-file gate",
+      not file_gate(budget_file()).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(runner={"identity": ""}), g)
-check("an unpinned runner fails the budget-file gate", g.failed)
+check("an unpinned runner fails the budget-file gate",
+      file_gate(budget_file(runner={"identity": ""})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(runner={"identity": "   "}), g)
-check("whitespace is not an identity", g.failed)
+check("whitespace is not an identity",
+      file_gate(budget_file(runner={"identity": "   "})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(entry={"baseline_mb": 25.0}), g)
-check("a baseline above the stated figure fails", g.failed)
+check("a baseline above the stated figure fails",
+      file_gate(budget_file(entry={"baseline": 25.0})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(entry={"baseline_mb": 20.0}), g)
-check("a baseline equal to the figure is permitted", not g.failed)
+check("a baseline equal to the figure is permitted",
+      not file_gate(budget_file(entry={"baseline": 20.0})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(entry={"tolerance_pct": 5.1}), g)
-check("a tolerance above the cap fails", g.failed)
+check("a tolerance above the cap fails",
+      file_gate(budget_file(entry={"tolerance_pct": 5.1})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(entry={"tolerance_pct": 5.0}), g)
-check("a tolerance at the cap is permitted", not g.failed)
+check("a tolerance at the cap is permitted",
+      not file_gate(budget_file(entry={"tolerance_pct": 5.0})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file(budget_file(entry={"status": "ratified-ish"}), g)
-check("an unknown status fails", g.failed)
+check("a negative tolerance fails",
+      file_gate(budget_file(entry={"tolerance_pct": -1.0})).failed)
 
-g = budgets.Gate("f")
-budgets.check_budget_file({"runners": {}, "entry": []}, g)
-check("an empty file fails rather than vacuously passing", g.failed)
+check("an unknown status fails",
+      file_gate(budget_file(entry={"status": "ratified-ish"})).failed)
 
-g = budgets.Gate("f")
+b = budget_file()
+del b["entry"][0]["status"]
+check("an absent status fails", file_gate(b).failed)
+
+check("an empty file fails rather than vacuously passing",
+      file_gate({"runners": {}, "entry": []}).failed)
+
 b = budget_file()
 b["entry"].append(dict(b["entry"][0]))
-budgets.check_budget_file(b, g)
-check("a duplicated entry fails", g.failed)
+check("a duplicated entry fails", file_gate(b).failed)
+
+b = budget_file()
+del b["entry"][0]["baseline"]
+check("a missing baseline fails", file_gate(b).failed)
+
+check("a figure that is not a number fails",
+      file_gate(budget_file(entry={"figure": "20"})).failed)
+
+check("a boolean is not a figure",
+      file_gate(budget_file(entry={"figure": True})).failed)
+
+b = budget_file()
+del b["entry"][0]["criterion"]
+check("an entry with no criterion fails rather than crashing the reader",
+      file_gate(b).failed)
+
+# --- the unit --------------------------------------------------------------
+# A figure with no unit is not a number a measurement can be compared against,
+# and a figure in a unit its criterion does not state is not that criterion's
+# entry. Both are refused rather than inferred.
+
+b = budget_file()
+del b["entry"][0]["unit"]
+check("an entry with no unit fails", file_gate(b).failed)
+
+check("a unit outside MB, ms and percent-of-core fails",
+      file_gate(budget_file(entry={"unit": "GB"})).failed)
+
+check("a unit the criterion does not state fails",
+      file_gate(budget_file(entry={"unit": "ms"})).failed)
+
+check("SC-002 is stated in ms",
+      not file_gate(budget_file(entry={"criterion": "SC-002", "name": "warm start",
+                                       "figure": 800, "unit": "ms"})).failed)
+
+window = {"criterion": "SC-005", "name": "60-minute window", "figure": 0.5,
+          "baseline": 0.0, "unit": "percent-of-core"}
+check("SC-005 is stated in percent-of-core",
+      not file_gate(budget_file(entry=window)).failed)
+
+check("SC-006 is stated in ms",
+      not file_gate(budget_file(entry={"criterion": "SC-006", "name": "tab switch",
+                                       "figure": 16, "unit": "ms"})).failed)
+
+check("a criterion that states no budget entry fails",
+      file_gate(budget_file(entry={"criterion": "SC-003"})).failed)
+
+check("the retired figure_mb field fails, so an unmigrated entry is named as such",
+      file_gate(budget_file(entry={"figure_mb": 20})).failed)
+
+check("the retired baseline_mb field fails",
+      file_gate(budget_file(entry={"baseline_mb": 0.0})).failed)
+
+# --- the runner block -------------------------------------------------------
+# Pinned means identity, runner_label and display_refresh all recorded. They
+# are written together when the machine is procured, so any of them missing
+# is the same unpinned state, reported once and deferred by one flag.
+
+check("a runner with no runner_label is not pinned",
+      file_gate(budget_file(runner={"runner_label": ""})).failed)
+
+check("a runner with display_refresh 0 is not pinned",
+      file_gate(budget_file(runner={"display_refresh": 0})).failed)
+
+b = budget_file()
+del b["runners"]["tier1"]["runner_label"]
+del b["runners"]["tier1"]["display_refresh"]
+check("a runner block without the two fields is not pinned", file_gate(b).failed)
+
+unprocured = {"identity": "", "runner_label": "", "display_refresh": 0}
+g = file_gate(budget_file(runner=unprocured))
+check("a runner missing all three is reported once, not three times",
+      len(g.blocking) == 1 and budgets.UNPINNED in g.blocking[0])
+
+check("a negative display_refresh fails",
+      file_gate(budget_file(runner={"display_refresh": -60})).failed)
+
+check("a display_refresh that is not a number fails",
+      file_gate(budget_file(runner={"display_refresh": "60"})).failed)
+
+check("a runner_label that is not a string fails",
+      file_gate(budget_file(runner={"runner_label": 7})).failed)
+
+# The deferral is exactly the unpinned condition and nothing else.
+g = file_gate(budget_file(runner={"runner_label": ""}, entry={"baseline": 25.0}))
+budgets.defer_unpinned_runners(g)
+check("--allow-unpinned-runners defers the unpinned runner",
+      len(g.advisory) == 1 and budgets.UNPINNED in g.advisory[0])
+check("...and defers nothing else", g.failed and len(g.blocking) == 1)
+
+g = file_gate(budget_file(runner={"display_refresh": -60}))
+budgets.defer_unpinned_runners(g)
+check("a malformed display_refresh is not deferred as merely unpinned", g.failed)
+
+# --- founder_decision and cross_check_margin ---------------------------------
+
+check("a founder decision citing a record passes",
+      not file_gate(budget_file(entry={"founder_decision": "decisions/0001"})).failed)
+
+check("an empty founder decision fails",
+      file_gate(budget_file(entry={"founder_decision": ""})).failed)
+
+check("a founder decision that is not a string fails",
+      file_gate(budget_file(entry={"founder_decision": 1})).failed)
+
+TEN_TAB = {"criterion": "SC-004", "name": "ten-tab memory", "figure": 150}
+
+check("a cross-check margin on SC-004 passes",
+      not file_gate(budget_file(entry={**TEN_TAB, "cross_check_margin": 2.0})).failed)
+
+check("a cross-check margin on a criterion other than SC-004 fails",
+      file_gate(budget_file(entry={"cross_check_margin": 2.0})).failed)
+
+check("a cross-check margin that is not a number fails",
+      file_gate(budget_file(entry={**TEN_TAB, "cross_check_margin": "2"})).failed)
+
+# --- spike_exemption --------------------------------------------------------
+
+check("a complete spike exemption passes",
+      not file_gate(budget_file(entry={"spike_exemption": dict(EXEMPTION)})).failed)
+
+for field in EXEMPTION:
+    record = dict(EXEMPTION)
+    del record[field]
+    check(f"a spike exemption lacking {field} fails",
+          file_gate(budget_file(entry={"spike_exemption": record})).failed)
+
+
+def exemption(**fields):
+    return budget_file(entry={"spike_exemption": {**EXEMPTION, **fields}})
+
+
+check("a spike exemption naming no pull request number fails",
+      file_gate(exemption(pull_request=0)).failed)
+
+check("a spike exemption with an unknown field fails",
+      file_gate(exemption(figur="x")).failed)
+
+check("a spike exemption that is not a table fails",
+      file_gate(budget_file(entry={"spike_exemption": 57})).failed)
+
+# --- baseline_reset ---------------------------------------------------------
+
+check("a complete baseline reset passes",
+      not file_gate(budget_file(entry={"baseline_reset": dict(RESET)})).failed)
+
+for field in RESET:
+    record = dict(RESET)
+    del record[field]
+    check(f"a baseline reset lacking {field} fails",
+          file_gate(budget_file(entry={"baseline_reset": record})).failed)
+
+
+def reset(**fields):
+    return budget_file(entry={"baseline_reset": {**RESET, **fields}})
+
+
+check("a baseline reset whose date is a string fails",
+      file_gate(reset(date="2026-09-01")).failed)
+
+check("a baseline reset naming an empty decision fails",
+      file_gate(reset(founder_decision="")).failed)
+
+check("a baseline reset with a cost that is not a number fails",
+      file_gate(reset(measured_cost="1.5 MB")).failed)
+
+# --- the wake enumeration ---------------------------------------------------
+
+check("an empty enumeration passes", not file_gate(budget_file(wake=[])).failed)
+
+check("a complete wake passes", not file_gate(budget_file(wake=[dict(WAKE)])).failed)
+
+for field in WAKE:
+    record = dict(WAKE)
+    del record[field]
+    check(f"a wake lacking {field} fails", file_gate(budget_file(wake=[record])).failed)
+
+check("a wake with a period of zero fails",
+      file_gate(budget_file(wake=[{**WAKE, "period": 0}])).failed)
+
+check("a wake with a negative processor-time bound fails",
+      file_gate(budget_file(wake=[{**WAKE, "processor_time_bound": -1}])).failed)
+
+check("a wake enumerated twice fails",
+      file_gate(budget_file(wake=[dict(WAKE), dict(WAKE)])).failed)
+
+check("a wake that is not a table fails",
+      file_gate(budget_file(wake=["update check"])).failed)
+
+check("an enumeration that is not an array fails",
+      file_gate(budget_file(wake=WAKE)).failed)
+
+# An absent enumeration is not yet a failure. The clause that fails on it lands
+# with the enumeration's semantics -- the per-wake cap and the hourly sum --
+# and is recorded here as not enforced rather than left to be assumed.
+b = budget_file()
+del b["wake"]
+check("an absent enumeration is not yet a failure", not file_gate(b).failed)
+
+# --- the repository's own budget file ---------------------------------------
+# The file as committed reads under the schema and fails only on what it says
+# it fails on: two runners awaiting procurement.
+
+real = budgets.load_budgets(budgets.REPO / "budgets.toml")
+g = file_gate(real)
+check("the committed budget file fails only on its two unpinned runners",
+      len(g.blocking) == 2 and all(budgets.UNPINNED in m for m in g.blocking))
+budgets.defer_unpinned_runners(g)
+check("...and passes once that is deferred", not g.failed)
+check("the committed budget file carries an empty wake enumeration, not none",
+      real.get("wake") == [])
+check("every committed entry states its unit",
+      all(e.get("unit") == budgets.UNIT_OF[e["criterion"]] for e in real["entry"]))
 
 # --- absolute and regression gates -------------------------------------------
 
@@ -92,6 +335,8 @@ absolute, regression, unmeasured = budgets.run_gates(
     b, {("SC-001", "download size"): 25.0}
 )
 check("exceeding a non-hardware figure blocks the absolute gate", absolute.failed)
+check("...and the verdict is stated in the entry's unit",
+      "25.000 MB exceeds 20 MB" in absolute.blocking[0])
 
 b = budget_file()
 absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.0})
@@ -111,11 +356,38 @@ check("a regression inside the declared tolerance passes", not regression.failed
 b = budget_file(entry={"tolerance_pct": 5.0})
 absolute, regression, _ = budgets.run_gates(b, {("SC-001", "download size"): 1.06})
 check("a regression outside the declared tolerance blocks", regression.failed)
+check("...stated in the entry's unit",
+      "1.060 MB is worse than baseline 1.0 MB" in regression.blocking[0])
+
+# A millisecond entry is compared and reported in milliseconds.
+b = budget_file(
+    entry={"criterion": "SC-002", "name": "warm start", "figure": 800, "unit": "ms",
+           "baseline": 700.0, "tolerance_pct": 0.0},
+)
+absolute, regression, _ = budgets.run_gates(b, {("SC-002", "warm start"): 900.0})
+check("a millisecond breach blocks on a pinned runner",
+      absolute.failed and regression.failed)
+check("...and is stated in ms", "900.000 ms exceeds 800 ms" in absolute.blocking[0])
+
+# An entry the budget-file gate has already refused is not compared: a
+# measurement in the criterion's unit against a figure in another is two
+# quantities, and a verdict over them would be a verdict on nothing.
+over = {("SC-001", "download size"): 25.0}
+b = budget_file(entry={"unit": "ms"})
+absolute, regression, unmeasured = budgets.run_gates(b, over)
+check("a figure in a unit its criterion does not state gets no verdict",
+      not absolute.failed and not absolute.advisory and not regression.failed
+      and not unmeasured)
+
+b = budget_file(entry={"figure": "20"})
+absolute, regression, unmeasured = budgets.run_gates(b, over)
+check("a figure that is not a number gets no verdict rather than a crash",
+      not absolute.failed and not unmeasured)
 
 # A hardware-dependent entry's absolute gate is advisory until its runner is
 # pinned; its regression gate is not, because it compares a machine to itself.
 b = budget_file(
-    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": ""},
 )
 absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
@@ -123,7 +395,15 @@ check("an unpinned hardware entry's absolute breach is advisory", not absolute.f
 check("...and is still reported", len(absolute.advisory) == 1)
 
 b = budget_file(
-    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
+    runner={"runner_label": ""},
+)
+absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
+check("a runner with no label is unpinned for the absolute gate too",
+      not absolute.failed)
+
+b = budget_file(
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": "pinned-1"},
 )
 absolute, regression, _ = budgets.run_gates(b, {("SC-004", "ten-tab memory"): 200.0})
@@ -133,8 +413,8 @@ b = budget_file(
     entry={
         "criterion": "SC-004",
         "name": "ten-tab memory",
-        "figure_mb": 150,
-        "baseline_mb": 100.0,
+        "figure": 150,
+        "baseline": 100.0,
         "tolerance_pct": 0.0,
     },
     runner={"identity": ""},
@@ -157,7 +437,7 @@ check("a non-hardware entry with no measurement is marked BLOCKING",
       unmeasured == [("SC-001 download size (windows)", "BLOCKING")])
 
 b = budget_file(
-    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": ""},
 )
 absolute, regression, unmeasured = budgets.run_gates(b, {})
@@ -165,7 +445,7 @@ check("an unmeasured hardware entry with no pinned runner is not blocking",
       unmeasured and unmeasured[0][1] != "BLOCKING")
 
 b = budget_file(
-    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure_mb": 150},
+    entry={"criterion": "SC-004", "name": "ten-tab memory", "figure": 150},
     runner={"identity": "pinned-1"},
 )
 absolute, regression, unmeasured = budgets.run_gates(b, {})
