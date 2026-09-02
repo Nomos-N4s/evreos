@@ -200,6 +200,13 @@ check("a dated nightly fails",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly-2026-08-01"\n')))
 check("beta is not stable",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "beta"\n')))
+# The pattern allows leading whitespace before the channel name and the error
+# message strips it, so the two agree; nothing pinned the allowance. Without it
+# one space is all it takes to select nightly unseen -- and rustup reads the
+# value as TOML, which does not trim inside the quotes, so this is a spelling
+# that behaves differently from how it reads.
+check("a channel padded with a space is still nightly",
+      nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = " nightly"\n')))
 check("a custom toolchain path fails",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\npath = "/opt/rust"\n')))
 check("a pinned stable version passes",
@@ -415,6 +422,68 @@ check("...while a real engine archive beside it still fails",
 
 # A binary file under a member's src/ is not read. Without the NUL guard its
 # bytes are decoded and an engine name inside them reads as an acquisition.
+# --- every engine name and every acquisition verb ----------------------------
+# Six alternatives were the sole catcher of nothing: each could be deleted and a
+# real acquisition the check catches today would go unreported, suite green.
+# That is the false-PASS direction, which is the one that matters in a clause
+# enforcing a NON-NEGOTIABLE principle.
+for label, line in (
+    ("libxul, Gecko's shipped library",
+     'let url = "https://ftp.mozilla.org/pub/libxul.tar.gz";\n'),
+    ("wpewebkit", 'download("https://wpe/wpewebkit-2.44.tar.xz");\n'),
+    # The docstring singles the Fixed Version Runtime out as the private-copy
+    # form that must fail, and only the separator-free spelling was fixtured.
+    ("the fixed-version runtime, hyphenated",
+     'fetch("https://msedge/Fixed-Version-Runtime_120.cab");\n'),
+    ("the fixed-version runtime, underscored",
+     'fetch("https://msedge/fixed_version_runtime.zip");\n'),
+    ("a plain-http mirror", 'const M: &str = "http://mirror.local/chromium";\n'),
+    ("include_dir!", 'static CEF: Dir = include_dir!("$CARGO_MANIFEST_DIR/cef");\n'),
+    ("third-party, hyphenated", 'include!("third-party/chromium/mod.rs");\n'),
+    ("third_party, underscored", 'include!("third_party/cef/mod.rs");\n'),
+):
+    check(f"{label} is an engine acquisition",
+          acquisition_problems(lambda r, line=line: rs(r, line, "build.rs")))
+
+# The `cef` bounds, in the passing direction the docstring names by word.
+check("cefalo is not cef", acquisition_problems(
+    lambda r: rs(r, 'download("https://x/cefalo-1.0.zip");\n', "build.rs")) == [])
+
+# --- which files the acquisition clause reads --------------------------------
+# Each exclusion is a deliberate narrowing and only `.lock` was pinned. These
+# fail in the over-report direction -- a design note or a comment read as an
+# acquisition -- so no assertion about the clause failing could reach them.
+for label, path, text in (
+    ("a markdown note", "crates/evreos-shell/src/NOTES.md",
+     "See https://x/chromium.zip for what we rejected.\n"),
+    ("a text note", "crates/evreos-shell/src/NOTES.txt",
+     "Do not fetch https://x/chromium.zip.\n"),
+):
+    check(f"{label} is prose and is not read",
+          acquisition_problems(lambda r, p=path, t=text: write(r, p, t)) == [])
+
+for label, path, text in (
+    ("a justfile", "crates/evreos-shell/build/justfile",
+     "# TODO: download https://x/chromium.zip\n"),
+    ("a Justfile", "crates/evreos-shell/build/Justfile",
+     "# TODO: download https://x/chromium.zip\n"),
+    ("a Makefile", "crates/evreos-shell/build/Makefile",
+     "# TODO: download https://x/chromium.zip\n"),
+    ("a python script", "crates/evreos-shell/build/gen.py",
+     "# do not download https://x/chromium.zip\n"),
+    ("a shell script", "crates/evreos-shell/build/fetch.sh",
+     "# do not download https://x/chromium.zip\n"),
+    ("a powershell script", "crates/evreos-shell/build/fetch.ps1",
+     "# do not download https://x/chromium.zip\n"),
+    ("a yaml file", "crates/evreos-shell/build/conf.yaml",
+     "# do not download https://x/chromium.zip\n"),
+):
+    check(f"a hash comment in {label} is not an acquisition",
+          acquisition_problems(lambda r, p=path, t=text: write(r, p, t)) == [])
+    check(f"...while the same line as code in {label} is",
+          acquisition_problems(
+              lambda r, p=path, t=text: write(r, p, t.lstrip("# "))))
+
 check("a binary file is not read by the acquisition clause",
       acquisition_problems(lambda r: write(
           r, "crates/evreos-shell/src/blob.dat",
