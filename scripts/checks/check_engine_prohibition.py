@@ -164,10 +164,13 @@ UNSTABLE_VALUE = re.compile(r"(?<![\w-])(?:nightly|beta)\b", re.IGNORECASE)
 # which is the standard way a crate puts nightly features behind a Cargo
 # feature and so the commonest real gate there is. The `;` exclusion stays:
 # no statement terminator falls inside one attribute head.
-# `#!` and `[` may be separated by whitespace: rustc reads `#! [feature(x)]` as
-# the same attribute it reads `#![feature(x)]` as, verified against the compiler.
-# Requiring them adjacent let one space put the release path on nightly unseen.
-FEATURE_ATTRIBUTE = re.compile(r'#![ \t]*\[[^\];]*\bfeature\s*\(')
+# Whitespace may sit between `#`, `!` and `[`, in any combination: rustc reads
+# `#![feature(x)]`, `#! [feature(x)]`, `# ![feature(x)]` and `#!` on its own
+# line as one and the same attribute -- verified against the compiler, which
+# rejects every spelling on stable with the same E0554. Closing only the gap
+# between `!` and `[` left the one to its left open, and a single space there
+# still put the release path on nightly unseen.
+FEATURE_ATTRIBUTE = re.compile(r'#\s*!\s*\[[^\];]*\bfeature\s*\(')
 
 
 # What a workflow does, on a command line or in a variable, to put the release

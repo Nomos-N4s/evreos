@@ -290,6 +290,15 @@ check("#![feature(...)] fails", nightly_problems(lambda r: rs(r, "#![feature(spe
 # same E0554. Requiring them adjacent let one space put the release path on
 # nightly unseen, and the crate policy's mirror of this pattern refused a forbid
 # rustc honours. An OUTER attribute is still not one.
+# Whitespace may sit between `#`, `!` and `[`, in any combination -- rustc
+# rejects every spelling below on stable with the same E0554, verified against
+# the compiler. Closing only the gap between `!` and `[` left the one to its
+# left open, and a single space there still put the release path on nightly.
+for spelling in ("# ![feature(specialization)]",
+                 "# ! [feature(specialization)]",
+                 "#\t![feature(specialization)]"):
+    check(f"a feature attribute written {spelling.strip()!r} fails",
+          nightly_problems(lambda r, spelling=spelling: rs(r, spelling + "\n")))
 check("a feature attribute with a space after #! fails",
       nightly_problems(lambda r: rs(r, "#! [feature(specialization)]\n")))
 check("...with several spaces too",
