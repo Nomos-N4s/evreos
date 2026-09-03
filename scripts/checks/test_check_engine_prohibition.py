@@ -351,6 +351,41 @@ check("a -Z flag on a cargo line fails",
       nightly_problems(lambda r: wf(r, "run: cargo build -Zbuild-std\n")))
 check("a -Z flag on a line naming no toolchain tool passes",
       nightly_problems(lambda r: wf(r, "run: tar -Zcf archive.tar.gz src\n")) == [])
+# --- a wrapped line is the same line -----------------------------------------
+# Every reading here needs its two halves together -- a `-Z` beside the word
+# `cargo`, a channel beside its key -- and a workflow's logical line is not its
+# physical line. Wrapping is ordinary formatting, so reading physical lines
+# refused the unwrapped form and passed the wrapped one: a release path put
+# entirely on nightly passed the check that exists to refuse it.
+for label, text in (
+    ("a folded scalar", 'env:\n  RUSTFLAGS: >-\n    -D warnings\n    -Z share-generics\n'),
+    ("a literal scalar", 'env:\n  RUSTFLAGS: |\n    -D warnings\n    -Z share-generics\n'),
+    ("a shell continuation",
+     'jobs:\n  b:\n    steps:\n      - run: |\n          cargo build --locked \\\n            -Z build-std=std\n'),
+    ("a wrapped toolchain install",
+     'jobs:\n  b:\n    steps:\n      - run: |\n          rustup toolchain install \\\n            nightly --profile minimal\n'),
+    ("a wrapped default",
+     'jobs:\n  b:\n    steps:\n      - run: |\n          rustup default \\\n            nightly\n'),
+    ("a folded toolchain value",
+     'jobs:\n  b:\n    steps:\n      - uses: x\n        with:\n          toolchain: >-\n            nightly\n'),
+):
+    check(f"nightly behind {label} still fails",
+          nightly_problems(lambda r, text=text: wf(r, text)))
+
+# The carve-out that keeps folding honest. A block body under a SCRIPT key is a
+# sequence of commands, not one value, so folding it would put the words of one
+# beside the words of another -- `cargo build` on one line and `tar -Zcf` on
+# another would read as a nightly cargo flag. Those bodies keep their lines and
+# get the shell's backslash rule instead.
+check("two commands in one script body are not one line",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: |\n          cargo build --release\n'
+             '          tar -Zcf out.tgz target\n')) == [])
+check("a wrapped stable install stays clean",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: |\n          rustup toolchain install \\\n'
+             '            stable --profile minimal\n')) == [])
+
 check("a workflow installing nightly fails",
       nightly_problems(lambda r: wf(r, "run: rustup toolchain install nightly --profile minimal\n")))
 check("rustup install, the alias of toolchain install, fails",

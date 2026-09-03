@@ -702,6 +702,84 @@ def check_manifest_features(root, path, problems):
         )
 
 
+# A block scalar header -- `key: |`, `key: >-`, `key: |+2` -- whose body is the
+# more-indented lines beneath it.
+BLOCK_SCALAR = re.compile(r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:\s*[|>][-+]?[0-9]*\s*$""")
+# Keys whose block body is a SCRIPT: each line is its own command, so the body
+# is not one value and must not be folded into one. Every other block scalar is
+# a value, and YAML's own folding joins it with spaces.
+SCRIPT_KEYS = {"run", "script", "cmd", "shell", "entrypoint", "args"}
+
+
+def logical_lines(lines):
+    """`lines` with each continuation folded into the line it opens on.
+
+    A workflow's logical line is not its physical line, and every reading below
+    needs its two halves together: a `-Z` beside the word `cargo`, a channel
+    beside the key it sits under. Wrapping is ordinary formatting, so a check
+    that reads physical lines refuses the unwrapped form and passes the wrapped
+    one -- which is what a release path put entirely on nightly looked like.
+
+    Two kinds of continuation, each folded on its own terms:
+
+    - A shell line ending in `\\` continues onto the next. That is the shell's
+      rule and it holds wherever it appears.
+    - A block scalar's body belongs to its key. A folded or literal scalar is
+      ONE value, so it is joined with spaces -- except under a script key, where
+      the body is a sequence of commands and joining them would put the words of
+      one beside the words of another. Those keep their lines and get the
+      backslash rule instead.
+
+    Each result carries the number of the physical line it opens on, so a report
+    still names where a reader would look.
+    """
+    numbered = list(lines)
+    out = []
+    i = 0
+    while i < len(numbered):
+        number, text = numbered[i]
+        header = BLOCK_SCALAR.match(text)
+        if header:
+            indent, key = len(header.group(1)), header.group(2)
+            body, j = [], i + 1
+            while j < len(numbered):
+                following = numbered[j][1]
+                if following.strip() and len(following) - len(following.lstrip()) <= indent:
+                    break
+                body.append(numbered[j])
+                j += 1
+            if key.lower() in SCRIPT_KEYS:
+                out.append((number, text))
+                out.extend(fold_backslashes(body))
+            else:
+                folded = " ".join(line.strip() for _, line in body if line.strip())
+                out.append((number, f"{text.rstrip()} {folded}".rstrip()))
+            i = j
+            continue
+        out.append((number, text))
+        i += 1
+    return fold_backslashes(out)
+
+
+def fold_backslashes(lines):
+    """`lines` with each shell continuation joined onto the line it opens on."""
+    out = []
+    pending = None
+    for number, text in lines:
+        stripped = text.rstrip()
+        if pending is not None:
+            number, text = pending[0], f"{pending[1]} {text.strip()}"
+            stripped = text.rstrip()
+            pending = None
+        if stripped.endswith("\\"):
+            pending = (number, stripped[:-1].rstrip())
+            continue
+        out.append((number, text))
+    if pending is not None:
+        out.append(pending)
+    return out
+
+
 def workflow_nightly_lines(lines):
     """The (number, line) pairs of a workflow that select nightly or beta.
 
@@ -742,7 +820,7 @@ def workflow_nightly_lines(lines):
 
 def check_workflow_nightly(root, path, problems):
     where = relative(root, path)
-    for number, line in workflow_nightly_lines(code_lines(path)):
+    for number, line in workflow_nightly_lines(logical_lines(code_lines(path))):
         problems.append(
             f"{where}:{number}: puts the toolchain on a non-stable channel or turns nightly "
             f"features on: {line.strip()!r}"
