@@ -117,9 +117,16 @@
   the override — it is stated in the constitution only. Rules this file adds that
   the constitution does not state — the session-identifier ban, the
   `Co-Authored-By` ban, the branch prefixes, the Spec Kit directory rule — stay
-  here and rest on review. Two limbs of this file's older wording are
-  deliberately not carried forward: a blanket ban on "tool attribution", which
-  contradicted Principle I's carve-out for naming an integrated tool, and the
+  here. Three of the four rest on review; the `Co-Authored-By` ban does not, and
+  saying it did contradicted this file's own account of it twelve lines above,
+  which records that the checker rejects every co-authorship trailer whoever it
+  names and that it is no longer a review obligation. The checker was verified
+  against both spellings before this sentence was corrected: a trailer naming a
+  human is refused, and a `Claude-Session:` line — the session-identifier ban,
+  which genuinely does rest on review — is not. Two limbs of this file's older
+  wording are deliberately not carried forward: a blanket ban on "tool
+  attribution", which contradicted Principle I's carve-out for naming an
+  integrated tool, and the
   broader "session attribution", narrowed here to session, run and conversation
   identifiers. When the
   constitution is amended, the reminders above MUST be re-checked against it.
