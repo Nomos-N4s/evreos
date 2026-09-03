@@ -25,8 +25,15 @@ RAW_OPENER = re.compile(r'(?:br|rb|r)(#*)"')
 PLAIN_OPENER = re.compile(r'b?"')
 
 
-def strip_non_code(source):
+def strip_non_code(source, keep_literals=False):
     """`source` with every non-code region blanked, newlines kept.
+
+    `keep_literals` blanks comments ONLY, leaving string and char literals
+    whole. One caller needs that and the difference is not a nicety: the engine
+    prohibition's acquisition clause looks for an engine named INSIDE a string
+    -- `download("https://x/chromium.zip")` -- so blanking strings would blank
+    the text it reads. It still must not read a comment, and a comment spans
+    lines, which is why it cannot do this itself line by line.
 
     An inner attribute inside a comment or a string is not an attribute -- it
     is text the compiler never reads -- and one inside a function body is
@@ -56,6 +63,10 @@ def strip_non_code(source):
     def blank(text):
         return "".join(character if character == "\n" else " " for character in text)
 
+    # A literal is blanked, or kept exactly, depending on the caller. A comment
+    # is blanked either way: nothing has a use for what a comment says.
+    keep = (lambda text: text) if keep_literals else blank
+
     while i < n:
         if source.startswith("//", i):
             end = source.find("\n", i)
@@ -74,20 +85,20 @@ def strip_non_code(source):
             out.append(blank(source[i:j]))
             i = j
         elif (literal := CHAR_LITERAL.match(source, i)) is not None:
-            out.append(blank(literal.group(0)))
+            out.append(keep(literal.group(0)))
             i = literal.end()
         elif (raw := RAW_OPENER.match(source, i)) is not None:
             close = '"' + raw.group(1)
             end = source.find(close, raw.end())
             end = n if end == -1 else end + len(close)
-            out.append(blank(source[i:end]))
+            out.append(keep(source[i:end]))
             i = end
         elif (plain := PLAIN_OPENER.match(source, i)) is not None:
             j = plain.end()
             while j < n and source[j] != '"':
                 j += 2 if source[j] == "\\" else 1
             j = min(j + 1, n)
-            out.append(blank(source[i:j]))
+            out.append(keep(source[i:j]))
             i = j
         else:
             out.append(source[i])
