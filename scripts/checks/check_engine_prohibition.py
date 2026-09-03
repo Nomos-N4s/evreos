@@ -39,11 +39,13 @@ prohibition by review alone. This check reads the tree and fails on:
                toolchain is one per workspace, so a single file that needs
                nightly to compile puts the whole workspace on it. A workflow
                is read too, since it is what actually puts a toolchain on the
-               release path -- and a LOCAL ACTION is read on the same terms,
-               since a step written `uses: ./path` hands the runner whatever is
-               defined there and a composite action's `run:` steps are shell
-               exactly as a workflow's are. It fails on each way one selects
-               nightly or beta: installing it (`rustup install`, `rustup toolchain
+               release path -- and a LOCAL ACTION DEFINITION is read on the
+               same terms, since a step written `uses: ./path` hands the runner
+               whatever is defined there and a COMPOSITE action's `run:` steps
+               are shell exactly as a workflow's are. What is read is the
+               definition file; a node or docker action's own program is not,
+               and the limits section below says so. It fails on each way one
+               selects nightly or beta: installing it (`rustup install`, `rustup toolchain
                install`), defaulting to it (`rustup default`, `rustup
                override set`), invoking it (`cargo +nightly`, `rustup run
                nightly`), naming it in a `toolchain:` input or through a
@@ -130,6 +132,18 @@ unusual key -- passes, as does a channel spelled by concatenation, and a
 the toolchain step build.yml carries, which installs stable and makes it the
 default before anything builds, so the only way onto nightly is a later line
 this clause does read.
+
+A LOCAL ACTION is read as its definition file and no further. That is the whole
+of a composite action, whose steps are written there. It is not the whole of a
+node action, whose `main`, `pre` and `post` name JavaScript files, nor of a
+docker action, whose `image` may name a Dockerfile -- and neither of those files
+is read, so a `rustup default nightly` inside one passes. Nothing in this
+repository is such an action; closing it is a change to the file set, and it
+lands with the first one, where the diff that adds the action and the diff that
+adds its reading are the same review. A THIRD-PARTY action's code is not in the
+tree and cannot be read at all: what is read of one is the reference, which is
+why a `@nightly` pin and a `toolchain:` input are matched where they are
+written.
 
 Neither clause reads a comment: a comment fetches nothing and selects nothing.
 """
@@ -316,6 +330,11 @@ NOT_READ = {".md", ".txt", ".lock"}
 # directory, and it keys on the name GitHub requires an action definition to
 # carry.
 ACTION_NAMES = ("action.yml", "action.yaml")
+# Pruned at EVERY depth, not only at the root. Cargo writes a target directory
+# per workspace and a nested one is still its output; a source directory that
+# happens to be called `target` is pruned with them, which costs a file this
+# clause would have read and is the safer of the two errors -- the other is
+# reporting every vendored crate that ships an action definition.
 NOT_WALKED = ("target", ".git", "node_modules")
 
 

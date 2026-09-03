@@ -1065,6 +1065,16 @@ check("a composite action that fetches an engine fails",
           r, ".github/actions/fetch/action.yml",
           "runs:\n  using: composite\n  steps:\n"
           "    - run: curl -O https://example.com/chromium.tar.gz\n      shell: bash\n")))
+# `.github/workflows/action.yml` is a valid workflow name and an action
+# definition's name at once, so it reaches the reading twice. One file, one
+# finding: a second copy would say the same thing about the same line and put
+# the file's own count out of step with what was read.
+check("a workflow named action.yml is read once, not twice",
+      len(nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: rustup default nightly\n",
+      ) and write(
+          r, ".github/workflows/action.yml",
+          "jobs:\n  b:\n    steps:\n      - run: rustup default nightly\n"))) == 2)
 
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(
