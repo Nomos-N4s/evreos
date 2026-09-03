@@ -567,6 +567,13 @@ for label, root_toml, member_toml in (
      BASE + "[lints]\nworkspace = true\n"),
     # A path must be a string, as `crate_roots` already requires of a declared
     # target path. Another type reached `base / path` and raised.
+    # A NUL reaches a path only as an ESCAPE -- TOML refuses a literal one, so
+    # the first version of this fixture proved nothing: it failed on the decode
+    # path instead. Escaped, `isinstance(str)` admits the value and `resolve()`
+    # raises on it, and a wrong VALUE must reach a verdict exactly as a wrong
+    # type does.
+    ("a dependency path holding a NUL", WORKSPACE_ROOT,
+     BASE + '[lints]\nworkspace = true\n[dev-dependencies]\nb = { path = "a\\u0000b" }\n'),
     ("a dependency path that is not a string", WORKSPACE_ROOT,
      BASE + '[lints]\nworkspace = true\n[dependencies]\nb = { path = 1 }\n'),
     ("a dev-dependency path that is not a string", WORKSPACE_ROOT,
@@ -749,6 +756,14 @@ for label, source, forbids in (
     # a real behavioural choice and nothing pinned it.
     # `#[forbid(...)]` is an OUTER attribute: it binds the next item only, not
     # the crate. Accepting it would let a crate root carrying nothing else pass.
+    # rustc applies `#! [forbid(unsafe_code)]` exactly as it applies the adjacent
+    # spelling -- verified against the compiler, which reports an unsafe block as
+    # an error under both. Requiring them adjacent reported a compliant crate as
+    # omitting the forbid it carries. The engine check's mirror of this pattern
+    # had the same gap in the opposite direction.
+    ("a space between #! and [ still counts",
+     "#! [forbid(unsafe_code)]\n", True),
+    ("several spaces too", "#!  [ forbid(unsafe_code) ]\n", True),
     ("an outer attribute is not the crate forbid",
      "#[forbid(unsafe_code)]\npub fn f() {}\n", False),
     # rustfmt leaves these alone but a person writes them, and they compile.

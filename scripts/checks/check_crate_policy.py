@@ -61,7 +61,11 @@ ALLOWLIST = HERE / "unsafe-carveout-allowlist.txt"
 # An unconditional inner attribute forbidding unsafe_code, alone or beside
 # other lints. A `cfg_attr` form is deliberately not matched: a forbid that
 # holds only under some configuration is not the policy.
-FORBID = re.compile(r"^\s*#!\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
+# `#!` and `[` may be separated by whitespace. rustc applies `#! [forbid(...)]`
+# exactly as it applies `#![forbid(...)]` -- verified against the compiler, which
+# reports the unsafe block as an error under both -- so requiring them adjacent
+# reported a compliant crate as omitting a forbid it carries.
+FORBID = re.compile(r"^\s*#![ \t]*\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
 
 # Every table Cargo reads path dependencies from, at the top level and under
 # each `[target.<cfg>]`.
@@ -292,6 +296,15 @@ def workspace_members(root, manifest, problems):
         followed += [(root, path)
                      for path in inherited_workspace_paths(manifest, member)]
         for base, path in followed:
+            if chr(0) in path:
+                # `isinstance(str)` is not enough: a NUL is legal in TOML and
+                # illegal in a path, and `resolve()` raises on it. A wrong VALUE
+                # must reach a verdict exactly as a wrong type now does.
+                problems.append(
+                    f"{relative(root, manifest_path)}: dependency path {path!r} "
+                    "holds a NUL and names no directory"
+                )
+                continue
             dependency = (base / path).resolve()
             if dependency.is_relative_to(root):
                 add(dependency, relative(root, manifest_path))
