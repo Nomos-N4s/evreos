@@ -514,6 +514,69 @@ check("a matrix under the key version fails",
       nightly_problems(lambda r: wf(r, "matrix:\n  version: [stable, nightly]\n")))
 check("a matrix include entry naming nightly fails",
       nightly_problems(lambda r: wf(r, "matrix:\n  include:\n    - rust: nightly\n      os: ubuntu-latest\n")))
+# The same mapping written inline. YAML gives a mapping a block form, where the
+# keys sit on their own lines, and a flow form, where the whole mapping is one
+# line's value. Actions reads both and means the same thing by them; the key
+# walk above reaches only the block form, so every case here passed while its
+# block twin failed -- a nightly release path one pair of braces from being
+# invisible. PyYAML parses each fixture below to exactly what its name claims.
+check("a toolchain input in a flow mapping fails",
+      nightly_problems(lambda r: wf(r, "with: { toolchain: nightly }\n")))
+check("the same flow mapping without spaces inside the braces fails",
+      nightly_problems(lambda r: wf(r, "with: {toolchain: nightly}\n")))
+check("a quoted key and value in a flow mapping fails",
+      nightly_problems(lambda r: wf(r, "with: {'toolchain': 'nightly'}\n")))
+check("a double-quoted beta in a flow mapping fails",
+      nightly_problems(lambda r: wf(r, 'with: {"toolchain": "beta"}\n')))
+check("a toolchain pair after a comma fails",
+      nightly_problems(lambda r: wf(r, "with: { os: windows-latest, toolchain: nightly }\n")))
+check("a flow sequence under a matrix key fails",
+      nightly_problems(lambda r: wf(r, "matrix: { rust: [stable, nightly] }\n")))
+check("a flow mapping nested in another fails",
+      nightly_problems(lambda r: wf(r, "strategy: { matrix: { rust: nightly } }\n")))
+check("a flow mapping inside a flow sequence fails",
+      nightly_problems(lambda r: wf(r, "matrix: { include: [ { toolchain: nightly, os: windows-latest } ] }\n")))
+# And the other side of it: braces are not themselves the offence.
+check("a stable flow mapping passes",
+      nightly_problems(lambda r: wf(r, "with: { toolchain: stable }\n")) == [])
+check("a pinned version in a flow sequence passes",
+      nightly_problems(lambda r: wf(r, "matrix: { rust: [stable, 1.94.1] }\n")) == [])
+check("nightly under a key that names no toolchain passes",
+      nightly_problems(lambda r: wf(r, "with: { path: nightly-cache }\n")) == [])
+check("a branch named nightly in a flow mapping passes",
+      nightly_problems(lambda r: wf(r, "on: { push: { branches: [nightly] } }\n")) == [])
+# The key-looking text here is inside a quoted scalar, so it is prose and not a
+# pair -- which is what the quote tracking in flow_pairs is for.
+check("a colon inside a quoted flow scalar is not a key",
+      nightly_problems(lambda r: wf(r, "env: { NOTE: 'toolchain: nightly is refused here' }\n")) == [])
+# The two below are what the quote tracking buys, in both directions. A comma
+# inside a quoted scalar does not end an element, or the text after it reads as
+# a second pair and prose about the rule is reported as a breach of it; a brace
+# inside one does not close the mapping, or every pair after it is invisible.
+# Both fixtures are what PyYAML makes of them: one scalar, and a real nightly.
+check("a comma inside a quoted flow scalar does not start a pair",
+      nightly_problems(lambda r: wf(r, "env: { NOTE: 'use stable, toolchain: nightly is refused' }\n")) == [])
+check("a brace inside a quoted flow scalar does not end the mapping",
+      nightly_problems(lambda r: wf(r, "with: { path: 'a}b', toolchain: nightly }\n")))
+# A colon with no space after it does not separate a key from a value: YAML
+# keeps `version:beta` whole as one plain scalar, so it is an argument and not
+# a toolchain named beta.
+check("a colon inside a plain flow scalar is not a key",
+      nightly_problems(lambda r: wf(r, "with: { args: [--cfg, version:beta] }\n")) == [])
+# A double-quoted scalar is the one place a backslash escapes the quote, so the
+# scan has to step over `\"` or the scalar ends early and every pair after it is
+# invisible. PyYAML reads the note below as `a " }` and the toolchain as
+# nightly, which is what this fixture asserts is reported.
+check("an escaped quote does not end a double-quoted flow scalar",
+      nightly_problems(lambda r: wf(r, 'with: { note: "a \\" }", toolchain: nightly }\n')))
+# And the other half of that: a single-quoted scalar has no backslash escapes
+# at all -- YAML spells a quote inside one by doubling it -- so a Windows path
+# ending in a separator closes its scalar on the quote that follows the
+# backslash. Treating the backslash as an escape there swallows the rest of the
+# mapping. PyYAML reads the directory below as `C:\` and the toolchain as
+# nightly.
+check("a backslash does not escape inside a single-quoted flow scalar",
+      nightly_problems(lambda r: wf(r, "with: { dir: 'C:\\', toolchain: nightly }\n")))
 # Nightly behaviour under a stable toolchain.
 # Each of the five below was the sole exercise of a branch nothing pinned:
 # mutating that branch left the suite green.

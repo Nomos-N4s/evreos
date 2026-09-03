@@ -206,7 +206,9 @@ TOOLCHAIN_KEYS = {
     "rust-version", "rust_version", "rustc", "version",
 }
 # A YAML mapping line, `key: value` or `- key: value`, and a block-list item.
-# Enough YAML for a workflow; nothing here is a parser.
+# Enough YAML for a workflow; nothing here is a parser. These two read the
+# BLOCK form only, where a mapping's keys sit on their own lines; the flow form,
+# `with: { toolchain: nightly }`, is one line's value and is read by flow_pairs.
 YAML_KEY = re.compile(r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:(?!:)(.*)$""")
 YAML_ITEM = re.compile(r"""^(\s*)-\s+(.*)$""")
 
@@ -803,6 +805,84 @@ def fold_backslashes(lines):
     return out
 
 
+def flow_pairs(text):
+    """The `key: value` pairs of every flow collection on one line.
+
+    YAML writes a mapping two ways and Actions reads both: `with:` with an
+    indented `toolchain:` beneath it, or `with: { toolchain: nightly }` all on
+    one line. The key chain in workflow_nightly_lines walks the first, and
+    cannot reach into the second -- the whole mapping is one line's value, and
+    the key it hangs under is `with`, which no toolchain key list contains. So
+    the block form was caught and the flow form, the same two tokens with the
+    same meaning to the workflow parser, was not.
+
+    Not a YAML parser either. It tracks quoting and bracket depth, takes a key
+    as the text before a colon that ends a token, and takes the value as the
+    text up to the next comma or closing bracket outside any deeper bracket --
+    which keeps a flow sequence with the key that introduces it, so
+    `rust: [stable, nightly]` is one pair and not two valueless items. Pairs at
+    depth zero are left out on purpose: those are the block form, which the
+    caller has already judged.
+    """
+    pairs = []
+    stack = []
+    depth = 0
+    quote = None
+    start = None  # where the element being read begins
+    colon = None  # where its key ends, once a separating colon is seen
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if quote is not None:
+            # Only a double-quoted scalar has escapes; inside a single-quoted
+            # one a backslash is an ordinary character.
+            if ch == "\\" and quote == '"':
+                i += 2
+                continue
+            if ch == quote:
+                quote = None
+            i += 1
+        elif ch in "\"'":
+            quote = ch
+            i += 1
+        elif ch in "{[":
+            stack.append((start, colon))
+            depth += 1
+            start, colon = i + 1, None
+            i += 1
+        elif ch in "}]" and depth:
+            if colon is not None:
+                pairs.append((text[start:colon], text[colon + 1:i]))
+            depth -= 1
+            start, colon = stack.pop()
+            i += 1
+        elif ch == "," and depth:
+            if colon is not None:
+                pairs.append((text[start:colon], text[colon + 1:i]))
+            start, colon = i + 1, None
+            i += 1
+        elif ch == ":" and depth and colon is None and text[i + 1:i + 2] == " ":
+            # In flow context YAML separates a key from its value with a colon
+            # and a SPACE, and only that: a tab there is a scanner error, and a
+            # colon with anything else after it is part of a plain scalar --
+            # `version:beta` is one argument token, not the beta channel under
+            # the key `version`. The empty-value spellings, `{toolchain:}` and
+            # `{toolchain:, os: x}`, need no branch of their own: an absent
+            # value is never a channel, and the pair that follows is read the
+            # same whether or not this colon was taken.
+            # `colon is None` fixes the key at the FIRST separating colon,
+            # which is YAML's rule. No well-formed flow element carries a
+            # second one -- a plain scalar may not contain `: `, a quoted one
+            # is stepped over, and a nested collection gets its own depth --
+            # so the suite cannot tell that guard from its absence. It is here
+            # because it states the rule, not because a case pins it.
+            colon = i
+            i += 1
+        else:
+            i += 1
+    return [(key.strip().strip("\"'"), value) for key, value in pairs]
+
+
 def workflow_nightly_lines(lines):
     """The (number, line) pairs of a workflow that select nightly or beta.
 
@@ -819,6 +899,12 @@ def workflow_nightly_lines(lines):
         if not line.strip():
             continue
         if WORKFLOW_NIGHTLY.search(line) or WORKFLOW_UNSTABLE_FLAG.search(line):
+            found.append((number, line))
+            continue
+        if any(
+            key in TOOLCHAIN_KEYS and UNSTABLE_VALUE.search(value)
+            for key, value in flow_pairs(line)
+        ):
             found.append((number, line))
             continue
         key_match = YAML_KEY.match(line)
