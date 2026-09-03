@@ -8,10 +8,16 @@ a literal, and every suffix they compare, asks that runner for a spelling the
 author may never have used -- and the answer there is silence rather than a
 failure: the file is not found, so nothing is read, so nothing is reported.
 
-Four spellings of that one question have each produced a finding on this branch:
-a suffix comparison, a glob, a constructed literal path, and a set membership.
-So the question is asked in one place. A new reading of a file gets these rather
-than writing a fifth.
+Seven spellings of that one question have each produced a finding on this
+branch: a suffix comparison, a glob, a constructed literal path, a membership in
+a lookup table, a membership in an exclusion set, a first-match lookup, and a
+multi-segment path. So the question is asked in one place, and a new reading of
+a file gets these rather than writing an eighth.
+
+The count is stated because it kept being wrong. Twice a round declared the
+class closed and the next one found another spelling, once inside the function
+the sweep had just edited; once a recorded, reasoned exception to keeping this
+in one place produced a defect within a single round.
 
 What deliberately does NOT come through here is a path a MANIFEST declares.
 That name is the author's own, Cargo resolves it exactly as a check would, and
@@ -19,6 +25,12 @@ where its case does not match the file the build fails on the case-sensitive
 runner rather than passing quietly -- so a check is not the last line there. An
 auto-discovered file needs no declaration and is compiled in silence, which is
 the case these functions exist for.
+
+One manifest key is an exception to that reasoning and is left alone knowingly:
+a `exclude` entry whose case does not match its directory fails nothing. It
+excludes nothing instead, so a crate Cargo skips on the release platform is
+CHECKED here -- an over-report on code that is in the tree either way, and the
+safer direction of the two.
 """
 
 from pathlib import Path

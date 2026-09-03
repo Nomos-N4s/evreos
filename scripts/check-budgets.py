@@ -133,7 +133,14 @@ REPO = Path(__file__).resolve().parent.parent
 # under a differently cased path went unmeasured -- so the boundary is crossed
 # rather than the rule written twice. The module is stdlib-only and imports
 # nothing back.
-sys.path.insert(0, str(Path(__file__).resolve().parent / "checks"))
+#
+# APPENDED, not prepended. The two checks put their OWN directory first, which
+# is what Python does for a script anyway; putting someone else's first is a
+# different thing. `scripts/checks/` holds short, ordinary module names by
+# convention -- `casefs`, `rustlex` -- and one named after a standard library
+# module would then shadow it for the whole process, silently and totally. A
+# file called `textwrap.py` there was enough to prove it.
+sys.path.append(str(Path(__file__).resolve().parent / "checks"))
 from casefs import resolve_dirs, suffix_of  # noqa: E402
 
 # Criteria whose figures depend on the machine they are measured on. Their

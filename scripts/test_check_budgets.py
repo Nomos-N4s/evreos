@@ -1240,6 +1240,23 @@ check("a malformed exemption is still a recorded one, and refused",
       == 1)
 
 SCRIPT = Path(__file__).resolve().parent / "check-budgets.py"
+
+# This script reaches into `scripts/checks/` for the one reader that asks the
+# filesystem for a name, and where that directory lands on sys.path decides
+# whether a module there can shadow a standard library one for the whole
+# process. Putting it FIRST does: a file called `textwrap.py` beside `casefs.py`
+# was enough to make `import textwrap` resolve to it. The directory holds short,
+# ordinary module names by convention, so it goes last.
+CHECKS_DIR = str(Path(__file__).resolve().parent / "checks")
+check("the shared module's directory is on sys.path", CHECKS_DIR in sys.path)
+# A standard library module that is a package, so its directory's parent is the
+# standard library's own directory on sys.path.
+import tomllib  # noqa: E402
+STDLIB_DIR = str(Path(tomllib.__file__).resolve().parent.parent)
+check("...behind the standard library, not ahead of it, so nothing there can "
+      "shadow a standard module",
+      STDLIB_DIR not in sys.path
+      or sys.path.index(CHECKS_DIR) > sys.path.index(STDLIB_DIR))
 EXEMPT_TOML = """\
 [[entry]]
 criterion = "SC-002"

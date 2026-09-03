@@ -48,8 +48,10 @@ first and made two checks wrong at once. `casefs.py` is the one reader that asks
 the filesystem for a name — the checks run on a case-sensitive Linux runner and
 the release installers are built on Windows and macOS, whose filesystems fold
 case, so a name a check builds from a literal asks the wrong runner and gets
-silence rather than a failure. That question was asked in five different
-spellings before it was asked in one place.
+silence rather than a failure. That question was asked in seven different
+spellings before it was asked in one place, and `scripts/check-budgets.py`
+reads it too — from outside this directory, appending rather than prepending
+to `sys.path`, so a module named here cannot shadow a standard one.
 
 A shared module is production logic that reaches every check importing it, so it
 carries tests on the same terms a check does. The workflow enforces that pairing

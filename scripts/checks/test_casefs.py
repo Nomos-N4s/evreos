@@ -2,12 +2,13 @@
 """Tests for casefs, the one reader that asks the filesystem for a name.
 
 It is not a check and has no verdict of its own. What it asserts is the property
-three clauses rest on: that a name is found the way the platforms this project
+three checks rest on: that a name is found the way the platforms this project
 SHIPS to find it, on the case-sensitive runner these checks RUN on.
 
-That gap produced eight findings across four rounds, in five spellings -- a
-suffix comparison, a glob, a constructed literal path, a set membership, and a
-first-match lookup -- so the cases below are stated as the inputs that
+That gap produced eight findings across six rounds, in seven spellings -- a
+suffix comparison, a glob, a constructed literal path, a membership in a lookup
+table, a membership in an exclusion set, a first-match lookup, and a
+multi-segment path -- so the cases below are stated as the inputs that
 distinguish this reader from each of those.
 """
 
