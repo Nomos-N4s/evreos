@@ -1027,6 +1027,44 @@ check("a suffix Actions does not run is not a workflow",
 check("...while an upper-case one is one",
       [path.name for path in engine.workflow_files(workflow_case_root)]
       == ["BUILD.YML", "a.yml"])
+# A workflow step written `uses: ./path` runs the action defined there, on the
+# same runner and the same release path. A composite action's `run:` steps are
+# shell exactly as a workflow's are, and both clauses read `.github/workflows/`
+# and nothing else -- so a `rustup default nightly` one directory across was
+# invisible. The path is the author's, so the walk is over the tree and keys on
+# the file name GitHub requires an action definition to carry.
+check("a composite action selecting nightly fails",
+      nightly_problems(lambda r: write(
+          r, ".github/actions/toolchain/action.yml",
+          "runs:\n  using: composite\n  steps:\n    - run: rustup default nightly\n"
+          "      shell: bash\n")))
+check("...wherever in the tree it is defined",
+      nightly_problems(lambda r: write(
+          r, "tools/setup/action.yaml",
+          "runs:\n  using: composite\n  steps:\n    - run: cargo +nightly build\n"
+          "      shell: bash\n")))
+check("...and under either case of its name",
+      nightly_problems(lambda r: write(
+          r, ".github/actions/x/ACTION.YML",
+          "runs:\n  using: composite\n  steps:\n    - with: { toolchain: nightly }\n")))
+check("a composite action on stable stays clean",
+      nightly_problems(lambda r: write(
+          r, ".github/actions/ok/action.yml",
+          "runs:\n  using: composite\n  steps:\n    - run: rustup default stable\n"
+          "      shell: bash\n")) == [])
+# Cargo's build output is not the tree's source. An action definition unpacked
+# from a dependency there is not this repository's release path, and walking it
+# would report every vendored crate that ships one.
+check("an action definition under Cargo's build output is not walked",
+      nightly_problems(lambda r: write(
+          r, "target/debug/build/x/action.yml",
+          "runs:\n  using: composite\n  steps:\n    - run: rustup default nightly\n"
+          "      shell: bash\n")) == [])
+check("a composite action that fetches an engine fails",
+      acquisition_problems(lambda r: write(
+          r, ".github/actions/fetch/action.yml",
+          "runs:\n  using: composite\n  steps:\n"
+          "    - run: curl -O https://example.com/chromium.tar.gz\n      shell: bash\n")))
 
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(

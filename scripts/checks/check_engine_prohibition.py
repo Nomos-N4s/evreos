@@ -39,8 +39,11 @@ prohibition by review alone. This check reads the tree and fails on:
                toolchain is one per workspace, so a single file that needs
                nightly to compile puts the whole workspace on it. A workflow
                is read too, since it is what actually puts a toolchain on the
-               release path, and fails on each way one selects nightly or
-               beta: installing it (`rustup install`, `rustup toolchain
+               release path -- and a LOCAL ACTION is read on the same terms,
+               since a step written `uses: ./path` hands the runner whatever is
+               defined there and a composite action's `run:` steps are shell
+               exactly as a workflow's are. It fails on each way one selects
+               nightly or beta: installing it (`rustup install`, `rustup toolchain
                install`), defaulting to it (`rustup default`, `rustup
                override set`), invoking it (`cargo +nightly`, `rustup run
                nightly`), naming it in a `toolchain:` input or through a
@@ -67,7 +70,8 @@ prohibition by review alone. This check reads the tree and fails on:
                WebKitGTK by name. A fetch alone is not one: the update check
                fetches. Workflows are read because packaging is part of the
                release path, and an archive a workflow unpacks into the
-               installer ships as surely as one build.rs fetched. A crate's
+               installer ships as surely as one build.rs fetched. Local actions are read here too, and
+               for the same reason. A crate's
                tests/, benches/ and examples/ are not its runtime path and are
                not read here; a vendored archive elsewhere in the crate is
                binary and fetches nothing until a line on the runtime path
@@ -131,6 +135,7 @@ Neither clause reads a comment: a comment fetches nothing and selects nothing.
 """
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -300,6 +305,18 @@ YAML_SUFFIXES = {".yml", ".yaml"}
 # dependency that clause has already judged, and reading it would report the
 # same engine twice under a weaker rule.
 NOT_READ = {".md", ".txt", ".lock"}
+
+# The file name a LOCAL ACTION is defined in, and the directories a walk for one
+# never enters. A workflow step written `uses: ./path` runs the action defined
+# there, on the same runner, on the same release path -- and a composite action
+# may run `rustup default nightly` or download an engine exactly as a workflow
+# step may. Reading only `.github/workflows/` left every one of them unread.
+# The path is not fixed: `uses: ./tools/setup` is as valid as
+# `./.github/actions/setup`, so the walk is over the tree rather than over one
+# directory, and it keys on the name GitHub requires an action definition to
+# carry.
+ACTION_NAMES = ("action.yml", "action.yaml")
+NOT_WALKED = ("target", ".git", "node_modules")
 
 
 class CheckError(Exception):
@@ -592,6 +609,42 @@ def workflow_files(root):
     if not directory.is_dir():
         return []
     return sorted(p for p in directory.iterdir() if p.is_file() and is_yaml(p))
+
+
+def action_files(root):
+    """Every local action definition in the tree.
+
+    A workflow step written `uses: ./path` runs the action defined at that path,
+    on the same runner and the same release path as the workflow that calls it.
+    A composite action's `run:` steps are shell exactly as a workflow's are, so
+    one may install a toolchain or fetch an engine on terms no clause here was
+    reading: the two clauses read `.github/workflows/` and nothing else, and a
+    `rustup default nightly` one directory across was invisible.
+
+    The path is the author's -- `uses: ./tools/setup` is as valid as
+    `./.github/actions/setup` -- so this walks the tree and keys on the file
+    name GitHub requires an action definition to carry, folded like every other
+    name here.
+    """
+    found = []
+    for directory, subdirectories, names in os.walk(root):
+        subdirectories[:] = [
+            name for name in subdirectories if not folded_in(name, NOT_WALKED)
+        ]
+        for name in names:
+            if folded_in(name, ACTION_NAMES):
+                found.append(Path(directory) / name)
+    return sorted(found)
+
+
+def workflow_like_files(root):
+    """Every YAML file the workflow clauses read: the workflows, and the local
+    actions a workflow step can hand the runner."""
+    files = workflow_files(root)
+    for path in action_files(root):
+        if path not in files:
+            files.append(path)
+    return files
 
 
 def files_under(directory, skip=()):
@@ -1200,7 +1253,7 @@ def scan_nightly(root, member_dirs):
         if manifest.is_file():
             check_manifest_features(root, manifest, problems)
             read += 1
-    for path in workflow_files(root):
+    for path in workflow_like_files(root):
         check_workflow_nightly(root, path, problems)
         read += 1
     for directory in member_dirs:
@@ -1275,7 +1328,7 @@ def acquisition_files(metadata, root):
             for found in named_dirs(directory, name):
                 for path in files_under(found):
                     add(path)
-    for path in workflow_files(Path(root)):
+    for path in workflow_like_files(Path(root)):
         add(path)
     return files
 
