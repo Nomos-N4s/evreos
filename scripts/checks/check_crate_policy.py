@@ -61,11 +61,13 @@ ALLOWLIST = HERE / "unsafe-carveout-allowlist.txt"
 # An unconditional inner attribute forbidding unsafe_code, alone or beside
 # other lints. A `cfg_attr` form is deliberately not matched: a forbid that
 # holds only under some configuration is not the policy.
-# `#!` and `[` may be separated by whitespace. rustc applies `#! [forbid(...)]`
-# exactly as it applies `#![forbid(...)]` -- verified against the compiler, which
-# reports the unsafe block as an error under both -- so requiring them adjacent
-# reported a compliant crate as omitting a forbid it carries.
-FORBID = re.compile(r"^\s*#![ \t]*\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
+# Whitespace may sit between `#`, `!` and `[`, in any combination. rustc applies
+# `#! [forbid(...)]`, `# ![forbid(...)]` and `#!` on its own line exactly as it
+# applies the adjacent spelling -- verified against the compiler, which reports
+# the unsafe block as an error under every one -- so requiring any pair adjacent
+# reported a compliant crate as omitting a forbid it carries. The line anchor
+# keeps to spaces and tabs, so `\\s*` before `#` would not admit a mid-file line.
+FORBID = re.compile(r"^[ \t]*#\s*!\s*\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
 
 # Every table Cargo reads path dependencies from, at the top level and under
 # each `[target.<cfg>]`.
@@ -178,6 +180,25 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from rustlex import strip_non_code  # noqa: E402
 
 
+def resolved(base, path):
+    """`base / path` resolved, or None when the string names no path.
+
+    Three call sites turn a manifest string into a path: the exclude list, the
+    members list, and a dependency's `path`. Only the third was guarded against a
+    NUL -- legal in TOML as an escape, illegal in a path, and `resolve()` raises
+    on it -- so the same value reached a verdict written one way and a traceback
+    written another. One resolver, so a fourth site cannot be added without it.
+
+    `is_dir()` swallows the error on the glob branch, which is why `members`
+    raised only for a literal pattern: the guard has to sit here rather than at
+    whichever branch happened to surface it.
+    """
+    try:
+        return (base / path).resolve()
+    except (ValueError, OSError):
+        return None
+
+
 def relative(root, path):
     """`path` named from the workspace root, or absolutely when it is outside.
 
@@ -263,9 +284,15 @@ def workspace_members(root, manifest, problems):
         problems.append("Cargo.toml: no [workspace] table; there are no members to check")
         return []
 
-    excluded = {(root / path).resolve()
-                for path in as_table(workspace).get("exclude", [])
-                if isinstance(path, str)}
+    excluded = set()
+    for path in as_table(workspace).get("exclude", []):
+        if not isinstance(path, str):
+            continue
+        directory = resolved(root, path)
+        if directory is None:
+            problems.append(f"Cargo.toml: exclude entry {path!r} names no path")
+            continue
+        excluded.add(directory)
     members = []
 
     def add(directory, origin):
@@ -296,16 +323,13 @@ def workspace_members(root, manifest, problems):
         followed += [(root, path)
                      for path in inherited_workspace_paths(manifest, member)]
         for base, path in followed:
-            if chr(0) in path:
-                # `isinstance(str)` is not enough: a NUL is legal in TOML and
-                # illegal in a path, and `resolve()` raises on it. A wrong VALUE
-                # must reach a verdict exactly as a wrong type now does.
+            dependency = resolved(base, path)
+            if dependency is None:
                 problems.append(
                     f"{relative(root, manifest_path)}: dependency path {path!r} "
-                    "holds a NUL and names no directory"
+                    "names no directory"
                 )
                 continue
-            dependency = (base / path).resolve()
             if dependency.is_relative_to(root):
                 add(dependency, relative(root, manifest_path))
 
@@ -320,7 +344,11 @@ def workspace_members(root, manifest, problems):
             if not matches:
                 problems.append(f"Cargo.toml: members pattern {pattern!r} matches nothing")
         else:
-            matches = [root / pattern]
+            directory = resolved(root, pattern)
+            if directory is None:
+                problems.append(f"Cargo.toml: members entry {pattern!r} names no path")
+                continue
+            matches = [directory]
         for match in matches:
             add(match, "Cargo.toml")
     return members

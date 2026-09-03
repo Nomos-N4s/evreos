@@ -567,6 +567,24 @@ for label, root_toml, member_toml in (
      BASE + "[lints]\nworkspace = true\n"),
     # A path must be a string, as `crate_roots` already requires of a declared
     # target path. Another type reached `base / path` and raised.
+    # Three call sites turn a manifest string into a path and only the
+    # dependency one was guarded, so the same value reached a verdict written
+    # one way and a traceback written another. The glob branch's `is_dir()`
+    # swallowed the error, which is why `members` raised for a literal pattern
+    # and not for a glob -- the guard belongs at the resolver, not at whichever
+    # branch happened to surface it.
+    ("an exclude entry holding a NUL",
+     '[workspace]\nmembers = ["crates/a"]\nexclude = ["a\\u0000b"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    ("a members entry holding a NUL",
+     '[workspace]\nmembers = ["crates/a", "a\\u0000b"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    ("a members glob holding a NUL",
+     '[workspace]\nmembers = ["crates/a", "a\\u0000b*"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
     # A NUL reaches a path only as an ESCAPE -- TOML refuses a literal one, so
     # the first version of this fixture proved nothing: it failed on the decode
     # path instead. Escaped, `isinstance(str)` admits the value and `resolve()`
@@ -761,6 +779,10 @@ for label, source, forbids in (
     # an error under both. Requiring them adjacent reported a compliant crate as
     # omitting the forbid it carries. The engine check's mirror of this pattern
     # had the same gap in the opposite direction.
+    ("a space between # and ! still counts",
+     "# ![forbid(unsafe_code)]\n", True),
+    ("spaces in both places still count",
+     "# ! [forbid(unsafe_code)]\n", True),
     ("a space between #! and [ still counts",
      "#! [forbid(unsafe_code)]\n", True),
     ("several spaces too", "#!  [ forbid(unsafe_code) ]\n", True),
