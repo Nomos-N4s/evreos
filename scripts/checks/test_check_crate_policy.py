@@ -175,6 +175,35 @@ problems, _, _ = scenario(
 check("a note beside a binary is not a crate root",
       not mentions(problems, "README.md") and problems == [])
 
+# The flat listing folded and the two names built from literals did not, in the
+# same function and the same change. Cargo compiles all three of these on the
+# platforms this project ships to, and each was skipped in silence on the
+# case-sensitive runner where this check actually runs.
+problems, _, _ = scenario(
+    [crate("a", files={"src/MAIN.RS": "fn main() { unsafe { } }\n"})]
+)
+check("the crate's own root is found whatever the case of its name",
+      mentions(problems, "crates/a/src/MAIN.RS"))
+
+problems, _, _ = scenario(
+    [crate("a", files={"src/LIB.RS": "fn f() { unsafe { } }\n"})]
+)
+check("...and so is a library root", mentions(problems, "crates/a/src/LIB.RS"))
+
+problems, _, _ = scenario(
+    [crate("a", files={"src/main.rs": MAIN,
+                       "src/bin/tool/MAIN.RS": "fn main() { unsafe { } }\n"})]
+)
+check("...and a nested src/bin root", mentions(problems, "crates/a/src/bin/tool/MAIN.RS"))
+
+# A member whose manifest is committed before its sources -- a stub crate, a
+# member listed ahead of its files -- has no src/ at all. Listing a directory
+# that is not there raises, and a traceback in place of a verdict is this
+# module's own defect class: an unrun check is not a pass.
+problems, _, _ = scenario([crate("a", files={})])
+check("a crate with no src/ reaches a verdict rather than raising",
+      isinstance(problems, list))
+
 problems, _, _ = scenario(
     [crate("a", extra='[[bin]]\nname = "cli"\npath = "src/cli.rs"\n',
            files={"src/lib.rs": LIB, "src/cli.rs": "fn main() {}\n"})]

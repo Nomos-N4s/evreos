@@ -384,26 +384,37 @@ def crate_roots(crate_dir, manifest):
     binaries under `src/bin/` and any `[lib]` or `[[bin]]` path the manifest
     declares. Each is its own crate, so a forbid in one does not reach another.
 
-    The `src/bin/` listing folds case, because the two platforms this project
-    ships to have a case-insensitive filesystem by default and `src/bin/TOOL.RS`
-    is an auto-discovered binary Cargo compiles there. A `*.rs` glob missed it,
+    Every AUTO-DISCOVERED name is matched with case folded, because the two
+    platforms this project ships to have a case-insensitive filesystem by
+    default and `src/MAIN.RS`, `src/bin/TOOL.RS` and `src/bin/tool/MAIN.RS` are
+    all crate roots Cargo compiles there. Naming them in lower case missed them,
     so a crate root with no forbid at all, holding `unsafe`, was never among the
     roots this check reads -- blocker 8 of this branch, reached through a
     filename rather than through a scanner.
+
+    A path the MANIFEST declares is not folded. That name is the author's and
+    Cargo resolves it the same way this does; where its case does not match the
+    file, the build fails on the case-sensitive runner rather than passing
+    quietly, so this check is not the last line there. An auto-discovered binary
+    needs no declaration and compiles in silence, which is why these do fold.
     """
     lib = as_table(as_table(manifest).get("lib"))
-    path = lib.get("path")
-    candidates = [crate_dir / (path if isinstance(path, str) else "src/lib.rs"),
-                  crate_dir / "src" / "main.rs"]
-    bin_dir = crate_dir / "src" / "bin"
+    declared_lib = lib.get("path")
+    src = crate_dir / "src"
+    candidates = [
+        crate_dir / declared_lib if isinstance(declared_lib, str)
+        else named_source(src, "lib.rs"),
+        named_source(src, "main.rs"),
+    ]
+    bin_dir = src / "bin"
     if bin_dir.is_dir():
-        candidates += sorted(
-            path for path in bin_dir.iterdir()
-            if path.is_file() and is_rust_source(path)
-        )
-        candidates += sorted(
-            path / "main.rs" for path in bin_dir.iterdir() if path.is_dir()
-        )
+        entries = sorted(bin_dir.iterdir())
+        candidates += [
+            path for path in entries if path.is_file() and is_rust_source(path)
+        ]
+        candidates += [
+            named_source(path, "main.rs") for path in entries if path.is_dir()
+        ]
     # `[bin]` written for `[[bin]]` is the ordinary slip, and it makes this a
     # table rather than a list of them. Cargo says "invalid type: map, expected
     # a sequence"; this took the string indices and raised.
@@ -415,9 +426,26 @@ def crate_roots(crate_dir, manifest):
     ]
     roots = []
     for candidate in candidates:
-        if candidate.is_file() and candidate not in roots:
+        if candidate is not None and candidate.is_file() and candidate not in roots:
             roots.append(candidate)
     return roots
+
+
+def named_source(directory, name):
+    """The file in `directory` called `name`, matched as the shipping platforms
+    match it: with case folded. None where the directory or the file is absent.
+
+    Building the path from a literal instead asks a case-sensitive runner for a
+    spelling the author may not have used, and the answer there is silence: the
+    root is skipped and whatever it holds is never read.
+    """
+    wanted = name.lower()
+    if not directory.is_dir():
+        return None
+    for path in sorted(directory.iterdir()):
+        if path.is_file() and path.name.lower() == wanted:
+            return path
+    return None
 
 
 def check_root(manifest, problems):
