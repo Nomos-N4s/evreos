@@ -287,7 +287,9 @@ COMMENT_STYLE = {
 HASH_NAMED = {"Makefile", "justfile", "Justfile"}
 # The suffixes whose contents are YAML, and so the only files whose lines fold
 # by YAML's rules. Every other file the acquisition clause reads has its own
-# syntax, in which indentation carries no meaning at all.
+# syntax, in which indentation carries no meaning at all. These are also the
+# only two Actions itself reads a workflow from, so the same set decides which
+# files are workflows at all -- one rule rather than two spellings of it.
 YAML_SUFFIXES = {".yml", ".yaml"}
 # Not read by the acquisition clause. `.md` and `.txt` are prose: a design
 # note describing a rejected engine is not an acquisition. `.lock` is
@@ -566,9 +568,25 @@ def load_toml(path):
         return tomllib.load(handle)
 
 
+def is_yaml(path):
+    """Whether this file's contents are YAML, by the one rule both readings use.
+
+    The glob that collected workflows was `*.y*ml` and the test that decided
+    whether to fold by YAML's rules was a suffix set. Two spellings of one
+    question, and they disagreed: `deploy.yeml` was collected as a workflow and
+    read as YAML by the nightly clause, while the acquisition clause read it as
+    plain text -- so a wrapped acquisition in it passed where the identical file
+    named `.yml` failed. Actions reads a workflow from `.yml` and `.yaml` and
+    nothing else, so that set is the answer to both questions.
+    """
+    return path.suffix in YAML_SUFFIXES
+
+
 def workflow_files(root):
     directory = root / ".github" / "workflows"
-    return sorted(p for p in directory.glob("*.y*ml") if p.is_file()) if directory.is_dir() else []
+    if not directory.is_dir():
+        return []
+    return sorted(p for p in directory.iterdir() if p.is_file() and is_yaml(p))
 
 
 def files_under(directory, skip=()):
@@ -735,7 +753,7 @@ BLOCK_SCALAR = re.compile(
 SCRIPT_KEYS = {"run", "script", "cmd", "shell", "entrypoint", "args"}
 
 
-def logical_lines(lines, yaml=True):
+def logical_lines(lines, yaml):
     """`lines` with each continuation folded into the line it opens on.
 
     A workflow's logical line is not its physical line, and every reading below
@@ -768,7 +786,10 @@ def logical_lines(lines, yaml=True):
     Each result carries the number of the physical line it opens on, so a report
     still names where a reader would look.
 
-    Three of the four folds are YAML's and are skipped when `yaml` is false. The
+    Three of the four folds are YAML's and are skipped when `yaml` is false, and
+    every caller states which it wants: a default would let the next reading of
+    a file take YAML's rules without anyone deciding that it should, which is
+    how they reached a Rust source file in the first place. The
     acquisition clause reads this file's Rust, TOML and shell as well as its
     workflows, and in none of those does indentation mean what it means in YAML:
     a deeper line is a function body or an array element, not the rest of the
@@ -1077,7 +1098,7 @@ def workflow_nightly_lines(lines):
 
 def check_workflow_nightly(root, path, problems):
     where = relative(root, path)
-    for number, line in workflow_nightly_lines(logical_lines(code_lines(path))):
+    for number, line in workflow_nightly_lines(logical_lines(code_lines(path), True)):
         problems.append(
             f"{where}:{number}: puts the toolchain on a non-stable channel or turns nightly "
             f"features on: {line.strip()!r}"
@@ -1188,7 +1209,7 @@ def check_acquisition_file(root, path, problems):
     # TOML and shell too, and in those a deeper line is a function body or an
     # array element rather than the rest of the value above it -- folding them
     # made one finding out of two unrelated literals.
-    for number, line in logical_lines(code_lines(path), path.suffix in YAML_SUFFIXES):
+    for number, line in logical_lines(code_lines(path), is_yaml(path)):
         if acquires_engine(line):
             problems.append(
                 f"{where}:{number}: fetches, unpacks, embeds or installs a web engine, which "

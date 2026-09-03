@@ -925,6 +925,19 @@ check("a .yaml workflow folds like a .yml one",
           r, ".github/workflows/release.yaml",
           'jobs:\n  b:\n    steps:\n      - run: >\n'
           '          ./tools/fetch-runtime.sh\n          --engine chromium\n')))
+# Which files are workflows and which files are YAML were two spellings of one
+# question -- a `*.y*ml` glob and a suffix set -- and they disagreed. A file
+# named `.yeml` was collected as a workflow and read as YAML by the nightly
+# clause, while the acquisition clause read it as plain text and missed a
+# wrapped acquisition the identical `.yml` file fails on. Actions reads a
+# workflow from `.yml` and `.yaml` and nothing else, so neither clause reads
+# this one now, and both agree.
+with tempfile.TemporaryDirectory() as tmp:
+    for name in ("a.yml", "b.yaml", "c.yeml", "notes.md"):
+        write(tmp, f".github/workflows/{name}", "jobs: {}\n")
+    collected = [path.name for path in engine.workflow_files(Path(tmp))]
+check("a suffix Actions does not run is not a workflow",
+      collected == ["a.yml", "b.yaml"])
 
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(
