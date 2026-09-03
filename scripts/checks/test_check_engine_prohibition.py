@@ -377,6 +377,17 @@ for label, text in (
 # beside the words of another -- `cargo build` on one line and `tar -Zcf` on
 # another would read as a nightly cargo flag. Those bodies keep their lines and
 # get the shell's backslash rule instead.
+# The carve-out keys on the block STYLE as well as the key. A literal body is a
+# sequence of commands; a FOLDED body is one line already, joined by YAML before
+# the shell sees it, so declining to fold it declines to read what will run.
+# Keying on the key alone let `run: >` put the release path on nightly and pass
+# -- in the spelling this repository's own build workflow uses to wrap a long
+# command.
+for style in (">", ">-"):
+    check(f"nightly behind a folded script body ({style}) still fails",
+          nightly_problems(lambda r, style=style: wf(
+              r, f'jobs:\n  b:\n    steps:\n      - run: {style}\n'
+                 '          rustup default\n          nightly\n')))
 check("two commands in one script body are not one line",
       nightly_problems(lambda r: wf(
           r, 'jobs:\n  b:\n    steps:\n      - run: |\n          cargo build --release\n'
@@ -592,6 +603,23 @@ for label, path, text in (
 # whole-file scan must keep literals and drop only comments. Both halves are
 # pinned here: a comment spanning lines hides nothing from a reader and must
 # hide it from the check too, and a URL in a string must still be seen.
+# This clause reads the same workflows the nightly clause does and needs the
+# same folding for the same reason: an engine's name and an acquisition marker
+# must be on one line, so a wrapped command splits the two halves and the
+# verdict turns on formatting. Fixing one of the two readings of one file was
+# the whole of the previous change; this is the other.
+check("an acquisition behind a folded script body fails",
+      acquisition_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: >\n'
+             '          ./tools/fetch-runtime.sh\n          --engine chromium\n')))
+check("an acquisition behind a shell continuation fails",
+      acquisition_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: |\n'
+             '          ./tools/fetch-runtime.sh \\\n          --engine chromium\n')))
+check("...and the same command unwrapped fails too",
+      acquisition_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: ./tools/fetch-runtime.sh --engine chromium\n')))
+
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(
           r, '/* download("https://x/cef.tar.bz2"); */\n', "build.rs")) == [])

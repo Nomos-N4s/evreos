@@ -693,10 +693,13 @@ def check_manifest_features(root, path, problems):
 
 # A block scalar header -- `key: |`, `key: >-`, `key: |+2` -- whose body is the
 # more-indented lines beneath it.
-BLOCK_SCALAR = re.compile(r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:\s*[|>][-+]?[0-9]*\s*$""")
-# Keys whose block body is a SCRIPT: each line is its own command, so the body
-# is not one value and must not be folded into one. Every other block scalar is
-# a value, and YAML's own folding joins it with spaces.
+BLOCK_SCALAR = re.compile(r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:\s*([|>])[-+]?[0-9]*\s*$""")
+# Keys whose block body is a SCRIPT: each line is its own command. That is true
+# of a LITERAL body, `|`, and only of a literal body -- YAML folds a `>` body
+# into one line itself, before the shell ever sees it, so declining to fold one
+# declines to read what will actually run. Keying the carve-out on the key alone
+# let `run: >` put the release path on nightly and pass, in the very spelling
+# this repository's own build workflow uses to wrap a long command.
 SCRIPT_KEYS = {"run", "script", "cmd", "shell", "entrypoint", "args"}
 
 
@@ -729,7 +732,7 @@ def logical_lines(lines):
         number, text = numbered[i]
         header = BLOCK_SCALAR.match(text)
         if header:
-            indent, key = len(header.group(1)), header.group(2)
+            indent, key, style = len(header.group(1)), header.group(2), header.group(3)
             body, j = [], i + 1
             while j < len(numbered):
                 following = numbered[j][1]
@@ -737,7 +740,7 @@ def logical_lines(lines):
                     break
                 body.append(numbered[j])
                 j += 1
-            if key.lower() in SCRIPT_KEYS:
+            if key.lower() in SCRIPT_KEYS and style == "|":
                 out.append((number, text))
                 out.extend(fold_backslashes(body))
             else:
@@ -911,7 +914,12 @@ def acquires_engine(line):
 
 def check_acquisition_file(root, path, problems):
     where = relative(root, path)
-    for number, line in code_lines(path):
+    # The same folding the nightly clause reads through, for the same reason and
+    # over the same files: this clause needs an engine's name and an acquisition
+    # marker on one line, so a wrapped command splits the two halves and the
+    # verdict turns on formatting. Fixing one of the two readings of one file
+    # was the whole of that fix, and this is the other.
+    for number, line in logical_lines(code_lines(path)):
         if acquires_engine(line):
             problems.append(
                 f"{where}:{number}: fetches, unpacks, embeds or installs a web engine, which "
