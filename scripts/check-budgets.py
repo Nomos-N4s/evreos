@@ -340,6 +340,16 @@ def load_budgets(path):
     a misread file is a verdict on nothing. That guard sits three hundred lines
     below this function and cannot help when the file itself does not parse: the
     traceback replaced the message one level up from where it was fixed.
+
+    The two clauses below the named ones are the ones this function was missing.
+    `tomllib` does not raise only TOMLDecodeError: an integer literal of more
+    than 4300 digits reaches `int()` and comes back as a plain ValueError, from
+    the same interpreter limit that makes such a number unrenderable further
+    down -- so a file could still put a traceback where this function promises a
+    message. And the two OSError subclasses named above are the two that were
+    thought of, not the two that exist: a path whose parent is a file, a
+    permission, a name too long for the filesystem all arrive as some other
+    OSError. The named clauses stay ahead of the general one for their wording.
     """
     try:
         with open(path, "rb") as handle:
@@ -352,6 +362,10 @@ def load_budgets(path):
         raise Unreadable(f"{path}: not valid UTF-8 ({error.reason})") from None
     except tomllib.TOMLDecodeError as error:
         raise Unreadable(f"{path}: {error}") from None
+    except ValueError as error:
+        raise Unreadable(f"{path}: {error}") from None
+    except OSError as error:
+        raise Unreadable(f"{path}: {error.strerror or error}") from None
 
 
 def label_of(criterion, name, platform):

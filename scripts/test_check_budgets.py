@@ -1539,6 +1539,37 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# Two more ways in, both outside the classes named above. `tomllib` does not
+# raise only TOMLDecodeError: an integer literal past the interpreter's 4300
+# digit limit reaches `int()` and comes back a plain ValueError -- the same
+# limit that makes such a number unrenderable further down, striking one level
+# earlier than the clause written for it. And `FileNotFoundError` and
+# `IsADirectoryError` are the two OSErrors that were thought of: a path whose
+# parent is an ordinary file is a third, and arrives as NotADirectoryError.
+with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+    handle.write("huge = 1" + "0" * 4400 + "\n")
+    path = handle.name
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--budgets", path],
+    capture_output=True, text=True,
+)
+os.unlink(path)
+check("an integer past the digit limit exits 2",
+      result.returncode == 2 and "Cannot read the budget file" in result.stderr)
+check("...saying so rather than raising", "Traceback" not in result.stderr)
+
+with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+    handle.write("name = \"x\"\n")
+    path = handle.name
+result = subprocess.run(
+    [sys.executable, str(SCRIPT), "--budgets", os.path.join(path, "budgets.toml")],
+    capture_output=True, text=True,
+)
+os.unlink(path)
+check("a budget path whose parent is a file exits 2",
+      result.returncode == 2 and "Cannot read the budget file" in result.stderr)
+check("...saying so rather than raising, too", "Traceback" not in result.stderr)
+
 # The predicate written to reject a value a gate cannot compare destroyed the
 # verdict on exactly such a value: `math.isfinite` converts an int to float
 # first, and raises on one too large to convert. An int is finite by
