@@ -37,13 +37,29 @@ jobs:
         # check_ prefix it was the one file here the rule could not reach --
         # so the module that had already caused two checks to be wrong at once
         # was also the module nothing required tests for.
+        #
+        # BOTH directories, not just this one. The two scripts in scripts/ are
+        # checks by every measure that matters -- one gates the budgets, one
+        # gates authorship -- and each carries a suite that a workflow runs by
+        # name. What they did not carry was this rule, so a THIRD script added
+        # there would have had neither: no pairing to require a suite, and no
+        # step naming one to run. The reason those two live outside
+        # scripts/checks/ is that each needs inputs its own workflow supplies,
+        # which is about how they RUN, not about whether their behaviour is
+        # proved. The rule that caught a module landing here without its tests
+        # had no reach one directory across.
         run: |
           shopt -s nullglob
           missing=0
-          for module in scripts/checks/*.py; do
+          for module in scripts/checks/*.py scripts/*.py; do
+            directory="$(dirname "$module")"
             name="$(basename "$module")"
             case "$name" in test_*) continue;; esac
-            expected="scripts/checks/test_$name"
+            # Hyphens become underscores, which is the whole difference between
+            # the two directories' names: scripts/ is hyphenated and pays for it
+            # with an importlib preamble in each suite, scripts/checks/ is not.
+            # check-budgets.py -> test_check_budgets.py; casefs.py is unchanged.
+            expected="$directory/test_${name//-/_}"
             if [ ! -f "$expected" ]; then
               echo "MISSING  $expected, the tests for $module" >&2
               missing=1

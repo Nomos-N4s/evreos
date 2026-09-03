@@ -32,6 +32,13 @@ Two kinds of check cannot meet that test, and each has a home already:
   supplies, so each stays in `scripts/` beside that workflow's job and is not
   a check in this directory's sense.
 
+  That is about how they RUN. The pairing rule below reaches them anyway, and
+  did not until it was made to: a check whose behaviour nobody has proved is
+  the same thing in either directory, and a third script added to `scripts/`
+  would otherwise have had neither a suite required of it nor a step naming
+  one to run. The rule that caught a module landing here without its tests had
+  no reach one directory across.
+
 ## The convention
 
 One check is two files, and the names are fixed by the workflow's globs:
