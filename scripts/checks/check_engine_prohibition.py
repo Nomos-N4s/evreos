@@ -646,7 +646,11 @@ def check_cargo_config(root, path, problems):
     if "unstable" in config:
         problems.append(f"{where}: carries an [unstable] table, which only a nightly Cargo reads")
     tables = [("build", config.get("build", {}))]
-    tables += [(f"target.{name}", table) for name, table in config.get("target", {}).items()]
+    # Guarded like every other table two lines below: a top-level `target = "x"`
+    # is valid TOML of the wrong type, and walking it raised.
+    declared_targets = config.get("target")
+    if isinstance(declared_targets, dict):
+        tables += [(f"target.{name}", table) for name, table in declared_targets.items()]
     for label, table in tables:
         if not isinstance(table, dict):
             continue
@@ -732,7 +736,16 @@ def logical_lines(lines):
         number, text = numbered[i]
         header = BLOCK_SCALAR.match(text)
         if header:
-            indent, key, style = len(header.group(1)), header.group(2), header.group(3)
+            # The body boundary is the KEY's column, not the dash's. In a
+            # sequence item -- `      - run: |` -- the dash sits at 6 and the
+            # key at 8, and the step's sibling keys (`with:`, `env:`, `uses:`)
+            # sit at 8 too. Measuring from the dash made every one of them
+            # deeper than the header, so the body swallowed the rest of the
+            # step and the walk never saw them: a `- run: >` beside a
+            # `toolchain: nightly` passed, and whether a step carried a `name:`
+            # line decided the verdict.
+            key, style = header.group(2), header.group(3)
+            indent = header.start(2)
             body, j = [], i + 1
             while j < len(numbered):
                 following = numbered[j][1]

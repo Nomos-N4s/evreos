@@ -228,6 +228,15 @@ check("the legacy rust-toolchain file on stable passes",
 check("a member's own toolchain file is read too",
       nightly_problems(lambda r: write(r, "crates/evreos-shell/rust-toolchain.toml", '[toolchain]\nchannel = "nightly"\n')))
 
+# Every other table in this reader is guarded on its shape and `target` was not,
+# so a top-level `target = "x"` -- valid TOML of the wrong type -- raised where a
+# verdict belonged.
+check("a cargo config whose target key is not a table reaches a verdict",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       'target = "x86_64-unknown-linux-gnu"\n')) == [])
+check("...while a -Z flag under a real target table still fails",
+      nightly_problems(lambda r: write(r, ".cargo/config.toml",
+                                       '[target.x86_64-unknown-linux-gnu]\nrustflags = ["-Zbuild-std"]\n')))
 check(".cargo/config.toml with [unstable] fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", "[unstable]\nbuild-std = true\n")))
 check("a -Z rustflag fails",
@@ -388,6 +397,35 @@ for style in (">", ">-"):
           nightly_problems(lambda r, style=style: wf(
               r, f'jobs:\n  b:\n    steps:\n      - run: {style}\n'
                  '          rustup default\n          nightly\n')))
+# A block scalar in a SEQUENCE ITEM ends where its KEY's column ends, not where
+# the dash's does. `      - run: |` puts the dash at 6 and the key at 8, and the
+# step's sibling keys -- `with:`, `env:`, `uses:` -- sit at 8 too. Measuring the
+# body from the dash swallowed all of them, so the walk never saw the step's own
+# toolchain, and whether a step carried a `name:` line decided the verdict.
+#
+# Every folding case above puts its block scalar LAST in its step, so none of
+# them has a sibling key to lose. That is why the whole suite passed either way.
+for label, text in (
+    ("after a folded run body",
+     'jobs:\n  b:\n    steps:\n      - run: >\n          cargo build\n          --release\n'
+     '        uses: x\n        with:\n          toolchain: nightly\n'),
+    ("after a folded step name",
+     'jobs:\n  b:\n    steps:\n      - name: >-\n          Install the toolchain and\n'
+     '          warm the cache\n        uses: x\n        with:\n          toolchain: nightly\n'),
+):
+    check(f"a toolchain key {label} is still read",
+          nightly_problems(lambda r, text=text: wf(r, text)))
+
+check("a nested block scalar under a compact run body is still folded",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: |\n          cargo build --release\n'
+             '        env:\n          RUSTFLAGS: >\n            -Z threads=8\n')))
+check("...and the same step with a name line reads the same",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - name: build\n        run: |\n'
+             '          cargo build --release\n        env:\n          RUSTFLAGS: >\n'
+             '            -Z threads=8\n')))
+
 check("two commands in one script body are not one line",
       nightly_problems(lambda r: wf(
           r, 'jobs:\n  b:\n    steps:\n      - run: |\n          cargo build --release\n'
