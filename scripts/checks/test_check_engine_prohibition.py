@@ -890,6 +890,41 @@ check("an acquisition behind a shell continuation fails",
 check("...and the same command unwrapped fails too",
       acquisition_problems(lambda r: wf(
           r, 'jobs:\n  b:\n    steps:\n      - run: ./tools/fetch-runtime.sh --engine chromium\n')))
+# Only a workflow folds by YAML's rules. This clause reads Rust, TOML and shell
+# too, and in those a deeper line is a function body or an array element, not
+# the rest of the value above it. Folding them made one finding out of two
+# unrelated literals: an array holding a sentence that says an engine is NOT
+# shipped and, three lines on, the name of this project's own installer.
+check("two literals in one Rust array are not one line",
+      acquisition_problems(lambda r: rs(
+          r, 'static NOTES: &[&str] = &[\n    "we never ship chromium",\n'
+             '    "the installer is evreos-setup.msi",\n];\n')) == [])
+check("a function body is not the rest of its signature",
+      acquisition_problems(lambda r: rs(
+          r, 'fn note() -> &\'static str {\n    "chromium is not bundled"\n}\n\n'
+             'fn artifact() -> &\'static str {\n    "evreos-setup.tar.gz"\n}\n')) == [])
+check("a Rust block opening on its own line is not a flow mapping",
+      acquisition_problems(lambda r: rs(
+          r, 'fn pick(name: &str) -> bool\n{\n    name == "chromium"\n}\n\n'
+             'fn url() -> &\'static str\n{\n    "https://example.com/evreos.tar.gz"\n}\n')) == [])
+check("...while a real acquisition on one Rust line still fails",
+      acquisition_problems(lambda r: rs(
+          r, 'fn get() { download("https://example.com/chromium.tar.gz"); }\n', "build.rs")))
+# The backslash rule is not YAML's and applies to every file: a trailing
+# backslash continues a line in a build helper's shell exactly as it does in a
+# workflow's script body, and the helper is on the runtime path this clause
+# reads.
+check("a shell continuation in a build helper still fails",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/build/fetch.sh",
+          "./tools/fetch-runtime.sh \\\n  --engine chromium\n")))
+# Workflows are found as *.y*ml, so both spellings of the suffix reach this
+# clause and both must fold by YAML's rules.
+check("a .yaml workflow folds like a .yml one",
+      acquisition_problems(lambda r: write(
+          r, ".github/workflows/release.yaml",
+          'jobs:\n  b:\n    steps:\n      - run: >\n'
+          '          ./tools/fetch-runtime.sh\n          --engine chromium\n')))
 
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(

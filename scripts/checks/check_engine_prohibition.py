@@ -45,9 +45,12 @@ prohibition by review alone. This check reads the tree and fails on:
                override set`), invoking it (`cargo +nightly`, `rustup run
                nightly`), naming it in a `toolchain:` input or through a
                toolchain action pinned `@nightly`, setting RUSTUP_TOOLCHAIN to
-               it, or listing it under a build-matrix key -- inline or as a
-               block list, since a matrix is where the channel is spelled
-               when the step that uses it reads an expression. RUSTC_BOOTSTRAP
+               it, or listing it under a build-matrix key, since a matrix is
+               where the channel is spelled when the step that uses it reads an
+               expression. A value is read in every shape YAML gives it: an
+               inline scalar, a block list, a flow mapping or sequence on one
+               line or wrapped over several, and a value written below its key.
+               RUSTC_BOOTSTRAP
                and CARGO_UNSTABLE_* variables, which turn nightly behaviour
                on under a stable toolchain, and a -Z flag on a cargo or rustc
                line fail on the same ground.
@@ -113,8 +116,9 @@ permits it. No such path exists, Linux being a separate decision under
 ADR-0001; when one does the remedy is a pattern added to SHARED_RUNTIME, a
 visible diff, not a quieter spelling.
 
-The nightly clause reads a workflow line by line and keys on the channel's
-name. A channel that reaches a step only through an expression whose source is
+The nightly clause reads a workflow a logical line at a time -- a physical line
+with its continuations folded in -- and keys on the channel's name. A channel
+that reaches a step only through an expression whose source is
 not a matrix list under one of the keys TOOLCHAIN_KEYS names -- a repository
 variable, a `workflow_dispatch` input, a step output, a matrix under an
 unusual key -- passes, as does a channel spelled by concatenation, and a
@@ -281,6 +285,10 @@ COMMENT_STYLE = {
     ".cfg": "hash", ".ini": "hash", ".in": "hash", ".mk": "hash", ".cmake": "hash",
 }
 HASH_NAMED = {"Makefile", "justfile", "Justfile"}
+# The suffixes whose contents are YAML, and so the only files whose lines fold
+# by YAML's rules. Every other file the acquisition clause reads has its own
+# syntax, in which indentation carries no meaning at all.
+YAML_SUFFIXES = {".yml", ".yaml"}
 # Not read by the acquisition clause. `.md` and `.txt` are prose: a design
 # note describing a rejected engine is not an acquisition. `.lock` is
 # GENERATED -- its contents restate the manifests the dependency clause already
@@ -727,7 +735,7 @@ BLOCK_SCALAR = re.compile(
 SCRIPT_KEYS = {"run", "script", "cmd", "shell", "entrypoint", "args"}
 
 
-def logical_lines(lines):
+def logical_lines(lines, yaml=True):
     """`lines` with each continuation folded into the line it opens on.
 
     A workflow's logical line is not its physical line, and every reading below
@@ -759,8 +767,20 @@ def logical_lines(lines):
 
     Each result carries the number of the physical line it opens on, so a report
     still names where a reader would look.
+
+    Three of the four folds are YAML's and are skipped when `yaml` is false. The
+    acquisition clause reads this file's Rust, TOML and shell as well as its
+    workflows, and in none of those does indentation mean what it means in YAML:
+    a deeper line is a function body or an array element, not the rest of the
+    value above it. Folding them together reported two unrelated string literals
+    in one Rust array -- one naming an engine, one naming an archive -- as a line
+    that fetches an engine. The backslash rule is not YAML's and applies to all
+    of them: a trailing backslash continues a line in the shell and inside a
+    string literal alike.
     """
     numbered = list(lines)
+    if not yaml:
+        return fold_backslashes(numbered)
     out = []
     script_body = set()  # line numbers that are shell, and so not YAML values
     i = 0
@@ -1164,7 +1184,11 @@ def check_acquisition_file(root, path, problems):
     # marker on one line, so a wrapped command splits the two halves and the
     # verdict turns on formatting. Fixing one of the two readings of one file
     # was the whole of that fix, and this is the other.
-    for number, line in logical_lines(code_lines(path)):
+    # Only a workflow folds by YAML's rules, though. This clause reads Rust,
+    # TOML and shell too, and in those a deeper line is a function body or an
+    # array element rather than the rest of the value above it -- folding them
+    # made one finding out of two unrelated literals.
+    for number, line in logical_lines(code_lines(path), path.suffix in YAML_SUFFIXES):
         if acquires_engine(line):
             problems.append(
                 f"{where}:{number}: fetches, unpacks, embeds or installs a web engine, which "
