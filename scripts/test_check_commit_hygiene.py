@@ -133,6 +133,11 @@ SUBJECT_MUST_PASS = [
     # The subject is read from the STRIPPED message, so leading blank lines do
     # not make the subject empty and the whole message unreadable.
     ("a message with leading blank lines", "\n\nfeat(x): a thing\n\nCloses #1"),
+    # git stores and returns a byte-order mark. It is `Cf`, so `normalise` drops
+    # it and the attribution and issue rules never saw it; the subject was taken
+    # from the raw text, so one message was judged on two different texts and a
+    # conventional subject read as unreadable.
+    ("a subject behind a byte-order mark", "\ufefffeat(x): a thing\n\nCloses #1"),
 ]
 ISSUE_MUST_FAIL = [
     ("no reference at all", "feat(x): a thing\n\nA body with no link."),

@@ -282,7 +282,12 @@ def run(*args):
 
 def check_message(message, where, problems):
     problems.extend(attribution_problems(message, where))
-    lines = message.strip().splitlines()
+    # The subject is read from the FOLDED message, as the attribution and issue
+    # rules already are. A byte-order mark is `Cf`, so `normalise` drops it;
+    # taking the subject from the raw text left one commit message in three
+    # checks judged on different texts, and a BOM made a conventional subject
+    # unreadable while the other two saw it plainly.
+    lines = normalise(message).strip().splitlines()
     subject = lines[0] if lines else ""
     if GENERATED_SUBJECT.match(subject):
         return
