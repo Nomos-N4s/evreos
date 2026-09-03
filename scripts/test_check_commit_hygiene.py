@@ -425,6 +425,36 @@ def end_to_end(failures):
         if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: a compliant commit was rejected")
 
+        # Placed HERE, while the range is still clean: every commit the
+        # fixture makes after this one is a deliberate breach, so the run
+        # would fail and print no pass summary at all. The first version of
+        # these cases sat at the end and failed for that reason -- the fifth
+        # insertion on this branch to land in the wrong place in a fixture.
+        # Every other check in this tree reports what it read -- crates,
+        # packages, files -- and this one said only "passed", so a run that read
+        # nothing looked exactly like a run that read a hundred commits. A stale
+        # local `main` is enough to make `main..HEAD` empty, and the operator
+        # reads a pass. Three shapes, because the first version of the summary
+        # had two and the second was wrong for its sibling: handed
+        # `--range HEAD..HEAD` it announced that no rev range was given.
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD")
+        if "read" not in result.stdout or "commit(s)" not in result.stdout:
+            failed("a passing run did not say how many commits it read")
+
+        cases += 1
+        result = run_check(tmp, "--range", "HEAD..HEAD")
+        if result.returncode != 0 or "having read nothing" not in result.stdout:
+            failed("an empty range did not report itself as having read nothing")
+        elif "no rev range" in result.stdout:
+            failed("an empty range claimed no rev range was given")
+
+        cases += 1
+        result = run_check(tmp)
+        if result.returncode != 0 or "no rev range" not in result.stdout:
+            failed("a run given no input at all did not say so")
+
+
         commit("feat(b): wrong author\n\nCloses #3",
                GIT_AUTHOR_NAME="Someone Else", GIT_AUTHOR_EMAIL="x@y.z")
         cases += 1

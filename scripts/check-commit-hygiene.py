@@ -466,6 +466,12 @@ def main():
 
 def check(args):
     problems = []
+    # What this run actually read, named on the summary line. Every other check
+    # in this tree reports a count -- crates, packages, files -- and this one
+    # said only "passed", so a run that read nothing looked exactly like a run
+    # that read a hundred commits. A stale local `main` is enough to make
+    # `main..HEAD` empty, and the operator reads a pass.
+    read = []
 
     allowed_signers = None
     if args.allowed_signers_file:
@@ -505,6 +511,8 @@ def check(args):
             return 2
         if not shas:
             print(f"No commits in {args.range}; nothing to check.")
+        else:
+            read.append(f"{len(shas)} commit(s) in {args.range}")
         for sha in shas:
             check_commit(sha, problems, allowed_signers)
         if shas and allowed_signers:
@@ -522,6 +530,7 @@ def check(args):
                 print(f"Cannot read the {label}: {error}", file=sys.stderr)
                 return 2
             problems.extend(attribution_problems(text, label))
+            read.append(f"the {label}")
 
     if args.commit_msg:
         try:
@@ -534,6 +543,7 @@ def check(args):
             if not line.startswith("#")
         )
         check_message(body, "commit message", problems)
+        read.append("a commit message")
 
     if problems:
         print("Commit hygiene check FAILED:\n", file=sys.stderr)
@@ -546,7 +556,22 @@ def check(args):
         )
         return 1
 
-    print("Commit hygiene check passed.")
+    # Three shapes, because the first version of this had two and the second
+    # was wrong for its sibling: given `--range HEAD..HEAD` it announced that no
+    # rev range was given, contradicting the invocation it had just been handed.
+    if read:
+        print(f"Commit hygiene check passed: read {', '.join(read)}.")
+    elif args.range:
+        print(
+            f"Commit hygiene check passed, having read nothing: {args.range} holds "
+            "no commits, and no pull request title or body and no commit message "
+            "were given."
+        )
+    else:
+        print(
+            "Commit hygiene check passed, having read nothing: no rev range, no "
+            "pull request title or body, and no commit message were given."
+        )
     return 0
 
 
