@@ -209,6 +209,13 @@ WAKES_WINDOW_CAP_MS = 500
 WINDOW_SECONDS = 3600
 
 
+# TOML specifies an integer as 64-bit signed. A value outside that is not a TOML
+# integer, whatever `tomllib` accepts, and is refused as a number this file can
+# carry rather than left to overflow somewhere downstream.
+TOML_INT_MIN = -(2 ** 63)
+TOML_INT_MAX = 2 ** 63 - 1
+
+
 def is_number(value):
     """A FINITE int or float, which is what every gate here compares.
 
@@ -226,11 +233,21 @@ def is_number(value):
     """
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return False
-    # An int is finite by construction, and asking `math.isfinite` costs a
-    # conversion to float that RAISES on one too large to convert -- so the
-    # predicate written to reject a value a gate cannot compare destroyed the
-    # verdict on exactly such a value. Only a float can be nan or inf.
-    return not isinstance(value, float) or math.isfinite(value)
+    if isinstance(value, float):
+        # Only a float can be nan or inf. Asking `math.isfinite` of an int costs
+        # a conversion that RAISES on one too large to convert, so the predicate
+        # written to reject a value a gate cannot compare destroyed the verdict
+        # on exactly such a value.
+        return math.isfinite(value)
+    # An int is finite by construction but not therefore usable. TOML specifies
+    # an integer as 64-bit signed, so a larger one is outside the format this
+    # file is written in -- and admitting it moved the failure downstream twice
+    # over: `baseline * (1 + tolerance / 100.0)` converts and raises past 1e308,
+    # and rendering a magnitude for a message raises past 4300 digits, which the
+    # wake sum reaches by multiplying. Bounding it here is one clause; guarding
+    # each arithmetic and formatting site it can reach is an open-ended list, and
+    # the last two rounds each found one more member of that list.
+    return TOML_INT_MIN <= value <= TOML_INT_MAX
 
 
 def is_positive_number(value):

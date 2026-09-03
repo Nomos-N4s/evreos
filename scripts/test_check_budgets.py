@@ -1543,8 +1543,33 @@ check("a directory given as the budget file exits 2",
 # verdict on exactly such a value: `math.isfinite` converts an int to float
 # first, and raises on one too large to convert. An int is finite by
 # construction, so only a float needs asking.
-check("a huge int is a number, and asking does not raise",
-      budgets.is_number(int("1" + "0" * 400)))
+# An int is finite by construction but not therefore usable. TOML specifies an
+# integer as 64-bit signed, so a larger one is outside the format this file is
+# written in -- and admitting it moved the failure downstream twice over, into
+# the regression arithmetic and into the message that renders a magnitude. The
+# first version of this case asserted the opposite, which is how both of those
+# came to be reachable.
+# Built by exponentiation, not from a string: the digit limit that makes
+# rendering raise applies to string-to-int too, so the first version of the
+# second case raised while CONSTRUCTING its own fixture.
+check("an int outside TOML's range is not a number, and asking does not raise",
+      not budgets.is_number(10 ** 400))
+check("...nor one past the digit limit rendering itself would hit",
+      not budgets.is_number(10 ** 4400))
+check("the largest TOML integer is one", budgets.is_number(2 ** 63 - 1))
+check("the smallest is too", budgets.is_number(-(2 ** 63)))
+check("one past the top is not", not budgets.is_number(2 ** 63))
+check("one past the bottom is not", not budgets.is_number(-(2 ** 63) - 1))
+# And end to end, through a file `tomllib` reads without complaint: TOML's own
+# range is not enforced by the parser, so a twenty-five digit figure arrives as
+# an ordinary Python int. Admitting it is what put the arithmetic and the
+# message out of reach; the file gate now refuses it as a number, in the same
+# breath as a string, and the run still reaches a verdict.
+b = budget_file(entry={"figure": 10 ** 24})
+code, out, err = run_main(b, "--allow-unmeasured", host="windows", megabytes=5.0)
+check("a figure outside TOML's integer range fails the file gate", code == 1)
+check("...naming that gate", "FAILED: budget file" in err)
+check("...and reaching a verdict rather than raising", "Traceback" not in err)
 check("a float too large to represent is still not one",
       not budgets.is_number(float("1e400")))
 check("nan and inf are still not", not budgets.is_number(float("nan"))
