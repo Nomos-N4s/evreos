@@ -208,7 +208,10 @@ def path_dependencies(manifest):
         if not isinstance(table, dict):
             continue
         for dependency in table.values():
-            if isinstance(dependency, dict) and "path" in dependency:
+            # A path must be a string, as `crate_roots` already requires of a
+            # declared target path. Yielding another type sent it to `base / path`,
+            # which raised where a verdict belonged.
+            if isinstance(dependency, dict) and isinstance(dependency.get("path"), str):
                 yield dependency["path"]
 
 
@@ -243,7 +246,9 @@ def inherited_workspace_paths(root_manifest, member_manifest):
             if not (isinstance(spec, dict) and spec.get("workspace") is True):
                 continue
             source = declared.get(name)
-            if isinstance(source, dict) and "path" in source:
+            # Same string guard as its sibling above: a path of another type
+            # reached `base / path` and raised.
+            if isinstance(source, dict) and isinstance(source.get("path"), str):
                 yield source["path"]
 
 

@@ -565,6 +565,18 @@ for label, root_toml, member_toml in (
     ("a member named by absolute path",
      '[workspace]\nmembers = ["/etc"]\n[workspace.lints.rust]\nunsafe_code = "forbid"\n',
      BASE + "[lints]\nworkspace = true\n"),
+    # A path must be a string, as `crate_roots` already requires of a declared
+    # target path. Another type reached `base / path` and raised.
+    ("a dependency path that is not a string", WORKSPACE_ROOT,
+     BASE + '[lints]\nworkspace = true\n[dependencies]\nb = { path = 1 }\n'),
+    ("a dev-dependency path that is not a string", WORKSPACE_ROOT,
+     BASE + '[lints]\nworkspace = true\n[dev-dependencies]\nb = { path = [] }\n'),
+    ("a target dependency path that is not a string", WORKSPACE_ROOT,
+     BASE + '[lints]\nworkspace = true\n[target."cfg(unix)".dependencies]\nb = { path = 2.5 }\n'),
+    ("an inherited path that is not a string",
+     '[workspace]\nmembers = ["crates/a"]\n[workspace.dependencies]\nb = { path = 1 }\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + '[lints]\nworkspace = true\n[dependencies]\nb = { workspace = true }\n'),
     ("an exclude entry that is not a path",
      '[workspace]\nmembers = ["crates/a"]\nexclude = [7]\n'
      '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
