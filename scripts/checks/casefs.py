@@ -37,27 +37,36 @@ def is_rust_source(path):
     return str(path).lower().endswith(RUST_SUFFIX)
 
 
-def named_file(directory, name):
-    """The file in `directory` called `name`, matched with case folded.
+def named_files(directory, name):
+    """Every file in `directory` called `name`, matched with case folded.
 
-    None where the directory or the file is absent -- a member whose manifest is
+    A LIST, not one path, and that is the point. The release runners can hold
+    only one of `main.rs` and `MAIN.RS`; the case-sensitive runner these checks
+    run on can hold both, and answering with the first would put the reading
+    back where it started -- one spelling read, its sibling silent. Sorted, so
+    a report is stable.
+
+    Empty where the directory or the file is absent. A member whose manifest is
     committed before its sources has no `src/` at all, and listing a directory
     that is not there raises, which puts a traceback where a verdict belongs.
     """
     return _named(directory, name, want_dir=False)
 
 
-def named_dir(directory, name):
-    """The subdirectory of `directory` called `name`, matched with case folded."""
+def named_dirs(directory, name):
+    """Every subdirectory of `directory` called `name`, matched with case folded."""
     return _named(directory, name, want_dir=True)
 
 
 def _named(directory, name, want_dir):
+    if directory is None:
+        return []
     directory = Path(directory)
     if not directory.is_dir():
-        return None
+        return []
     wanted = name.lower()
-    for path in sorted(directory.iterdir()):
-        if path.name.lower() == wanted and (path.is_dir() if want_dir else path.is_file()):
-            return path
-    return None
+    return [
+        path for path in sorted(directory.iterdir())
+        if path.name.lower() == wanted
+        and (path.is_dir() if want_dir else path.is_file())
+    ]

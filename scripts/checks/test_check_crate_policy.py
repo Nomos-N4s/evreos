@@ -196,6 +196,18 @@ problems, _, _ = scenario(
 )
 check("...and a nested src/bin root", mentions(problems, "crates/a/src/bin/tool/MAIN.RS"))
 
+# The release runners can hold only one of these two names; the case-sensitive
+# runner this check runs on can hold both. Answering with the first match would
+# put the reading back where it started -- one spelling read, its sibling
+# silent -- so both are roots and both are read.
+problems, _, _ = scenario(
+    [crate("a", files={"src/main.rs": "fn main() { unsafe { } }\n",
+                       "src/MAIN.RS": "fn main() { unsafe { } }\n"})]
+)
+check("where both spellings exist, both are read",
+      mentions(problems, "crates/a/src/MAIN.RS")
+      and mentions(problems, "crates/a/src/main.rs"))
+
 # A member whose manifest is committed before its sources -- a stub crate, a
 # member listed ahead of its files -- has no src/ at all. Listing a directory
 # that is not there raises, and a traceback in place of a verdict is this

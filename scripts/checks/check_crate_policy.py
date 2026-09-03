@@ -181,7 +181,7 @@ def lifts_forbid(manifest):
 # path so this file works both when run directly and when a test loads it
 # through importlib from another directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from casefs import is_rust_source, named_file  # noqa: E402
+from casefs import is_rust_source, named_files  # noqa: E402
 from rustlex import strip_non_code  # noqa: E402
 
 
@@ -402,20 +402,20 @@ def crate_roots(crate_dir, manifest):
     lib = as_table(as_table(manifest).get("lib"))
     declared_lib = lib.get("path")
     src = crate_dir / "src"
-    candidates = [
-        crate_dir / declared_lib if isinstance(declared_lib, str)
-        else named_file(src, "lib.rs"),
-        named_file(src, "main.rs"),
-    ]
+    candidates = (
+        [crate_dir / declared_lib] if isinstance(declared_lib, str)
+        else named_files(src, "lib.rs")
+    )
+    candidates += named_files(src, "main.rs")
     bin_dir = src / "bin"
     if bin_dir.is_dir():
         entries = sorted(bin_dir.iterdir())
         candidates += [
             path for path in entries if path.is_file() and is_rust_source(path)
         ]
-        candidates += [
-            named_file(path, "main.rs") for path in entries if path.is_dir()
-        ]
+        for path in entries:
+            if path.is_dir():
+                candidates += named_files(path, "main.rs")
     # `[bin]` written for `[[bin]]` is the ordinary slip, and it makes this a
     # table rather than a list of them. Cargo says "invalid type: map, expected
     # a sequence"; this took the string indices and raised.
@@ -427,7 +427,7 @@ def crate_roots(crate_dir, manifest):
     ]
     roots = []
     for candidate in candidates:
-        if candidate is not None and candidate.is_file() and candidate not in roots:
+        if candidate.is_file() and candidate not in roots:
             roots.append(candidate)
     return roots
 

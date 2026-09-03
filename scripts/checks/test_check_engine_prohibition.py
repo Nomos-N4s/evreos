@@ -196,6 +196,13 @@ check("a stable workspace passes the nightly clause", nightly_problems(lambda r:
 
 check("rust-toolchain.toml on nightly fails",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly"\n')))
+# The release installers are built on Windows and macOS, whose filesystems are
+# case-insensitive by default, so rustup and Cargo find these files under a name
+# this check built in lower case and never looked for. Each selects the channel
+# or the Cargo for the build that ships.
+check("...and under a name in upper case, which the release runners resolve",
+      nightly_problems(lambda r: write(
+          r, "RUST-TOOLCHAIN.TOML", '[toolchain]\nchannel = "nightly"\n')))
 check("a dated nightly fails",
       nightly_problems(lambda r: write(r, "rust-toolchain.toml", '[toolchain]\nchannel = "nightly-2026-08-01"\n')))
 check("beta is not stable",
@@ -239,6 +246,8 @@ check("...while a -Z flag under a real target table still fails",
                                        '[target.x86_64-unknown-linux-gnu]\nrustflags = ["-Zbuild-std"]\n')))
 check(".cargo/config.toml with [unstable] fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", "[unstable]\nbuild-std = true\n")))
+check("...and with both its directory and its name in upper case",
+      nightly_problems(lambda r: write(r, ".CARGO/CONFIG.TOML", "[unstable]\nbuild-std = true\n")))
 check("a -Z rustflag fails",
       nightly_problems(lambda r: write(r, ".cargo/config.toml", '[build]\nrustflags = ["-Zbuild-std"]\n')))
 check("a -Z rustflag on a target table fails",
@@ -929,6 +938,32 @@ check("a Rust block opening on its own line is not a flow mapping",
 check("...while a real acquisition on one Rust line still fails",
       acquisition_problems(lambda r: rs(
           r, 'fn get() { download("https://example.com/chromium.tar.gz"); }\n', "build.rs")))
+# `build.rs` and `src/` are conventions Cargo resolves on the release runner's
+# own filesystem, where `BUILD.RS` is the build script and `SRC` is the source
+# directory. Named in lower case, a build script that fetches an engine and
+# every file beneath a source directory went unread.
+check("a build script named in upper case is still a build script",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/BUILD.RS",
+          'fn main() { download("https://example.com/chromium.tar.gz"); }\n')))
+check("a source directory named in upper case is still on the runtime path",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/SRC/fetch.rs",
+          'fn get() { download("https://example.com/cef.zip"); }\n')))
+# The workspace fixture already carries `src/`, so this is the case where both
+# spellings stand side by side -- which only the case-sensitive runner can hold,
+# and which answering with the first match would have left half-read.
+def both_source_directories(root):
+    write(root, "crates/evreos-shell/SRC/fetch.rs",
+          'fn get() { download("https://example.com/cef.zip"); }\n')
+    write(root, "crates/evreos-shell/src/other.rs",
+          'fn get() { download("https://example.com/chromium.zip"); }\n')
+
+
+found = acquisition_problems(both_source_directories)
+check("...beside the lower-case one, both being read rather than the first",
+      any("SRC/fetch.rs" in problem for problem in found)
+      and any("src/other.rs" in problem for problem in found))
 # The backslash rule is not YAML's and applies to every file: a trailing
 # backslash continues a line in a build helper's shell exactly as it does in a
 # workflow's script body, and the helper is on the runtime path this clause

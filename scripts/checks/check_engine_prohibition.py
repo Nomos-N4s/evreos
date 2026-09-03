@@ -311,7 +311,7 @@ class CheckError(Exception):
 # quote inside `'"'` or behind a backslash desynchronised it -- rejecting
 # compliant crate roots AND blanking away a genuine `feature(...)` gate.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from casefs import is_rust_source, named_dir, named_file, suffix_of  # noqa: E402
+from casefs import is_rust_source, named_dirs, named_files, suffix_of  # noqa: E402
 from rustlex import strip_non_code  # noqa: E402
 
 
@@ -1168,16 +1168,20 @@ def scan_nightly(root, member_dirs):
     read = 0
     directories = [root] + [Path(d) for d in member_dirs]
     for directory in directories:
+        # Each of these is found by name, and the release runners find a name
+        # with case folded. `RUST-TOOLCHAIN.TOML` selects the channel for the
+        # build that ships and was read by nothing here; so was a `[unstable]`
+        # table in `.CARGO/CONFIG.TOML`. `Cargo.toml` is not folded: Cargo
+        # itself requires that spelling, so no other one names a package.
         for name in ("rust-toolchain.toml", "rust-toolchain"):
-            path = directory / name
-            if path.is_file():
+            for path in named_files(directory, name):
                 check_toolchain_file(root, path, problems)
                 read += 1
-        for name in ("config.toml", "config"):
-            path = directory / ".cargo" / name
-            if path.is_file():
-                check_cargo_config(root, path, problems)
-                read += 1
+        for cargo_dir in named_dirs(directory, ".cargo"):
+            for name in ("config.toml", "config"):
+                for path in named_files(cargo_dir, name):
+                    check_cargo_config(root, path, problems)
+                    read += 1
         manifest = directory / "Cargo.toml"
         if manifest.is_file():
             check_manifest_features(root, manifest, problems)
@@ -1243,13 +1247,19 @@ def acquisition_files(metadata, root):
     for package in member_packages(metadata):
         directory = Path(package["manifest_path"]).parent
         add(directory / "Cargo.toml")
-        add(directory / "build.rs")
+        # `build.rs` and the runtime directories are conventions Cargo resolves
+        # on the release runner's own filesystem, where `BUILD.RS` is the build
+        # script and `SRC` is the source directory. Naming them in lower case
+        # left a build script that fetches an engine, and every file beneath a
+        # source directory, unread.
+        for path in named_files(directory, "build.rs"):
+            add(path)
         for target in package.get("targets", []):
             if "custom-build" in target.get("kind", []):
                 add(Path(target["src_path"]))
         for name in RUNTIME_PATH:
-            if (directory / name).is_dir():
-                for path in files_under(directory / name):
+            for found in named_dirs(directory, name):
+                for path in files_under(found):
                     add(path)
     for path in workflow_files(Path(root)):
         add(path)
