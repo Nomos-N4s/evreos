@@ -514,6 +514,49 @@ with tempfile.TemporaryDirectory() as tmp:
     check("an allowlist that is not UTF-8 is reported, not raised", bool(found))
     check("...saying why", any("not valid UTF-8" in problem for problem in found))
 
+
+# --- valid TOML with a wrong type reaches a verdict, not a traceback ---------
+# Every reader here walks a manifest by chained `get`, and TOML admits a scalar
+# where a table belongs. Cargo reports that as a type error; this check is the
+# reader when cargo is not there to say so, and it raised instead -- neither a
+# pass, nor a breach, nor a stated inability to decide.
+BASE = '[package]\nname = "a"\nversion = "0.0.0"\nedition = "2021"\n'
+for label, root_toml, member_toml in (
+    ("a member [lints] that is not a table", WORKSPACE_ROOT,
+     BASE + '[lints]\nrust = "forbid"\n'),
+    ("a workspace lints key that is not a table",
+     '[workspace]\nmembers = ["crates/a"]\nlints = "x"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    # `[bin]` for `[[bin]]` is the ordinary slip: cargo says "invalid type: map,
+    # expected a sequence", and this took the string indices and raised.
+    ("[bin] written for [[bin]]", WORKSPACE_ROOT,
+     BASE + '[lints]\nworkspace = true\n[bin]\npath = "src/main.rs"\n'),
+    ("a [lib] path that is not a string", WORKSPACE_ROOT,
+     BASE + "[lints]\nworkspace = true\n[lib]\npath = 7\n"),
+):
+    def build(r, root_toml=root_toml, member_toml=member_toml):
+        (r / "Cargo.toml").write_text(root_toml)
+        member(r, manifest=member_toml)
+    try:
+        found, _, _ = workspace_at(build)
+        raised = None
+    except Exception as error:      # noqa: BLE001 - the point of the case
+        found, raised = [], f"{type(error).__name__}: {error}"
+    check(f"{label} reaches a verdict rather than raising", raised is None)
+
+# A byte-order mark before the crate attribute. rustc honours the forbid --
+# verified against the installed toolchain -- and the anchored pattern missed it
+# because U+FEFF is not whitespace, so a compliant crate was reported as
+# omitting the forbid it carries.
+found, _, _ = workspace_at(lambda r: (
+    (r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+    member(r, source="\ufeff#![forbid(unsafe_code)]\n")))
+check("a crate root beginning with a BOM still carries its forbid", found == [])
+check("...while one with a BOM and no forbid is still reported",
+      any("omits" in problem for problem in workspace_at(lambda r: (
+          (r / "Cargo.toml").write_text(WORKSPACE_ROOT),
+          member(r, source="\ufeffpub fn f() {}\n")))[0]))
+
 # --- a crate reached only through [workspace.dependencies] ------------------
 # `cargo metadata` reports it in workspace_members and `cargo build -p` builds
 # it, so it is a member and is bound by all three clauses. It was reached by no

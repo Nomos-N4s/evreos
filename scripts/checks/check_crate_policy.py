@@ -80,7 +80,11 @@ def read_text(path):
     an operator reading the log cannot tell it from the check crashing.
     """
     try:
-        return Path(path).read_text(encoding="utf-8")
+        # The BOM is stripped for the reason the engine prohibition strips it:
+        # an editor that writes one is not a way past a check. It is not `\s`,
+        # so a crate attribute on the first line would sit behind it and the
+        # anchored pattern would miss a forbid rustc honours.
+        return Path(path).read_text(encoding="utf-8").lstrip("\ufeff")
     except UnicodeDecodeError as error:
         raise Unreadable(f"not valid UTF-8 ({error.reason})") from None
 
@@ -132,8 +136,21 @@ def forbids_unsafe(source):
     )
 
 
+def as_table(value):
+    """`value` when it is a table, an empty one otherwise.
+
+    Every reader below walks a manifest by chained `get`. TOML admits a scalar
+    where a table is expected -- `lints = "x"`, or `[bin]` written for `[[bin]]`
+    -- and cargo reports that as a type error rather than crashing. This check
+    is the reader when cargo is not there to say so, and it raised instead: a
+    well-formed file with a wrong type ended the run with a traceback, which is
+    neither a pass nor a breach nor a stated inability to decide.
+    """
+    return value if isinstance(value, dict) else {}
+
+
 def inherits_workspace_lints(manifest):
-    return manifest.get("lints", {}).get("workspace") is True
+    return as_table(as_table(manifest).get("lints")).get("workspace") is True
 
 
 def lifts_forbid(manifest):
@@ -147,7 +164,7 @@ def lifts_forbid(manifest):
     """
     if inherits_workspace_lints(manifest):
         return False
-    return lint_level(manifest.get("lints", {}).get("rust", {}), "unsafe_code") != "forbid"
+    return lint_level(as_table(as_table(as_table(manifest).get("lints")).get("rust")), "unsafe_code") != "forbid"
 
 
 # The one Rust scanner, shared with the engine prohibition check. Loaded by
@@ -281,12 +298,20 @@ def crate_roots(crate_dir, manifest):
     binaries under `src/bin/` and any `[lib]` or `[[bin]]` path the manifest
     declares. Each is its own crate, so a forbid in one does not reach another.
     """
-    lib = manifest.get("lib", {})
-    candidates = [crate_dir / lib.get("path", "src/lib.rs"), crate_dir / "src" / "main.rs"]
+    lib = as_table(as_table(manifest).get("lib"))
+    path = lib.get("path")
+    candidates = [crate_dir / (path if isinstance(path, str) else "src/lib.rs"),
+                  crate_dir / "src" / "main.rs"]
     candidates += sorted((crate_dir / "src" / "bin").glob("*.rs"))
     candidates += sorted((crate_dir / "src" / "bin").glob("*/main.rs"))
+    # `[bin]` written for `[[bin]]` is the ordinary slip, and it makes this a
+    # table rather than a list of them. Cargo says "invalid type: map, expected
+    # a sequence"; this took the string indices and raised.
+    declared = as_table(manifest).get("bin")
     candidates += [
-        crate_dir / target["path"] for target in manifest.get("bin", []) if "path" in target
+        crate_dir / target["path"]
+        for target in (declared if isinstance(declared, list) else [])
+        if isinstance(target, dict) and isinstance(target.get("path"), str)
     ]
     roots = []
     for candidate in candidates:
@@ -297,8 +322,8 @@ def crate_roots(crate_dir, manifest):
 
 def check_root(manifest, problems):
     """The workspace root must itself keep the forbid."""
-    lints = manifest.get("workspace", {}).get("lints", {}).get("rust", {})
-    level = lint_level(lints, "unsafe_code")
+    lints = as_table(as_table(as_table(manifest).get("workspace")).get("lints")).get("rust")
+    level = lint_level(as_table(lints), "unsafe_code")
     if level != "forbid":
         problems.append(
             f"Cargo.toml: [workspace.lints.rust] unsafe_code is {level!r}, must be "
