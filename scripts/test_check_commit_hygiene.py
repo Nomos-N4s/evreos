@@ -570,6 +570,24 @@ def end_to_end(failures):
         # reached, so either of these could be deleted and the traceback would
         # come back with the suite green -- three guards landed together and one
         # case covered one of them.
+        # Every commit, every signature and the rev range itself come from git.
+        # With git absent the wrapper raised FileNotFoundError and the script
+        # exited 1 -- the code that means a breach was found, under a traceback
+        # an operator cannot tell from a crash. The engine prohibition check
+        # answers the same question about cargo with exit 2 and a message, and
+        # the two checks in one tree should not answer it differently.
+        cases += 1
+        empty_dir = pathlib.Path(tmp) / "no-tools"
+        empty_dir.mkdir()
+        result = run_check(
+            tmp, "--range", f"{base}..HEAD",
+            env={"PATH": str(empty_dir), "HOME": tmp},
+        )
+        if result.returncode != 2 or "git not found" not in result.stderr:
+            failed(f"a missing git exited {result.returncode}, expected 2 saying why")
+        elif "Traceback" in result.stderr:
+            failed("a missing git raised rather than reporting")
+
         # The third is the clause the reader was missing. FileNotFoundError and
         # IsADirectoryError are the two OSErrors that were thought of; a path
         # whose parent is an ordinary file arrives as NotADirectoryError, and

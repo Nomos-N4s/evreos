@@ -277,7 +277,15 @@ def attribution_problems(text, where):
 
 
 def run(*args):
-    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+    try:
+        return subprocess.run(
+            ["git", *args], capture_output=True, text=True, check=True
+        ).stdout
+    except FileNotFoundError:
+        raise CannotRun(
+            "git not found; every commit, signature and rev range this check reads "
+            "comes from it"
+        ) from None
 
 
 def check_message(message, where, problems):
@@ -306,6 +314,19 @@ def check_message(message, where, problems):
 
 class Unreadable(Exception):
     """A file passed on the command line cannot be decoded."""
+
+
+class CannotRun(Exception):
+    """The check cannot reach a verdict. An unrun check is not a pass.
+
+    Every commit this script reads, every signature it verifies and the rev
+    range itself come from `git`. With git absent, `subprocess.run` raised
+    FileNotFoundError and the script exited 1 -- the code that means a breach
+    was found, which is the opposite of the truth, under a traceback an
+    operator cannot tell from the check crashing. The engine prohibition check
+    answers the same question about `cargo` with a message and exit 2, and this
+    is that answer for `git`.
+    """
 
 
 def read_utf8(path):
@@ -436,6 +457,14 @@ def main():
     )
     args = parser.parse_args()
 
+    try:
+        return check(args)
+    except CannotRun as error:
+        print(f"Commit hygiene check could not run: {error}", file=sys.stderr)
+        return 2
+
+
+def check(args):
     problems = []
 
     allowed_signers = None
