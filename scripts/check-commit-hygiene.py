@@ -282,13 +282,15 @@ def run(*args):
 
 def check_message(message, where, problems):
     problems.extend(attribution_problems(message, where))
-    # The subject is read from the FOLDED message, as the attribution and issue
-    # rules already are. A byte-order mark is `Cf`, so `normalise` drops it;
-    # taking the subject from the raw text left one commit message in three
-    # checks judged on different texts, and a BOM made a conventional subject
-    # unreadable while the other two saw it plainly.
-    lines = normalise(message).strip().splitlines()
-    subject = lines[0] if lines else ""
+    # The FIRST LINE is chosen from the raw message and only then folded. A
+    # byte-order mark is `Cf`, so folding first made a conventional subject
+    # unreadable -- but folding the whole message first also DELETES a first
+    # line made only of format characters, handing the subject to line two while
+    # `git log --oneline` still shows the invisible one. Splitting first and
+    # folding the line keeps both: the mark stops hiding the subject, and an
+    # empty-looking subject stays the subject it is.
+    lines = message.strip().splitlines()
+    subject = normalise(lines[0]).strip() if lines else ""
     if GENERATED_SUBJECT.match(subject):
         return
     if not CONVENTIONAL.match(subject):

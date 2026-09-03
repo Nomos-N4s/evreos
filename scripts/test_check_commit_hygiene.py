@@ -108,6 +108,11 @@ SUBJECT_MUST_FAIL = [
     # The separator is a colon and exactly one space. Relaxing it to any run of
     # whitespace admits `fix:a thing`, which is not the convention and which
     # every other tool reading these messages would parse differently.
+    # Folding the WHOLE message before splitting deletes a first line made only
+    # of format characters, handing the subject to line two -- while
+    # `git log --oneline` still shows the invisible one. The line is chosen
+    # first and folded second, so an empty-looking subject stays the subject.
+    ("a first line of only a word joiner", "\u2060\nfeat(x): a thing\n\nCloses #1"),
     ("no space after the colon", "fix:a thing\n\nCloses #1"),
     ("two spaces after the colon", "fix:  a thing\n\nCloses #1"),
 ]
