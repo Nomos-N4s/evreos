@@ -126,6 +126,16 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
 
+# The one reader that asks the filesystem for a name. This script lives beside
+# `scripts/checks/` rather than in it, and for one folded suffix a local copy
+# looked cheaper than reaching across that boundary. The directory half of the
+# same lookup was then left raw in the same change, and an installer published
+# under a differently cased path went unmeasured -- so the boundary is crossed
+# rather than the rule written twice. The module is stdlib-only and imports
+# nothing back.
+sys.path.insert(0, str(Path(__file__).resolve().parent / "checks"))
+from casefs import resolve_dirs, suffix_of  # noqa: E402
+
 # Criteria whose figures depend on the machine they are measured on. Their
 # absolute gate waits on a pinned runner; their regression gate does not.
 HARDWARE_DEPENDENT = {"SC-002", "SC-004", "SC-005", "SC-006"}
@@ -878,24 +888,27 @@ def host_platform(system=sys.platform):
 def installer_artefacts(platform, repo=REPO):
     """Every file of the platform's artefact kind where its build publishes.
 
-    The suffix is compared with case folded, because the two platforms that
-    build these artefacts have a case-insensitive filesystem by default -- NTFS
-    on tier 1, APFS on tier 2 -- and a packaging step there may name its output
-    `Evreos-Setup.MSI` as readily as `evreos-setup.msi`. A glob for `*.msi`
-    finds neither the second spelling on a case-sensitive runner nor, reliably,
-    the first: it reported no artefact, and no artefact is not a failure but an
-    UNMEASURED entry, which `--allow-unmeasured` then defers. The download-size
-    gate would have gone quiet on the tier this project ships first, keyed on
-    the case of a filename. That is the shape of blockers 4 and 5 -- a gate that
-    does not fail rather than one that fails wrongly.
+    Both halves of the lookup -- the publishing directory and the suffix -- are
+    matched with case folded, because the two platforms that build these
+    artefacts have a case-insensitive filesystem by default: NTFS on tier 1,
+    APFS on tier 2. A packaging step there may write `Evreos-Setup.MSI` as
+    readily as `evreos-setup.msi`, and `target/Packaging/Windows` as readily as
+    `target/packaging/windows`.
+
+    What a raw match costs is not a wrong verdict but no verdict: no artefact is
+    not a failure, it is an UNMEASURED entry, which `--allow-unmeasured` then
+    defers. The download-size gate would have gone quiet on the tier this
+    project ships first, keyed on the case of a path. That is the shape of
+    blockers 4 and 5 -- a gate that does not fail rather than one that fails
+    wrongly. The suffix half was fixed first and the directory half was left raw
+    in the same change, which is the shape of every round since the eleventh.
     """
     directory, suffix = INSTALLER_ARTEFACT[platform]
-    published = repo / directory
-    if not published.is_dir():
-        return []
     return sorted(
-        path for path in published.iterdir()
-        if path.is_file() and path.suffix.lower() == suffix
+        path
+        for published in resolve_dirs(repo, directory)
+        for path in published.iterdir()
+        if path.is_file() and suffix_of(path) == suffix
     )
 
 

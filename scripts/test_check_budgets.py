@@ -1061,6 +1061,20 @@ measured = budgets.measure_download_size("windows", tree)
 check("what the packaging step leaves beside the artefact is not the artefact",
       measured.megabytes == 12.0 and measured.reason is None)
 
+# The DIRECTORY half of the same lookup. It was left raw in the change that
+# folded the suffix, so an installer published under a differently cased path
+# was still not found -- and not found is an unmeasured entry rather than a
+# failure, which is the gate going quiet on the tier this project ships first.
+for published in ("target/packaging/windows", "target/Packaging/Windows",
+                  "TARGET/packaging/WINDOWS"):
+    tree = Path(tempfile.mkdtemp())
+    TREES.append(tree)
+    (tree / published).mkdir(parents=True)
+    (tree / published / "Evreos-Setup.MSI").write_bytes(b"\0" * (12 * MiB))
+    measured = budgets.measure_download_size("windows", tree)
+    check(f"an artefact published under {published} is found",
+          measured.megabytes == 12.0 and measured.reason is None)
+
 measured = budgets.measure_download_size("windows", packaging_tree())
 check("a tier's host with no artefact measures nothing and says the installer is "
       "not built yet",

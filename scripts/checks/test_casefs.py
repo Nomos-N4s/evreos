@@ -148,6 +148,35 @@ check("...and its contents are then found through it",
       [p.name for p in casefs.named_files(found[0], "CONFIG.TOML")] == ["config.toml"])
 handle.cleanup()
 
+# --- resolve_dirs -------------------------------------------------------------
+
+handle, root = tree("target/Packaging/Windows/")
+check("every segment of a path is matched with case folded",
+      [str(p.relative_to(root)) for p in
+       casefs.resolve_dirs(root, "target/packaging/windows")]
+      == ["target/Packaging/Windows"])
+check("...and a path already matching resolves to itself",
+      [str(p.relative_to(root)) for p in
+       casefs.resolve_dirs(root, "target/Packaging/Windows")]
+      == ["target/Packaging/Windows"])
+check("a segment that is not there resolves to nothing",
+      casefs.resolve_dirs(root, "target/packaging/linux") == [])
+check("a segment that is a file rather than a directory resolves to nothing",
+      casefs.resolve_dirs(root, "target/packaging/windows/absent") == [])
+check("an empty relative path is the root itself",
+      casefs.resolve_dirs(root, "") == [root])
+handle.cleanup()
+
+# Two directories differing only in case can stand side by side on the runner
+# these checks run on, and each may hold a different artefact.
+handle, root = tree("target/packaging/windows/", "target/Packaging/WINDOWS/")
+check("both resolutions of one path are answered",
+      sorted(str(p.relative_to(root)) for p in
+             casefs.resolve_dirs(root, "target/packaging/windows"))
+      == ["target/Packaging/WINDOWS", "target/packaging/windows"])
+handle.cleanup()
+
+
 total = PASSED + len(FAILED)
 print(f"\n{PASSED}/{total} passed")
 sys.exit(1 if FAILED else 0)

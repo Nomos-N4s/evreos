@@ -68,6 +68,25 @@ def named_dirs(directory, name):
     return _named(directory, name, want_dir=True)
 
 
+def resolve_dirs(root, relative):
+    """Every directory `root / relative` names, each segment matched with case
+    folded. Empty where any segment is absent.
+
+    A multi-segment path is the same question asked once per segment, and it was
+    asked raw: an installer published to `target/Packaging/Windows` was not found
+    under `target/packaging/windows`, so the gate that measures it reported no
+    artefact -- which is an unmeasured entry rather than a failure.
+
+    A list, for the reason `named_files` is a list: the runner these checks run
+    on can hold two directories differing only in case, and answering with one
+    of them leaves the other unread.
+    """
+    current = [Path(root)]
+    for segment in Path(relative).parts:
+        current = [found for base in current for found in named_dirs(base, segment)]
+    return current
+
+
 def _named(directory, name, want_dir):
     if directory is None:
         return []
