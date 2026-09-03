@@ -311,7 +311,8 @@ class CheckError(Exception):
 # quote inside `'"'` or behind a backslash desynchronised it -- rejecting
 # compliant crate roots AND blanking away a genuine `feature(...)` gate.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rustlex import is_rust_source, strip_non_code  # noqa: E402
+from casefs import is_rust_source, named_dir, named_file, suffix_of  # noqa: E402
+from rustlex import strip_non_code  # noqa: E402
 
 
 def relative(root, path):
@@ -528,21 +529,6 @@ def read_text(path):
     if b"\0" in data:
         return None
     return data.decode("utf-8", errors="replace")
-
-
-def suffix_of(path):
-    """A path's suffix, lowercased, which is the only way to ask it here.
-
-    Both platforms this project ships to have a case-insensitive filesystem by
-    default -- NTFS on tier 1, APFS on tier 2 -- so `MAIN.RS` is a Rust source
-    file that Cargo compiles and `SETUP.MSI` is an installer. Asking `suffix ==
-    ".rs"` made the verdict turn on how a file was named: a crate root carrying
-    `#![feature(let_chains)]` was not read at all when its name was upper case,
-    under the clause enforcing a NON-NEGOTIABLE principle. Every suffix test in
-    this file goes through here so that a new one cannot be written the other
-    way by accident.
-    """
-    return Path(path).suffix.lower()
 
 
 def comment_style(path):

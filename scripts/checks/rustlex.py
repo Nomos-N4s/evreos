@@ -14,23 +14,6 @@ interleave, and the order below is the order Rust's lexer uses.
 
 import re
 
-# The suffix a Rust source file carries, matched with case folded. Both
-# platforms this project ships to have a case-insensitive filesystem by default
-# -- NTFS on tier 1, APFS on tier 2 -- so `src/bin/TOOL.RS` is an auto-discovered
-# binary Cargo compiles there, and `mod util;` resolves `UTIL.RS`. Asking for
-# `.rs` exactly let such a file out of both checks that read this module: a
-# crate root with no forbid at all, holding `unsafe`, and a feature attribute on
-# the release path. Blocker 8 and the engine clause's own rule, reached through
-# a filename. One reader, here, because a second spelling of this question is
-# how both of those came back.
-RUST_SUFFIX = ".rs"
-
-
-def is_rust_source(path):
-    """Whether `path` names a Rust source file, as the shipping platforms do."""
-    return str(path).lower().endswith(RUST_SUFFIX)
-
-
 # A char literal: one character, or one escape. `'a'` and `'\''` are literals;
 # `'a` in `&'a str` is a lifetime and opens nothing. The distinction matters
 # because a literal may CONTAIN a quote -- `'"'` -- and reading that quote as a

@@ -181,7 +181,8 @@ def lifts_forbid(manifest):
 # path so this file works both when run directly and when a test loads it
 # through importlib from another directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rustlex import is_rust_source, strip_non_code  # noqa: E402
+from casefs import is_rust_source, named_file  # noqa: E402
+from rustlex import strip_non_code  # noqa: E402
 
 
 def resolved(base, path):
@@ -403,8 +404,8 @@ def crate_roots(crate_dir, manifest):
     src = crate_dir / "src"
     candidates = [
         crate_dir / declared_lib if isinstance(declared_lib, str)
-        else named_source(src, "lib.rs"),
-        named_source(src, "main.rs"),
+        else named_file(src, "lib.rs"),
+        named_file(src, "main.rs"),
     ]
     bin_dir = src / "bin"
     if bin_dir.is_dir():
@@ -413,7 +414,7 @@ def crate_roots(crate_dir, manifest):
             path for path in entries if path.is_file() and is_rust_source(path)
         ]
         candidates += [
-            named_source(path, "main.rs") for path in entries if path.is_dir()
+            named_file(path, "main.rs") for path in entries if path.is_dir()
         ]
     # `[bin]` written for `[[bin]]` is the ordinary slip, and it makes this a
     # table rather than a list of them. Cargo says "invalid type: map, expected
@@ -429,23 +430,6 @@ def crate_roots(crate_dir, manifest):
         if candidate is not None and candidate.is_file() and candidate not in roots:
             roots.append(candidate)
     return roots
-
-
-def named_source(directory, name):
-    """The file in `directory` called `name`, matched as the shipping platforms
-    match it: with case folded. None where the directory or the file is absent.
-
-    Building the path from a literal instead asks a case-sensitive runner for a
-    spelling the author may not have used, and the answer there is silence: the
-    root is skipped and whatever it holds is never read.
-    """
-    wanted = name.lower()
-    if not directory.is_dir():
-        return None
-    for path in sorted(directory.iterdir()):
-        if path.is_file() and path.name.lower() == wanted:
-            return path
-    return None
 
 
 def check_root(manifest, problems):
