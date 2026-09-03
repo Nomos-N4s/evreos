@@ -876,9 +876,27 @@ def host_platform(system=sys.platform):
 
 
 def installer_artefacts(platform, repo=REPO):
-    """Every file of the platform's artefact kind where its build publishes."""
+    """Every file of the platform's artefact kind where its build publishes.
+
+    The suffix is compared with case folded, because the two platforms that
+    build these artefacts have a case-insensitive filesystem by default -- NTFS
+    on tier 1, APFS on tier 2 -- and a packaging step there may name its output
+    `Evreos-Setup.MSI` as readily as `evreos-setup.msi`. A glob for `*.msi`
+    finds neither the second spelling on a case-sensitive runner nor, reliably,
+    the first: it reported no artefact, and no artefact is not a failure but an
+    UNMEASURED entry, which `--allow-unmeasured` then defers. The download-size
+    gate would have gone quiet on the tier this project ships first, keyed on
+    the case of a filename. That is the shape of blockers 4 and 5 -- a gate that
+    does not fail rather than one that fails wrongly.
+    """
     directory, suffix = INSTALLER_ARTEFACT[platform]
-    return sorted((repo / directory).glob(f"*{suffix}"))
+    published = repo / directory
+    if not published.is_dir():
+        return []
+    return sorted(
+        path for path in published.iterdir()
+        if path.is_file() and path.suffix.lower() == suffix
+    )
 
 
 def measure_download_size(host, repo=REPO):

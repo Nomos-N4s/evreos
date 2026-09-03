@@ -984,7 +984,11 @@ def packaging_tree(**artefacts):
     root = Path(tempfile.mkdtemp())
     TREES.append(root)
     for name, size in artefacts.items():
-        platform = "windows" if name.endswith(".msi") else "macos"
+        # Folded, as the code under test folds it. Matching `.msi` raw put an
+        # `Evreos-Setup.MSI` in the macOS directory, so the case that exists to
+        # prove the suffix is read case-insensitively would have failed for the
+        # wrong reason -- the fixture, not the code.
+        platform = "windows" if name.lower().endswith(".msi") else "macos"
         directory = root / budgets.INSTALLER_ARTEFACT[platform][0]
         directory.mkdir(parents=True, exist_ok=True)
         (directory / name).write_bytes(b"\0" * size)
@@ -1025,6 +1029,37 @@ measured = budgets.measure_download_size(None, tree)
 check("a host of no tier measures nothing, though both artefacts stand on its disk",
       measured.platform is None and measured.megabytes is None
       and "builds no tier's installer artefact" in measured.reason)
+
+# Both platforms that build these artefacts have a case-insensitive filesystem
+# by default, so a packaging step may name its output in upper case and mean the
+# same file. Matching the suffix raw found nothing -- and no artefact is not a
+# failure but an UNMEASURED entry, which --allow-unmeasured then defers, so the
+# download-size gate went quiet on the tier this project ships first, keyed on
+# the case of a filename. That is the shape of blockers 4 and 5: a gate that
+# does not fail rather than one that fails wrongly.
+measured = budgets.measure_download_size(
+    "windows", packaging_tree(**{"Evreos-Setup.MSI": 12 * MiB})
+)
+check("an artefact whose suffix is upper case is the same artefact",
+      measured.platform == "windows" and measured.megabytes == 12.0
+      and measured.reason is None)
+measured = budgets.measure_download_size(
+    "windows", packaging_tree(**{"a.msi": MiB, "B.MSI": MiB})
+)
+check("...and two of them, in either case, are still two",
+      measured.megabytes is None and "exactly one" in measured.reason)
+
+# What the packaging step leaves beside the artefact is not the artefact. WiX
+# writes a .wixpdb next to its .msi and a checksum is published with it; reading
+# the directory rather than the suffix would count those as artefacts and report
+# three where one is served.
+tree = packaging_tree(**{"a.msi": 12 * MiB})
+directory = tree / budgets.INSTALLER_ARTEFACT["windows"][0]
+(directory / "a.wixpdb").write_bytes(b"\0" * MiB)
+(directory / "a.msi.sha256").write_bytes(b"0" * 64)
+measured = budgets.measure_download_size("windows", tree)
+check("what the packaging step leaves beside the artefact is not the artefact",
+      measured.megabytes == 12.0 and measured.reason is None)
 
 measured = budgets.measure_download_size("windows", packaging_tree())
 check("a tier's host with no artefact measures nothing and says the installer is "
