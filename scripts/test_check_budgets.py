@@ -1539,6 +1539,28 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# The caller does not merely COMPARE the firing count -- it multiplies it by the
+# wake's bound and formats the product with `:g`, and a big enough int raises
+# there rather than converting. Returning an unbounded int moved the failure one
+# step on, into the message, which is the same destroyed verdict.
+#
+# The live spelling is the committed one: `processor_time_bound = 50` is a TOML
+# integer, so the product stays an exact int instead of saturating to inf. A
+# float bound never reached the raise, which is why the isolated case missed it.
+for label, period in (("just above the overflow guard", 1e-303),
+                      ("well below it", 1e-320),
+                      ("small but sane", 1e-8)):
+    b = budget_file(wake=[{
+        "name": "w", "period": period, "processor_time_bound": 50,
+        "requirement": "FR-001",
+    }])
+    gate = file_gate(b)
+    check(f"a wake period {label} reaches a verdict", gate.failed)
+    check(f"...rather than raising while formatting it: {label}", bool(gate.blocking))
+
+check("the firing count is bounded so the product stays formattable",
+      f"{50 * budgets.firings_in_window(1e-303):g}" != "")
+
 # A number a gate compares is a FINITE one. Every ordering comparison against
 # `nan` is False, so an entry written `baseline = nan` passed the clause that
 # refuses a negative baseline, passed the clause that refuses one above the

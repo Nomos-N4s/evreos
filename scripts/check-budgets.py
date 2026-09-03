@@ -468,10 +468,14 @@ def firings_in_window(period):
     after it, the last landing on its close. "Any 60-minute window" binds the
     worst one, so this is the count a wake's bound is multiplied by."""
     firings = WINDOW_SECONDS // period
-    if not math.isfinite(firings):
-        # A period small enough to overflow the division is not a schedule; the
-        # caller's cap refuses whatever this returns, and raising here destroyed
-        # the verdict instead of producing one.
+    if not math.isfinite(firings) or firings > sys.maxsize:
+        # A period this small is not a schedule. The caller does not merely
+        # COMPARE what this returns -- it multiplies it by the wake's bound and
+        # formats the product with `:g`, and a big enough int raises there
+        # rather than converting. Returning an unbounded int moved the failure
+        # from this line into that message, which is the same destroyed verdict
+        # one step further on; the clamp keeps the product inside float range,
+        # and the cap refuses it either way.
         return sys.maxsize
     return int(firings) + 1
 
