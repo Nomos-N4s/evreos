@@ -72,9 +72,17 @@ jobs:
         # does not hide another; the step fails at the end. An empty glob
         # passes, which is what let this harness land before its first check;
         # checks have since landed, so the step runs them.
+        #
+        # Both directories, as the pairing step above requires of both. That
+        # step alone would have demanded a suite for a new script in scripts/
+        # and left nothing running it -- half a rule, which is the shape this
+        # branch keeps finding. The two suites already there are also run by
+        # their own workflows, beside the check each gates, because a check
+        # whose tests fail has no verdict worth reading; running them here too
+        # costs seconds and is what makes the rule whole.
         run: |
           shopt -s nullglob
-          files=(scripts/checks/test_*.py)
+          files=(scripts/checks/test_*.py scripts/test_*.py)
           if [ "${#files[@]}" -eq 0 ]; then
             echo "No tests under scripts/checks/ yet."
           fi
