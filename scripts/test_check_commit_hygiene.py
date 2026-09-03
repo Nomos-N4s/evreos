@@ -570,9 +570,20 @@ def end_to_end(failures):
         # reached, so either of these could be deleted and the traceback would
         # come back with the suite green -- three guards landed together and one
         # case covered one of them.
+        # The third is the clause the reader was missing. FileNotFoundError and
+        # IsADirectoryError are the two OSErrors that were thought of; a path
+        # whose parent is an ordinary file arrives as NotADirectoryError, and
+        # produced a traceback and exit 1 where this reader promises a message
+        # and exit 2. The budget script's loader was fixed for exactly this and
+        # this one was not swept with it.
+        (pathlib.Path(tmp) / "a-file.txt").write_text("x", encoding="utf-8")
         for flag, target, fragment in (
             ("--commit-msg", str(pathlib.Path(tmp) / "not-here.txt"), "no such file"),
             ("--pr-body", tmp, "is a directory"),
+            ("--pr-title", str(pathlib.Path(tmp) / "a-file.txt" / "under.txt"),
+             "Not a directory"),
+            ("--commit-msg", str(pathlib.Path(tmp) / "a-file.txt" / "under.txt"),
+             "Not a directory"),
         ):
             arguments = ([flag, target] if flag == "--commit-msg"
                          else ["--range", f"{base}..HEAD", flag, target])

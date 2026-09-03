@@ -315,6 +315,15 @@ def read_utf8(path):
     the bytes are outside this repository's control; a commit message is a file
     a hook hands over. None of the three is a breach when it fails to decode --
     it is an input the check could not read, which is exit 2, not exit 1.
+
+    The last clause is the one this reader was missing. FileNotFoundError and
+    IsADirectoryError are the two OSErrors that were thought of, not the two
+    that exist: a path whose parent is an ordinary file arrives as
+    NotADirectoryError, a permission and a name too long for the filesystem as
+    others again, and each produced a traceback and exit 1 where this function
+    promises a message and exit 2. The budget script's own loader was fixed for
+    exactly this and this reader was not swept with it. The named clauses stay
+    ahead of the general one for their wording.
     """
     try:
         with open(path, encoding="utf-8") as handle:
@@ -325,6 +334,8 @@ def read_utf8(path):
         raise Unreadable(f"{path}: is a directory") from None
     except UnicodeDecodeError as error:
         raise Unreadable(f"{path}: not valid UTF-8 ({error.reason})") from None
+    except OSError as error:
+        raise Unreadable(f"{path}: {error.strerror or error}") from None
 
 
 def allowed_signer_entries(path):
