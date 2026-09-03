@@ -549,6 +549,23 @@ def end_to_end(failures):
             elif "Traceback" in result.stderr or "not valid UTF-8" not in result.stderr:
                 failed(f"an undecodable {name} did not say why it could not be read")
 
+        # The other two branches of the same reader. Only the decode branch was
+        # reached, so either of these could be deleted and the traceback would
+        # come back with the suite green -- three guards landed together and one
+        # case covered one of them.
+        for flag, target, fragment in (
+            ("--commit-msg", str(pathlib.Path(tmp) / "not-here.txt"), "no such file"),
+            ("--pr-body", tmp, "is a directory"),
+        ):
+            arguments = ([flag, target] if flag == "--commit-msg"
+                         else ["--range", f"{base}..HEAD", flag, target])
+            cases += 1
+            result = run_check(tmp, *arguments)
+            if result.returncode != 2 or fragment not in result.stderr:
+                failed(f"{flag} {fragment}: exited {result.returncode}, expected 2 saying so")
+            elif "Traceback" in result.stderr:
+                failed(f"{flag} {fragment} raised rather than reporting")
+
     return cases
 
 

@@ -1526,6 +1526,19 @@ result = subprocess.run(
 check("a budget file that does not exist exits 2",
       result.returncode == 2 and "no such file" in result.stderr)
 
+# A path that exists and is not a file. The three guards this commit added were
+# each one branch, and only two of them were reached by a case -- so the third
+# could be deleted and the traceback the commit exists to remove would come back
+# with the suite green.
+with tempfile.TemporaryDirectory() as directory:
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--budgets", directory],
+        capture_output=True, text=True,
+    )
+check("a directory given as the budget file exits 2",
+      result.returncode == 2 and "is a directory" in result.stderr
+      and "Traceback" not in result.stderr)
+
 # The unmeasured branch's own undeclared-tier case, which had no test at all:
 # reverting the branch left the whole suite green. An entry on a tier the file
 # does not declare is BLOCKING-unmeasured, where one on a declared-but-unpinned
