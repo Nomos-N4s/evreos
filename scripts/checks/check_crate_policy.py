@@ -237,12 +237,14 @@ def inherited_workspace_paths(root_manifest, member_manifest):
 
 def workspace_members(root, manifest, problems):
     """The member directories, resolved as Cargo resolves them."""
-    workspace = manifest.get("workspace")
+    workspace = as_table(manifest).get("workspace")
     if workspace is None:
         problems.append("Cargo.toml: no [workspace] table; there are no members to check")
         return []
 
-    excluded = {(root / path).resolve() for path in workspace.get("exclude", [])}
+    excluded = {(root / path).resolve()
+                for path in as_table(workspace).get("exclude", [])
+                if isinstance(path, str)}
     members = []
 
     def add(directory, origin):
@@ -279,7 +281,10 @@ def workspace_members(root, manifest, problems):
 
     if "package" in manifest:
         add(root, "Cargo.toml")
-    for pattern in workspace.get("members", []):
+    for pattern in as_table(workspace).get("members", []):
+        if not isinstance(pattern, str):
+            problems.append(f"Cargo.toml: members entry {pattern!r} is not a path")
+            continue
         if any(character in pattern for character in "*?["):
             matches = sorted(path for path in root.glob(pattern) if path.is_dir())
             if not matches:
@@ -366,7 +371,9 @@ def check_crate(root, crate_dir, allowlist, allowlist_name, problems):
         problems.append(f"{where}: {error}")
         return None, False
 
-    name = manifest.get("package", {}).get("name")
+    name = as_table(as_table(manifest).get("package")).get("name")
+    if not isinstance(name, str):
+        name = None
     if not name:
         problems.append(f"{where}: no [package] name")
         return None, False

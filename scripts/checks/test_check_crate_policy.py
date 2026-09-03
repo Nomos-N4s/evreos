@@ -533,6 +533,21 @@ for label, root_toml, member_toml in (
      BASE + '[lints]\nworkspace = true\n[bin]\npath = "src/main.rs"\n'),
     ("a [lib] path that is not a string", WORKSPACE_ROOT,
      BASE + "[lints]\nworkspace = true\n[lib]\npath = 7\n"),
+    # The commit that added the guard said "every reader below walks a manifest
+    # by chained get" and left two of them unguarded. Same slip, same outcome.
+    ("[[package]] written for [package]", WORKSPACE_ROOT,
+     '[[package]]\nname = "a"\n[lints]\nworkspace = true\n'),
+    ("a package key that is not a table", WORKSPACE_ROOT,
+     'package = "a"\n[lints]\nworkspace = true\n'),
+    ("[[workspace]] written for [workspace]",
+     '[[workspace]]\nmembers = ["crates/a"]\n', BASE + "[lints]\nworkspace = true\n"),
+    ("a members entry that is not a path",
+     '[workspace]\nmembers = [1]\n[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    ("an exclude entry that is not a path",
+     '[workspace]\nmembers = ["crates/a"]\nexclude = [7]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
 ):
     def build(r, root_toml=root_toml, member_toml=member_toml):
         (r / "Cargo.toml").write_text(root_toml)
