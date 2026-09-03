@@ -457,9 +457,16 @@ def prohibited_dependencies(metadata, denylist):
 def strip_comment(line, style):
     """The part of `line` before its comment, leaving string literals whole.
 
-    A URL is `//` inside a string, and an attribute is `#` outside one, so a
-    comment is recognised only outside quotes. `style` is "rust" for `//` and
-    `/* */`, "hash" for `#`, or None to leave the line as it is.
+    For `style` "hash" only, plus None to leave the line as it is. A hash
+    comment ends at the newline, so a line is the whole of its context and this
+    is exact.
+
+    Rust is NOT handled here and must not be. A Rust comment spans lines and a
+    line is not its context: reading one at a time ended a block comment where
+    it opened and handed the interior back as code, which refused compliant
+    crate roots. `code_lines` sends Rust to the shared scanner, which carries
+    that state -- and this function's Rust branches were deleted rather than
+    left as a second reading of Rust that nothing calls and someone could.
     """
     if style is None:
         return line
@@ -478,27 +485,9 @@ def strip_comment(line, style):
                 quote = None
             i += 1
             continue
-        if ch == '"' or (ch == "'" and style == "hash"):
+        if ch == '"' or ch == "'":
             quote = ch
-        elif ch == "'" and style == "rust":
-            # A char literal, `'x'` or `'\n'`; a lifetime is left alone.
-            if i + 2 < n and line[i + 2] == "'":
-                out.append(line[i:i + 3])
-                i += 3
-                continue
-            if i + 3 < n and line[i + 1] == "\\" and line[i + 3] == "'":
-                out.append(line[i:i + 4])
-                i += 4
-                continue
-        elif style == "rust" and line.startswith("//", i):
-            break
-        elif style == "rust" and line.startswith("/*", i):
-            end = line.find("*/", i + 2)
-            if end == -1:
-                break
-            i = end + 2
-            continue
-        elif style == "hash" and ch == "#":
+        elif line.startswith("#", i):
             break
         out.append(ch)
         i += 1

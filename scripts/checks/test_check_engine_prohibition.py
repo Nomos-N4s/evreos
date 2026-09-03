@@ -771,9 +771,9 @@ for shared in ("MicrosoftEdgeWebview2Setup.exe", "MicrosoftEdgeWebView2RuntimeIn
 # --- comment stripping --------------------------------------------------------
 
 check("a URL inside a string survives Rust comment stripping",
-      engine.strip_comment('let u = "https://a/b.zip"; // c', "rust") == 'let u = "https://a/b.zip"; ')
-check("a block comment is removed", engine.strip_comment("a /* chromium.zip */ b", "rust") == "a  b")
-check("a char literal does not open a string", engine.strip_comment("let c = '\"'; // x", "rust") == "let c = '\"'; ")
+      engine.strip_comment('url = "https://a/b.zip" # c', "hash") == 'url = "https://a/b.zip" ')
+check("a quote in a hash file opens a string",
+      engine.strip_comment("echo 'a # b' # note", "hash") == "echo 'a # b' ")
 check("a hash inside quotes survives hash stripping",
       engine.strip_comment('url = "https://x/#frag" # note', "hash") == 'url = "https://x/#frag" ')
 check("a shebang is a comment", engine.strip_comment("#!/bin/sh", "hash") == "")
