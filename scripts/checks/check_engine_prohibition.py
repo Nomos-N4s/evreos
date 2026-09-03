@@ -487,7 +487,12 @@ def strip_comment(line, style):
             continue
         if ch == '"' or ch == "'":
             quote = ch
-        elif line.startswith("#", i):
+        elif line.startswith("#", i) and (i == 0 or line[i - 1] in " \t"):
+            # `#` opens a comment at a word start and nowhere else, in sh and in
+            # YAML alike. Cutting at every unquoted one truncated a URL with a
+            # fragment -- `https://x/a#b/chromium.zip` -- and a `$#` test on a
+            # line that went on to select nightly, so the verdict turned on
+            # whether the author had quoted the argument.
             break
         out.append(ch)
         i += 1

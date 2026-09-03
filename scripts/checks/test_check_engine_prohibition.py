@@ -840,6 +840,25 @@ check("a URL inside a string survives Rust comment stripping",
       engine.strip_comment('url = "https://a/b.zip" # c', "hash") == 'url = "https://a/b.zip" ')
 check("a quote in a hash file opens a string",
       engine.strip_comment("echo 'a # b' # note", "hash") == "echo 'a # b' ")
+# `#` opens a comment at a word start and nowhere else, in sh and in YAML alike.
+# Cutting at every unquoted one truncated a URL fragment and a `$#` test, so the
+# verdict turned on whether the author had quoted the argument.
+check("a hash mid-word is not a comment",
+      engine.strip_comment("curl -O https://x/a#b/chromium.zip", "hash")
+      == "curl -O https://x/a#b/chromium.zip")
+check("a shell parameter count is not a comment",
+      engine.strip_comment("if [ $# -gt 0 ]; then rustup default nightly; fi", "hash")
+      == "if [ $# -gt 0 ]; then rustup default nightly; fi")
+check("...while a hash after whitespace still is",
+      engine.strip_comment("cargo build # note", "hash") == "cargo build ")
+check("an unwrapped acquisition with a fragment in its URL is caught",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/build/fetch.sh",
+          "curl -O https://x/a#b/chromium.zip\n")))
+check("nightly behind a shell parameter count is caught",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: |\n'
+             '          if [ $# -gt 0 ]; then rustup default nightly; fi\n')))
 check("a hash inside quotes survives hash stripping",
       engine.strip_comment('url = "https://x/#frag" # note', "hash") == 'url = "https://x/#frag" ')
 check("a shebang is a comment", engine.strip_comment("#!/bin/sh", "hash") == "")
