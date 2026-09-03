@@ -285,6 +285,19 @@ def rs(root, text, name="src/lib.rs"):
 
 
 check("#![feature(...)] fails", nightly_problems(lambda r: rs(r, "#![feature(specialization)]\n")))
+# rustc reads `#! [feature(x)]` as the same attribute it reads `#![feature(x)]`
+# as -- verified against the compiler, which rejects both on stable with the
+# same E0554. Requiring them adjacent let one space put the release path on
+# nightly unseen, and the crate policy's mirror of this pattern refused a forbid
+# rustc honours. An OUTER attribute is still not one.
+check("a feature attribute with a space after #! fails",
+      nightly_problems(lambda r: rs(r, "#! [feature(specialization)]\n")))
+check("...with several spaces too",
+      nightly_problems(lambda r: rs(r, "#!  [feature(specialization)]\n")))
+check("...and behind cfg_attr as well",
+      nightly_problems(lambda r: rs(r, "#! [cfg_attr(docsrs, feature(doc_cfg))]\n")))
+check("an outer attribute with a space is still not a crate attribute",
+      nightly_problems(lambda r: rs(r, "#  [wrapper(feature(A))]\nstruct T;\n")) == [])
 check("a feature attribute behind cfg_attr fails",
       nightly_problems(lambda r: rs(r, "#![cfg_attr(docsrs, feature(doc_cfg))]\n")))
 check("a feature attribute in a test file fails, since the toolchain is one per workspace",
@@ -392,6 +405,21 @@ for label, text in (
 # Keying on the key alone let `run: >` put the release path on nightly and pass
 # -- in the spelling this repository's own build workflow uses to wrap a long
 # command.
+# A block scalar header carries an indentation indicator and a chomping
+# indicator IN EITHER ORDER -- YAML 1.2 allows `>2-` exactly as it allows `>-2`,
+# and PyYAML folds both identically. Accepting one order only left `run: >2-`
+# unfolded, which is the evasion the folding exists to close.
+for header in (">2", ">-2", ">+2", ">2-", ">2+", ">+"):
+    check(f"nightly behind a `{header}` scalar still fails",
+          nightly_problems(lambda r, header=header: wf(
+              r, f'jobs:\n  b:\n    steps:\n      - run: {header}\n'
+                 '          rustup default\n          nightly\n')))
+# A malformed header is not a header, so the body keeps its lines.
+check("a doubled chomping indicator is not a block scalar",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: >--\n'
+             '          rustup default\n          nightly\n')) == [])
+
 for style in (">", ">-"):
     check(f"nightly behind a folded script body ({style}) still fails",
           nightly_problems(lambda r, style=style: wf(

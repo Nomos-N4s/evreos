@@ -164,7 +164,10 @@ UNSTABLE_VALUE = re.compile(r"(?<![\w-])(?:nightly|beta)\b", re.IGNORECASE)
 # which is the standard way a crate puts nightly features behind a Cargo
 # feature and so the commonest real gate there is. The `;` exclusion stays:
 # no statement terminator falls inside one attribute head.
-FEATURE_ATTRIBUTE = re.compile(r'#!\[[^\];]*\bfeature\s*\(')
+# `#!` and `[` may be separated by whitespace: rustc reads `#! [feature(x)]` as
+# the same attribute it reads `#![feature(x)]` as, verified against the compiler.
+# Requiring them adjacent let one space put the release path on nightly unseen.
+FEATURE_ATTRIBUTE = re.compile(r'#![ \t]*\[[^\];]*\bfeature\s*\(')
 
 
 # What a workflow does, on a command line or in a variable, to put the release
@@ -702,7 +705,14 @@ def check_manifest_features(root, path, problems):
 
 # A block scalar header -- `key: |`, `key: >-`, `key: |+2` -- whose body is the
 # more-indented lines beneath it.
-BLOCK_SCALAR = re.compile(r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:\s*([|>])[-+]?[0-9]*\s*$""")
+# The header tail is an optional indentation indicator and an optional chomping
+# indicator, IN EITHER ORDER -- YAML 1.2 allows `>2-` exactly as it allows `>-2`,
+# and PyYAML folds both identically. Accepting only one order left `run: >2-`
+# unfolded, which is the same evasion the folding exists to close.
+BLOCK_SCALAR = re.compile(
+    r"""^(\s*)(?:-\s+)?["']?([A-Za-z_][\w.-]*)["']?\s*:\s*([|>])"""
+    r"""(?:[0-9][-+]?|[-+][0-9]?)?\s*$"""
+)
 # Keys whose block body is a SCRIPT: each line is its own command. That is true
 # of a LITERAL body, `|`, and only of a literal body -- YAML folds a `>` body
 # into one line itself, before the shell ever sees it, so declining to fold one
