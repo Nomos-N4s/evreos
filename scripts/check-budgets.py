@@ -118,6 +118,7 @@ reports.
 import argparse
 import collections
 import datetime
+import math
 import re
 import sys
 import tomllib
@@ -209,9 +210,23 @@ WINDOW_SECONDS = 3600
 
 
 def is_number(value):
-    """An int or float. A bool is neither: TOML has no way to write one where a
-    number is meant, and Python would otherwise accept `true` as 1."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool)
+    """A FINITE int or float, which is what every gate here compares.
+
+    A bool is neither: TOML has no way to write one where a number is meant,
+    and Python would otherwise accept `true` as 1.
+
+    `nan` and `inf` are neither, and that is the point rather than a detail.
+    Every ordering comparison against `nan` is False, so an entry written
+    `baseline = nan` passed the clause that refuses a negative baseline, passed
+    the clause that refuses a baseline above the figure, and then made its
+    regression gate unreachable -- the exact defect a negative baseline was
+    fixed for, in a spelling nobody would notice. `inf` does the same to a
+    figure. A number that disables the gate it is written into is not a number
+    this file can carry.
+    """
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return False
+    return math.isfinite(value)
 
 
 def is_positive_number(value):
@@ -452,7 +467,13 @@ def firings_in_window(period):
     60-minute window can hold: one at the window's opening and one every period
     after it, the last landing on its close. "Any 60-minute window" binds the
     worst one, so this is the count a wake's bound is multiplied by."""
-    return int(WINDOW_SECONDS // period) + 1
+    firings = WINDOW_SECONDS // period
+    if not math.isfinite(firings):
+        # A period small enough to overflow the division is not a schedule; the
+        # caller's cap refuses whatever this returns, and raising here destroyed
+        # the verdict instead of producing one.
+        return sys.maxsize
+    return int(firings) + 1
 
 
 def declared_entries(budgets):
@@ -993,6 +1014,14 @@ def run_gates(budgets, measurements, host=None):
 
         # The regression gate compares one machine against itself, so it blocks
         # regardless of whether the runner has been named.
+        if not is_number(tolerance):
+            # The budget-file gate reports it, at the clause that guards this
+            # same field. Reading past it here destroyed the whole run's output,
+            # including that verdict -- the failure the identity guard above was
+            # written to end, on the next field down. The guard sits HERE and
+            # not at the top of the loop, so the absolute gate above still
+            # reports its breach: a tolerance says nothing about a ceiling.
+            continue
         allowed = baseline * (1 + tolerance / 100.0)
         if baseline > 0 and measured > allowed:
             regression.block(

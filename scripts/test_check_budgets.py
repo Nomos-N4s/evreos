@@ -1539,6 +1539,54 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# A number a gate compares is a FINITE one. Every ordering comparison against
+# `nan` is False, so an entry written `baseline = nan` passed the clause that
+# refuses a negative baseline, passed the clause that refuses one above the
+# figure, and then made its own regression gate unreachable -- which is the
+# defect a NEGATIVE baseline was fixed for, in a spelling nobody would notice.
+check("nan is not a number a gate can compare", not budgets.is_number(float("nan")))
+check("inf is not either", not budgets.is_number(float("inf")))
+check("-inf is not either", not budgets.is_number(float("-inf")))
+check("a finite float still is", budgets.is_number(1.5) and budgets.is_number(0))
+
+for label, field, value in (
+    ("a nan figure", "figure", float("nan")),
+    ("an inf figure", "figure", float("inf")),
+    ("a nan baseline", "baseline", float("nan")),
+    ("a nan tolerance", "tolerance_pct", float("nan")),
+):
+    b = budget_file(entry={field: value})
+    gate = file_gate(b)
+    check(f"{label} fails the budget-file gate", gate.failed)
+
+# ...and the gate it would have disabled still blocks, because the entry never
+# reaches it.
+b = single_entry(entry={"figure": 20, "baseline": 1.0, "tolerance_pct": float("nan")})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 500.0}
+)
+check("an entry with a nan tolerance is not compared at all",
+      not regression.failed and not regression.blocking)
+check("...and its absolute breach is still reported", absolute.failed)
+
+# `run_gates` reads `tolerance_pct` three lines below the identity guard, and
+# read it unguarded: a quoted number -- the ordinary TOML slip -- raised, and
+# the traceback destroyed the verdict the budget-file gate had already written
+# about that very entry.
+b = single_entry(entry={"tolerance_pct": "0.0"})
+absolute, regression, _ = budgets.run_gates(
+    b, {("SC-001", "download size", "windows"): 500.0}
+)
+check("a tolerance that is not a number is skipped, not raised",
+      not regression.failed)
+
+# A period small enough to overflow the division is not a schedule. Raising
+# there destroyed the verdict rather than producing one.
+check("an absurdly small wake period returns a count rather than raising",
+      budgets.firings_in_window(1e-320) > 0)
+check("...and a sane period is unchanged",
+      budgets.firings_in_window(1.0) == 3601 and budgets.firings_in_window(3600) == 2)
+
 # The identity triple is read by three functions. Two guarded it in almost the
 # same words; the third did not, and `main` calls it unconditionally after the
 # gate that reports the defect -- so a traceback replaced the whole run's output,
