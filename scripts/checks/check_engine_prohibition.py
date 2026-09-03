@@ -745,6 +745,10 @@ def logical_lines(lines):
       the body is a sequence of commands and joining them would put the words of
       one beside the words of another. Those keep their lines and get the
       backslash rule instead.
+    - A flow collection continues until its bracket closes, whatever line that
+      falls on. `with: { toolchain: nightly` and a `}` on the next line is one
+      mapping to YAML and was two lines to every reading here, so the pair the
+      first line opens was never completed and the channel was never seen.
 
     Each result carries the number of the physical line it opens on, so a report
     still names where a reader would look.
@@ -783,7 +787,7 @@ def logical_lines(lines):
             continue
         out.append((number, text))
         i += 1
-    return fold_backslashes(out)
+    return fold_flow(fold_backslashes(out))
 
 
 def fold_backslashes(lines):
@@ -805,8 +809,9 @@ def fold_backslashes(lines):
     return out
 
 
-def flow_pairs(text):
-    """The `key: value` pairs of every flow collection on one line.
+def flow_scan(text):
+    """The `key: value` pairs of every flow collection in one line, and the
+    bracket depth left open at its end.
 
     YAML writes a mapping two ways and Actions reads both: `with:` with an
     indented `toolchain:` beneath it, or `with: { toolchain: nightly }` all on
@@ -823,6 +828,12 @@ def flow_pairs(text):
     `rust: [stable, nightly]` is one pair and not two valueless items. Pairs at
     depth zero are left out on purpose: those are the block form, which the
     caller has already judged.
+
+    Returns the depth still open at the end of the text alongside the pairs.
+    `fold_flow` needs exactly that number and nothing else, and taking it from
+    this scan rather than a second one keeps the bracket and quote rules in a
+    single place -- the third time on this branch that two readers of one thing
+    disagreed and the weaker one decided a verdict.
     """
     pairs = []
     stack = []
@@ -830,6 +841,11 @@ def flow_pairs(text):
     quote = None
     start = None  # where the element being read begins
     colon = None  # where its key ends, once a separating colon is seen
+    # Whether a value may begin here, which at depth zero is the only place a
+    # bracket opens a flow collection. `run: echo {` is a plain scalar with a
+    # brace in it -- to YAML and to the shell alike -- and reading it as an
+    # opened mapping would fold every following line into it and lose them.
+    may_open = True
     i = 0
     while i < len(text):
         ch = text[i]
@@ -844,8 +860,9 @@ def flow_pairs(text):
             i += 1
         elif ch in "\"'":
             quote = ch
+            may_open = False
             i += 1
-        elif ch in "{[":
+        elif ch in "{[" and (depth or may_open):
             stack.append((start, colon))
             depth += 1
             start, colon = i + 1, None
@@ -875,12 +892,63 @@ def flow_pairs(text):
             # second one -- a plain scalar may not contain `: `, a quoted one
             # is stepped over, and a nested collection gets its own depth --
             # so the suite cannot tell that guard from its absence. It is here
-            # because it states the rule, not because a case pins it.
+            # because it states the rule, not because a case pins it. Clearing
+            # `may_open` when a quoted scalar opens is the same: after a quoted
+            # value nothing may open, and no valid YAML puts a bracket there --
+            # what it buys is on shell text folded out of a script body, which
+            # is not YAML and where a stray brace would otherwise read as a
+            # collection.
             colon = i
             i += 1
         else:
+            if not depth:
+                # Where a value may begin, outside any collection: after a key's
+                # colon, after the dash that heads a block sequence item, and at
+                # the head of the line -- with the spaces between them. A plain
+                # scalar's first character ends it, and a quoted scalar IS the
+                # value, so nothing after it opens anything either.
+                if ch == ":" and text[i + 1:i + 2] in (" ", "\t", ""):
+                    may_open = True
+                elif ch in " \t":
+                    pass
+                elif ch == "-" and may_open and text[i + 1:i + 2] in (" ", "\t"):
+                    pass
+                else:
+                    may_open = False
             i += 1
-    return [(key.strip().strip("\"'"), value) for key, value in pairs]
+    if colon is not None:
+        # A collection still open at the end of the text. That is malformed
+        # YAML and the workflow would not load -- but a reading that goes quiet
+        # on a malformed file is the wrong direction for a check whose whole
+        # job is to refuse something, so the pair it was in the middle of is
+        # reported rather than dropped. `colon` can only be set inside a
+        # collection, so a well-formed line never reaches this.
+        pairs.append((text[start:colon], text[colon + 1:]))
+    return [(key.strip().strip("\"'"), value) for key, value in pairs], depth
+
+
+def flow_pairs(text):
+    """The pairs of `flow_scan`, for a caller that does not need the depth."""
+    return flow_scan(text)[0]
+
+
+def fold_flow(lines):
+    """`lines` with a flow collection that spans lines joined onto the line it
+    opens on. The third continuation, on the same terms as the other two: the
+    line reported is the one the collection opens on."""
+    out = []
+    pending = None
+    for number, text in lines:
+        if pending is not None:
+            number, text = pending[0], f"{pending[1]} {text.strip()}"
+            pending = None
+        if flow_scan(text)[1] > 0:
+            pending = (number, text.rstrip())
+            continue
+        out.append((number, text))
+    if pending is not None:
+        out.append(pending)
+    return out
 
 
 def workflow_nightly_lines(lines):

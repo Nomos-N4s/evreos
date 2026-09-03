@@ -577,6 +577,52 @@ check("an escaped quote does not end a double-quoted flow scalar",
 # nightly.
 check("a backslash does not escape inside a single-quoted flow scalar",
       nightly_problems(lambda r: wf(r, "with: { dir: 'C:\\', toolchain: nightly }\n")))
+# A flow collection closes on its bracket, not at the end of a line, so every
+# form below is one mapping to YAML and was two or more readings here -- the
+# pair the first line opens never completed, and the channel was never seen.
+# Folding them is the third continuation, beside the shell backslash and the
+# block scalar. Each fixture is what PyYAML makes of it.
+check("a flow mapping closing on the next line fails",
+      nightly_problems(lambda r: wf(r, "with: { toolchain: nightly\n      }\n")))
+check("a flow mapping wrapped after a comma fails",
+      nightly_problems(lambda r: wf(r, "with: { toolchain: nightly,\n        os: windows-latest }\n")))
+check("a flow sequence wrapped mid-list fails",
+      nightly_problems(lambda r: wf(r, "matrix: { rust: [stable,\n                 nightly] }\n")))
+check("a flow mapping inside a wrapped flow sequence fails",
+      nightly_problems(lambda r: wf(r, "with: [ { toolchain: nightly\n} ]\n")))
+check("a wrapped flow mapping on stable stays clean",
+      nightly_problems(lambda r: wf(r, "with: { toolchain: stable\n      }\n")) == [])
+# Where a value may begin is where a bracket opens a collection: after a key's
+# colon, after the dash heading a sequence item, and at the head of a line.
+check("a flow mapping as a block sequence item fails",
+      nightly_problems(lambda r: wf(r, "- { toolchain: nightly }\n")))
+check("a flow mapping opening on the line below its key fails",
+      nightly_problems(lambda r: wf(r, "with:\n  { toolchain: nightly }\n")))
+# And where a value has already begun, a brace is a character in it. This is
+# what bounds the folding: `run: echo {` is a plain scalar to YAML and to the
+# shell alike, and reading it as an opened mapping would swallow every line
+# after it -- including the one that names the channel.
+check("an unbalanced brace in a script line does not swallow what follows",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: echo { unbalanced\n      - matrix:\n"
+             "          rust:\n            - nightly\n")))
+check("a brace after the value has begun opens nothing",
+      nightly_problems(lambda r: wf(r, "run: cmd --set x={toolchain: nightly}\n")) == [])
+check("an expression in a condition is not a flow mapping",
+      nightly_problems(lambda r: wf(r, "if: ${{ matrix.rust == 'nightly' }}\n")) == [])
+# A collection never closed is malformed YAML and the workflow would not load,
+# so nothing here can reach a release path. It is pinned all the same, because a
+# check whose job is to refuse something must not go quiet on a file it cannot
+# parse: the first case needs BOTH the fold to hand back the line it could not
+# complete and the scan to report the pair it was half way through, and fails if
+# either is dropped. The second is a `{` that opens nothing, the value having
+# already begun, so the line is never folded and is read as it stands.
+check("an unclosed flow mapping naming nightly is still reported",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with: { toolchain: nightly\n")))
+check("an unclosed line is still read for its command",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: cargo +nightly build --cfg {\n")))
 # Nightly behaviour under a stable toolchain.
 # Each of the five below was the sole exercise of a branch nothing pinned:
 # mutating that branch left the suite green.
