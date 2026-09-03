@@ -953,6 +953,31 @@ check("a source directory named in upper case is still on the runtime path",
 # The workspace fixture already carries `src/`, so this is the case where both
 # spellings stand side by side -- which only the case-sensitive runner can hold,
 # and which answering with the first match would have left half-read.
+# Cargo writes its build output to `target/`, and on the case-insensitive
+# filesystems the release runners use, `TARGET/` is that same directory. The
+# nightly clause reads every .rs file under a member, skipping that one
+# directory, so not skipping it hands the clause every vendored crate source
+# Cargo has unpacked there -- and a registry holds plenty that need nightly.
+check("Cargo's build output is not scanned whatever the case of its name",
+      nightly_problems(lambda r: write(
+          r, "crates/evreos-shell/TARGET/debug/vendor.rs",
+          "#![feature(specialization)]\n")) == [])
+check("...while the same file outside it is still scanned",
+      nightly_problems(lambda r: write(
+          r, "crates/evreos-shell/src/vendor.rs", "#![feature(specialization)]\n")))
+# The acquisition clause is NOT affected and no case here pretends otherwise: it
+# descends `src/` and `build/` rather than the crate directory, so Cargo's
+# output is outside what it reads and always was. The first version of this
+# block asserted it too, and passed under the very mutation it existed to catch.
+check("the acquisition clause reads the runtime path, not the crate directory",
+      acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/TARGET/debug/vendor.rs",
+          'fn get() { download("https://example.com/chromium.tar.gz"); }\n')) == []
+      and acquisition_problems(lambda r: write(
+          r, "crates/evreos-shell/src/vendor.rs",
+          'fn get() { download("https://example.com/chromium.tar.gz"); }\n')))
+
+
 def both_source_directories(root):
     write(root, "crates/evreos-shell/SRC/fetch.rs",
           'fn get() { download("https://example.com/cef.zip"); }\n')

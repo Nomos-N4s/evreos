@@ -72,6 +72,18 @@ check("a file under such a directory still is",
       casefs.is_rust_source(Path("src/vendor.rs/mod.rs")))
 
 
+# --- folded_in ----------------------------------------------------------------
+
+check("a name is in the set under its own spelling", casefs.folded_in("target", {"target"}))
+check("...and under one that differs only in case", casefs.folded_in("TARGET", {"target"}))
+check("...and where the SET carries the other case", casefs.folded_in("target", {"TARGET"}))
+check("a name that differs otherwise is not in it",
+      not casefs.folded_in("targets", {"target"}))
+check("an empty set holds nothing", not casefs.folded_in("target", set()))
+check("a tuple is accepted where a set is",
+      casefs.folded_in("Justfile", ("makefile", "justfile")))
+
+
 # --- named_files --------------------------------------------------------------
 
 handle, root = tree("main.rs")

@@ -37,6 +37,16 @@ def is_rust_source(path):
     return str(path).lower().endswith(RUST_SUFFIX)
 
 
+def folded_in(name, names):
+    """Whether `name` is one of `names`, compared with case folded.
+
+    The set-membership spelling of the same question. `skip={"target"}` did not
+    skip `TARGET/`, so Cargo's whole build output -- every vendored crate source
+    it holds -- was read by two clauses that report on what they find there.
+    """
+    return name.lower() in {each.lower() for each in names}
+
+
 def named_files(directory, name):
     """Every file in `directory` called `name`, matched with case folded.
 

@@ -311,7 +311,9 @@ class CheckError(Exception):
 # quote inside `'"'` or behind a backslash desynchronised it -- rejecting
 # compliant crate roots AND blanking away a genuine `feature(...)` gate.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from casefs import is_rust_source, named_dirs, named_files, suffix_of  # noqa: E402
+from casefs import (  # noqa: E402
+    folded_in, is_rust_source, named_dirs, named_files, suffix_of,
+)
 from rustlex import strip_non_code  # noqa: E402
 
 
@@ -533,7 +535,7 @@ def read_text(path):
 
 def comment_style(path):
     path = Path(path)
-    if path.name.lower() in HASH_NAMED:
+    if folded_in(path.name, HASH_NAMED):
         return "hash"
     return COMMENT_STYLE.get(suffix_of(path))
 
@@ -593,13 +595,25 @@ def workflow_files(root):
 
 
 def files_under(directory, skip=()):
-    """Every regular file under `directory`, skipping the named top-level dirs."""
+    """Every regular file under `directory`, skipping the named top-level dirs.
+
+    The skip is matched with case folded, like every other name here. Cargo
+    writes its build output to `target/`, and on the case-insensitive
+    filesystems the release runners use, `TARGET/` is that same directory --
+    which a raw comparison did not skip. Every vendored crate source Cargo has
+    unpacked there was then scanned for feature attributes, and a registry holds
+    plenty that need nightly.
+
+    Only the nightly caller passes a skip. The acquisition clause descends
+    `src/` and `build/` rather than the crate directory, so Cargo's output is
+    outside what it reads and needs no skipping.
+    """
     found = []
     for path in sorted(directory.rglob("*")):
         if not path.is_file():
             continue
         parts = path.relative_to(directory).parts
-        if parts[0] in skip:
+        if folded_in(parts[0], skip):
             continue
         found.append(path)
     return found
