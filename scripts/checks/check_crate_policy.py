@@ -181,7 +181,7 @@ def lifts_forbid(manifest):
 # path so this file works both when run directly and when a test loads it
 # through importlib from another directory.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rustlex import strip_non_code  # noqa: E402
+from rustlex import is_rust_source, strip_non_code  # noqa: E402
 
 
 def resolved(base, path):
@@ -383,13 +383,27 @@ def crate_roots(crate_dir, manifest):
     The conventional two, `src/lib.rs` and `src/main.rs`, plus the auto-discovered
     binaries under `src/bin/` and any `[lib]` or `[[bin]]` path the manifest
     declares. Each is its own crate, so a forbid in one does not reach another.
+
+    The `src/bin/` listing folds case, because the two platforms this project
+    ships to have a case-insensitive filesystem by default and `src/bin/TOOL.RS`
+    is an auto-discovered binary Cargo compiles there. A `*.rs` glob missed it,
+    so a crate root with no forbid at all, holding `unsafe`, was never among the
+    roots this check reads -- blocker 8 of this branch, reached through a
+    filename rather than through a scanner.
     """
     lib = as_table(as_table(manifest).get("lib"))
     path = lib.get("path")
     candidates = [crate_dir / (path if isinstance(path, str) else "src/lib.rs"),
                   crate_dir / "src" / "main.rs"]
-    candidates += sorted((crate_dir / "src" / "bin").glob("*.rs"))
-    candidates += sorted((crate_dir / "src" / "bin").glob("*/main.rs"))
+    bin_dir = crate_dir / "src" / "bin"
+    if bin_dir.is_dir():
+        candidates += sorted(
+            path for path in bin_dir.iterdir()
+            if path.is_file() and is_rust_source(path)
+        )
+        candidates += sorted(
+            path / "main.rs" for path in bin_dir.iterdir() if path.is_dir()
+        )
     # `[bin]` written for `[[bin]]` is the ordinary slip, and it makes this a
     # table rather than a list of them. Cargo says "invalid type: map, expected
     # a sequence"; this took the string indices and raised.

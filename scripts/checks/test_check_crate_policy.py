@@ -152,6 +152,29 @@ problems, _, _ = scenario(
 )
 check("a src/bin/<name>/main.rs root is found", mentions(problems, "src/bin/tool/main.rs"))
 
+# Both platforms this project ships to have a case-insensitive filesystem by
+# default -- NTFS on tier 1, APFS on tier 2 -- so `src/bin/TOOL.RS` is an
+# auto-discovered binary Cargo compiles there. A `*.rs` glob did not list it,
+# and a crate root with NO forbid at all, holding `unsafe`, was never read:
+# blocker 8 of this branch, reached through a filename.
+problems, _, _ = scenario(
+    [crate("a", files={"src/main.rs": MAIN,
+                       "src/bin/TOOL.RS": "fn main() { unsafe { } }\n"})]
+)
+check("a src/bin root whose suffix is upper case is still a crate root",
+      mentions(problems, "crates/a/src/bin/TOOL.RS"))
+
+# And what is not a Rust file there is not a crate root. Cargo compiles nothing
+# from a note left beside a binary, so reading the directory rather than its
+# Rust files would report a crate root that does not exist.
+problems, _, _ = scenario(
+    [crate("a", files={"src/main.rs": MAIN,
+                       "src/bin/tool.rs": MAIN,
+                       "src/bin/README.md": "the tools in this directory\n"})]
+)
+check("a note beside a binary is not a crate root",
+      not mentions(problems, "README.md") and problems == [])
+
 problems, _, _ = scenario(
     [crate("a", extra='[[bin]]\nname = "cli"\npath = "src/cli.rs"\n',
            files={"src/lib.rs": LIB, "src/cli.rs": "fn main() {}\n"})]

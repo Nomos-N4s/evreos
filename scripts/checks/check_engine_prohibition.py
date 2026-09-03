@@ -311,7 +311,7 @@ class CheckError(Exception):
 # quote inside `'"'` or behind a backslash desynchronised it -- rejecting
 # compliant crate roots AND blanking away a genuine `feature(...)` gate.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from rustlex import strip_non_code  # noqa: E402
+from rustlex import is_rust_source, strip_non_code  # noqa: E402
 
 
 def relative(root, path):
@@ -1201,7 +1201,7 @@ def scan_nightly(root, member_dirs):
         read += 1
     for directory in member_dirs:
         for path in files_under(Path(directory), skip={"target"}):
-            if suffix_of(path) == ".rs":
+            if is_rust_source(path):
                 check_rust_source_nightly(root, path, problems)
                 read += 1
     return problems, read
