@@ -423,11 +423,18 @@ for header in (">2", ">-2", ">+2", ">2-", ">2+", ">+"):
           nightly_problems(lambda r, header=header: wf(
               r, f'jobs:\n  b:\n    steps:\n      - run: {header}\n'
                  '          rustup default\n          nightly\n')))
-# A malformed header is not a header, so the body keeps its lines.
-check("a doubled chomping indicator is not a block scalar",
+# A malformed header is not a header, so the body keeps its lines -- and those
+# lines are then read as an ordinary value continuation, which is what they look
+# like. PyYAML refuses `>--` outright, so this workflow does not load and cannot
+# put anything on a release path either way; reporting it is the direction a
+# check whose job is to refuse something should err in, and matches how an
+# unclosed flow collection is treated below. This case previously asserted the
+# opposite, on the ground that the body keeps its lines; it does, and each of
+# them is still read.
+check("a doubled chomping indicator is not a block scalar, and the lines are still read",
       nightly_problems(lambda r: wf(
           r, 'jobs:\n  b:\n    steps:\n      - run: >--\n'
-             '          rustup default\n          nightly\n')) == [])
+             '          rustup default\n          nightly\n')))
 
 for style in (">", ">-"):
     check(f"nightly behind a folded script body ({style}) still fails",
@@ -623,6 +630,86 @@ check("an unclosed flow mapping naming nightly is still reported",
 check("an unclosed line is still read for its command",
       nightly_problems(lambda r: wf(
           r, "jobs:\n  b:\n    steps:\n      - run: cargo +nightly build --cfg {\n")))
+# A value need not sit on its key's line. YAML lets a plain or a quoted scalar
+# run across lines, and lets a key's whole value sit below it -- all ordinary,
+# all naming the channel, and all invisible to a walk that reads a key line or a
+# sequence item and nothing else. PyYAML reads each fixture below as the single
+# value its name claims.
+check("a plain scalar continued on the next line fails",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: rustup default\n          nightly\n")))
+check("a quoted scalar continued on the next line fails",
+      nightly_problems(lambda r: wf(
+          r, 'jobs:\n  b:\n    steps:\n      - run: "rustup default\n          nightly"\n')))
+check("a continuation carrying further arguments fails",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: rustup toolchain install\n"
+             "          nightly --profile minimal\n")))
+check("a key whose value sits on the line below fails",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain:\n"
+             "            nightly\n")))
+check("...and the same shape on stable stays clean",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain:\n"
+             "            stable\n")) == [])
+check("a continuation naming stable stays clean",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: rustup default\n          stable\n")) == [])
+# A script body is shell, not YAML: a deeper line there is an indented command,
+# not the rest of a value, and joining the two would put the words of one beside
+# the words of the other -- which is the whole reason the block-scalar fold
+# carves script keys out. Without that exemption the two lines below join into
+# one holding both `cargo` and `-Z`, and a tar flag reads as a cargo flag.
+check("an indented command in a script body is not a continuation",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: |\n          echo cargo\n"
+             "            tar -Zcf archive.tgz src\n")) == [])
+check("...while a nightly selection inside one is still caught",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: |\n          if [ -n \"$X\" ]; then\n"
+             "            rustup default nightly\n          fi\n")))
+# And ordinary nesting is not a continuation: every line below names a key or
+# heads a sequence item, so nothing folds and the block-list reading still
+# decides the verdict.
+check("a nested block list is not folded away",
+      nightly_problems(lambda r: wf(
+          r, "strategy:\n  matrix:\n    rust:\n      - stable\n      - 1.94.1\n")) == [])
+check("...and still fails when one of its items is nightly",
+      nightly_problems(lambda r: wf(
+          r, "strategy:\n  matrix:\n    rust:\n      - stable\n      - nightly\n")))
+# A sequence item is a sibling of the item above it, not a continuation of it,
+# and the report says so: the line named is the item holding the channel, not
+# the key three lines above. Folding items into their key would still fail the
+# workflow and would send a reader to the wrong line.
+check("a block-list item is reported at its own line",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain:\n"
+             "            - stable\n            - nightly\n"))[0].split(":")[1] == "7")
+# Depth is what separates a continuation from a sibling. The two lines below are
+# malformed YAML -- a plain scalar cannot follow a mapping entry at its own
+# indent -- and merging them would put `cargo` on a line holding `-Z`, making
+# one line's verdict out of two lines' words.
+check("a line at the same indent is a sibling, not a continuation",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: tar -Zcf archive.tgz src\n"
+             "      cargo\n")) == [])
+# A blank line has an indent of zero however deep the key above it is, so a
+# value written a blank line below its key measured itself against nothing,
+# folded onto the blank, and left the key reading as though it carried none.
+# PyYAML reads the first fixture as a toolchain of nightly.
+check("a value a blank line below its key still fails",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain:\n\n"
+             "            nightly\n")))
+check("...and the same shape on stable stays clean",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - with:\n          toolchain:\n\n"
+             "            stable\n")) == [])
+check("a blank line between two steps does not join them",
+      nightly_problems(lambda r: wf(
+          r, "jobs:\n  b:\n    steps:\n      - run: echo cargo\n\n"
+             "      - run: tar -Zcf archive.tgz src\n")) == [])
 # Nightly behaviour under a stable toolchain.
 # Each of the five below was the sole exercise of a branch nothing pinned:
 # mutating that branch left the suite green.

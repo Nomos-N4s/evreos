@@ -749,12 +749,20 @@ def logical_lines(lines):
       falls on. `with: { toolchain: nightly` and a `}` on the next line is one
       mapping to YAML and was two lines to every reading here, so the pair the
       first line opens was never completed and the channel was never seen.
+    - A value need not sit on its key's line at all. A more-indented line that
+      is neither a key nor a sequence item can only continue the value above
+      it: the second half of a plain or quoted scalar (`run: rustup default`
+      then `nightly`), or the whole value of a key written bare (`toolchain:`
+      then `nightly`). Both are ordinary YAML, both name the channel, and both
+      passed. Script bodies are exempt -- they are shell, not YAML, and joining
+      two commands there is what the carve-out above exists to prevent.
 
     Each result carries the number of the physical line it opens on, so a report
     still names where a reader would look.
     """
     numbered = list(lines)
     out = []
+    script_body = set()  # line numbers that are shell, and so not YAML values
     i = 0
     while i < len(numbered):
         number, text = numbered[i]
@@ -779,7 +787,9 @@ def logical_lines(lines):
                 j += 1
             if key.lower() in SCRIPT_KEYS and style == "|":
                 out.append((number, text))
-                out.extend(fold_backslashes(body))
+                folded_body = fold_backslashes(body)
+                script_body.update(each[0] for each in folded_body)
+                out.extend(folded_body)
             else:
                 folded = " ".join(line.strip() for _, line in body if line.strip())
                 out.append((number, f"{text.rstrip()} {folded}".rstrip()))
@@ -787,7 +797,7 @@ def logical_lines(lines):
             continue
         out.append((number, text))
         i += 1
-    return fold_flow(fold_backslashes(out))
+    return fold_flow(fold_continuations(fold_backslashes(out), script_body))
 
 
 def fold_backslashes(lines):
@@ -930,6 +940,56 @@ def flow_scan(text):
 def flow_pairs(text):
     """The pairs of `flow_scan`, for a caller that does not need the depth."""
     return flow_scan(text)[0]
+
+
+def fold_continuations(lines, script_body):
+    """`lines` with each value continuation joined onto the line it begins on.
+
+    YAML lets a value sit below its key -- `toolchain:` with `nightly` on the
+    next line -- and lets a plain or quoted scalar run across lines the same
+    way. Both are one value, and both looked like a line naming no key and
+    holding no channel: the walk in workflow_nightly_lines reads a key line or a
+    sequence item, and a continuation is neither, so it was never read at all.
+
+    A line continues the one above when it is deeper than it and is neither. The
+    line numbers in `script_body` are exempt: a block scalar's script body is
+    shell, where a deeper line is an indented command rather than the rest of a
+    value, and joining two commands is what the SCRIPT_KEYS carve-out exists to
+    prevent. Only the line being folded is tested against that set; a body's
+    lines are all deeper than their header and the line ending a body is never
+    deeper than the body, so the line a body line could be folded into is never
+    outside it.
+
+    In valid YAML the depth test is implied by the other two -- a line that is
+    neither a key nor an item can only be a continuation, and a continuation is
+    always deeper. It is what keeps a file that is NOT valid from collapsing
+    into one line, where two lines' words become one line's verdict.
+
+    Blank lines are dropped rather than carried. A value may sit a blank line
+    below its key, and a blank line has an indent of zero however deep the key
+    above it is -- so the value measured itself against nothing, folded onto the
+    blank, and the key was read as carrying none. Nothing downstream reads a
+    blank line: every reading here skips it.
+    """
+    out = []
+    for number, text in lines:
+        if not text.strip():
+            continue
+        if (
+            out
+            and number not in script_body
+            and indent_of(text) > indent_of(out[-1][1])
+            and not YAML_KEY.match(text)
+            and not YAML_ITEM.match(text)
+        ):
+            out[-1] = (out[-1][0], f"{out[-1][1].rstrip()} {text.strip()}")
+            continue
+        out.append((number, text))
+    return out
+
+
+def indent_of(text):
+    return len(text) - len(text.lstrip())
 
 
 def fold_flow(lines):
