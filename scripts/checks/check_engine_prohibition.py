@@ -524,11 +524,27 @@ def comment_style(path):
 
 
 def code_lines(path):
-    """(line number, line with its comment removed) for every line of `path`."""
+    """(line number, line with its comment removed) for every line of `path`.
+
+    Rust is scanned WHOLE, not line by line. A block comment spans lines, so a
+    per-line reading ends the comment at the line that opened it and hands the
+    interior back as code -- and a compliant file was then reported for words
+    written inside a comment explaining why they are forbidden. The shared
+    scanner carries that state and keeps every offset, so splitting after it
+    yields the same lines with the comments gone.
+
+    String literals are KEPT. The acquisition clause reads the engine's name
+    from inside one, so blanking them would blank what it reads; the same is
+    true of `RUSTC_BOOTSTRAP`, which appears as an argument to `set_var`.
+
+    Every other style comments to end of line, where per-line is exactly right.
+    """
     text = read_text(path)
     if text is None:
         return []
     style = comment_style(path)
+    if style == "rust":
+        return list(enumerate(strip_non_code(text, keep_literals=True).splitlines(), 1))
     return [
         (number, strip_comment(line, style))
         for number, line in enumerate(text.splitlines(), 1)
@@ -746,10 +762,17 @@ def check_rust_source_nightly(root, path, problems):
     """
     where = relative(root, path)
     lines = list(code_lines(path))
+    # The window is built from the WHOLE file, not from `lines`. Both a block
+    # comment and a raw string span lines, and this clause must read neither:
+    # scanning per line ended each at the line that opened it and handed the
+    # interior back as code, so an attribute quoted inside a multi-line comment
+    # was reported as one carried.
+    text = read_text(path)
+    scanned = strip_non_code(text).splitlines() if text is not None else []
     joined, offsets = [], []
-    for number, line in lines:
+    for number, line in enumerate(scanned, 1):
         offsets.append((len("".join(joined)) + len(joined), number))
-        joined.append(strip_non_code(line).strip())
+        joined.append(line.strip())
     window = " ".join(joined)
 
     def line_of(position):

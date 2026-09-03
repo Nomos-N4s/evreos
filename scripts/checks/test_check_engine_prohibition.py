@@ -299,6 +299,37 @@ check("feature(...) as an outer attribute macro's argument passes",
 check("the same argument list in the inner form fails",
       nightly_problems(lambda r: rs(r, "#![wrapper(feature(A))]\nstruct T;\n")))
 check("#![forbid(unsafe_code)] passes", nightly_problems(lambda r: rs(r, "#![forbid(unsafe_code)]\n")) == [])
+# --- a comment that spans lines is still a comment ---------------------------
+# Both clauses read Rust one line at a time, so a block comment ended at the
+# line that opened it and its interior came back as code. A file explaining in
+# prose why a feature attribute is forbidden was reported as carrying one --
+# and the same words on a single line passed, which is the pair that says it.
+#
+# This is the defect the one-scanner extraction was supposed to end: the shared
+# scanner already holds the property (`test_rustlex.py` pins it) and the check
+# that imports it did not, because it fed it a line at a time.
+for label, source in (
+    ("a line comment", "// #![feature(specialization)] was tried and rejected\n"),
+    ("a block comment on one line",
+     "/* #![feature(specialization)] was tried and rejected */\n"),
+    ("a block comment across lines",
+     "/*\n#![feature(specialization)] was tried\nand rejected.\n*/\n"),
+    ("a doc block across lines",
+     "/**\n * Principle III: never write #![feature(x)] here.\n */\n"),
+    ("a nested block comment", "/* outer /* #![feature(x)] */ still comment */\n"),
+    ("a raw string across lines",
+     'const NOTE: &str = r#"\n#![feature(specialization)]\n"#;\n'),
+):
+    check(f"a feature attribute inside {label} passes",
+          nightly_problems(lambda r, source=source: rs(r, source)) == [])
+
+# The other direction, so the pair above cannot be satisfied by reading nothing.
+check("an attribute after a multi-line comment is still caught",
+      nightly_problems(lambda r: rs(r, "/*\n a note\n*/\n#![feature(specialization)]\n")))
+check("RUSTC_BOOTSTRAP survives the whole-file scan, being inside a string",
+      nightly_problems(lambda r: rs(
+          r, 'fn main() { std::env::set_var("RUSTC_BOOTSTRAP", "1"); }\n')))
+
 check("a commented-out feature attribute passes",
       nightly_problems(lambda r: rs(r, "// #![feature(specialization)] was tried and rejected\n")) == [])
 check("a doc comment quoting the attribute passes",
@@ -521,6 +552,23 @@ for label, path, text in (
     check(f"...while the same line as code in {label} is",
           acquisition_problems(
               lambda r, p=path, t=text: write(r, p, t.lstrip("# "))))
+
+# The acquisition clause reads the engine's name from INSIDE a string, so the
+# whole-file scan must keep literals and drop only comments. Both halves are
+# pinned here: a comment spanning lines hides nothing from a reader and must
+# hide it from the check too, and a URL in a string must still be seen.
+check("an acquisition inside a block comment on one line passes",
+      acquisition_problems(lambda r: rs(
+          r, '/* download("https://x/cef.tar.bz2"); */\n', "build.rs")) == [])
+check("an acquisition inside a block comment across lines passes",
+      acquisition_problems(lambda r: rs(
+          r, '/*\ndownload("https://x/cef.tar.bz2");\n*/\n', "build.rs")) == [])
+check("...while the same call as code still fails",
+      acquisition_problems(lambda r: rs(
+          r, 'fn f() { download("https://x/cef.tar.bz2"); }\n', "build.rs")))
+check("an engine URL in a string literal is still read",
+      acquisition_problems(lambda r: rs(
+          r, 'const U: &str = "https://x/chromium.zip";\n', "build.rs")))
 
 check("a binary file is not read by the acquisition clause",
       acquisition_problems(lambda r: write(
