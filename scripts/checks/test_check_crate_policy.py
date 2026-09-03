@@ -7,6 +7,7 @@ excuses exactly the crate it names and nothing beside it.
 Run: python3 scripts/checks/test_check_crate_policy.py
 """
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -401,6 +402,7 @@ with tempfile.TemporaryDirectory() as tmp:
           any("src/lib.rs: omits" in problem for problem in found))
 
 
+
 # --- the paths that report nothing rather than a breach ----------------------
 # Four ways the check can find no workspace to read. Each returns early, and
 # each could be made silent with the suite green -- a check that reads nothing
@@ -573,6 +575,19 @@ for label, root_toml, member_toml in (
     # swallowed the error, which is why `members` raised for a literal pattern
     # and not for a glob -- the guard belongs at the resolver, not at whichever
     # branch happened to surface it.
+    # The glob branch is the FOURTH site that turns a manifest string into a
+    # path, and it was there when the resolver claimed a fourth could not be
+    # added without it. `glob` refuses two ordinary spellings on its own inputs
+    # rather than through `resolve`, so routing the literal branch did not
+    # reach it -- and the verdict turned on whether the entry carried a `*`.
+    ("a members pattern glob refuses",
+     '[workspace]\nmembers = ["crates/a", "crates/a**"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    ("an absolute members pattern",
+     '[workspace]\nmembers = ["crates/a", "/etc/*"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
     ("an exclude entry holding a NUL",
      '[workspace]\nmembers = ["crates/a"]\nexclude = ["a\\u0000b"]\n'
      '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
@@ -629,6 +644,45 @@ check("...while one with a BOM and no forbid is still reported",
       any("omits" in problem for problem in workspace_at(lambda r: (
           (r / "Cargo.toml").write_text(WORKSPACE_ROOT),
           member(r, source="\ufeffpub fn f() {}\n")))[0]))
+
+# `Path.resolve` catches the ELOOP OSError and deliberately re-raises it as a
+# RuntimeError, so the one error it goes out of its way to convert is the one a
+# tuple of ValueError and OSError misses. Two symlinks pointing at each other
+# are enough, and the same conversion covers the Windows limb the tier-1 runner
+# reaches.
+def looping(root):
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/a", "loopa"]\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n')
+    member(root)
+    os.symlink("loopb", root / "loopa")
+    os.symlink("loopa", root / "loopb")
+
+
+try:
+    found, _, _ = workspace_at(looping)
+    raised = None
+except Exception as error:      # noqa: BLE001 - the point of the case
+    found, raised = [], f"{type(error).__name__}: {error}"
+check("a symlink loop named as a member reaches a verdict", raised is None)
+check("...and is reported", bool(found))
+
+
+def excluded_loop(root):
+    (root / "Cargo.toml").write_text(
+        '[workspace]\nmembers = ["crates/a"]\nexclude = ["loopa"]\n'
+        '[workspace.lints.rust]\nunsafe_code = "forbid"\n')
+    member(root)
+    os.symlink("loopb", root / "loopa")
+    os.symlink("loopa", root / "loopb")
+
+
+try:
+    found, _, _ = workspace_at(excluded_loop)
+    raised = None
+except Exception as error:      # noqa: BLE001
+    raised = f"{type(error).__name__}: {error}"
+check("a symlink loop in the exclude list reaches a verdict too", raised is None)
 
 # --- a crate reached only through [workspace.dependencies] ------------------
 # `cargo metadata` reports it in workspace_members and `cargo build -p` builds
@@ -779,6 +833,13 @@ for label, source, forbids in (
     # an error under both. Requiring them adjacent reported a compliant crate as
     # omitting the forbid it carries. The engine check's mirror of this pattern
     # had the same gap in the opposite direction.
+    # What may precede the forbid on its line is other INNER attributes. rustfmt
+    # writes one per line and a person does not always, and the reverse order
+    # already counted -- so the verdict turned on which attribute came first.
+    ("an inner attribute before it still counts",
+     "#![no_std] #![forbid(unsafe_code)]\n", True),
+    ("two of them still count",
+     "#![a] #![b] #![forbid(unsafe_code)]\n", True),
     ("a space between # and ! still counts",
      "# ![forbid(unsafe_code)]\n", True),
     ("spaces in both places still count",

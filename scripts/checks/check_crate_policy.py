@@ -67,7 +67,11 @@ ALLOWLIST = HERE / "unsafe-carveout-allowlist.txt"
 # the unsafe block as an error under every one -- so requiring any pair adjacent
 # reported a compliant crate as omitting a forbid it carries. The line anchor
 # keeps to spaces and tabs, so `\\s*` before `#` would not admit a mid-file line.
-FORBID = re.compile(r"^[ \t]*#\s*!\s*\[\s*forbid\s*\(([^)]*)\)\s*\]", re.MULTILINE)
+FORBID = re.compile(
+    r"^[ \t]*(?:#\s*!\s*\[[^\]]*\][ \t]*)*"
+    r"#\s*!\s*\[\s*forbid\s*\(([^)]*)\)\s*\]",
+    re.MULTILINE,
+)
 
 # Every table Cargo reads path dependencies from, at the top level and under
 # each `[target.<cfg>]`.
@@ -183,19 +187,35 @@ from rustlex import strip_non_code  # noqa: E402
 def resolved(base, path):
     """`base / path` resolved, or None when the string names no path.
 
-    Three call sites turn a manifest string into a path: the exclude list, the
-    members list, and a dependency's `path`. Only the third was guarded against a
-    NUL -- legal in TOML as an escape, illegal in a path, and `resolve()` raises
-    on it -- so the same value reached a verdict written one way and a traceback
-    written another. One resolver, so a fourth site cannot be added without it.
-
-    `is_dir()` swallows the error on the glob branch, which is why `members`
-    raised only for a literal pattern: the guard has to sit here rather than at
-    whichever branch happened to surface it.
+    Four call sites turn a manifest string into a path: the exclude list, the
+    members list, that list's glob branch, and a dependency's `path`. The
+    previous change guarded three and claimed a fourth could not be added
+    without it -- while the fourth already existed, in the same function, ten
+    lines away. `glob` raises on its own inputs rather than through `resolve`,
+    which is why routing the literal branch here did not reach it.
     """
     try:
         return (base / path).resolve()
-    except (ValueError, OSError):
+    except (ValueError, OSError, RuntimeError):
+        # RuntimeError is not decoration: `Path.resolve` catches the ELOOP
+        # OSError and deliberately re-raises it as a RuntimeError, so the one
+        # error it goes out of its way to convert is the one a tuple of
+        # ValueError and OSError misses. A pair of symlinks pointing at each
+        # other is enough, and the same conversion covers the Windows limb,
+        # which the tier-1 runner reaches.
+        return None
+
+
+def matched(root, pattern):
+    """The directories `pattern` names under `root`, or None when it names none.
+
+    `glob` refuses two ordinary spellings outright: `a**` -- the typo for `a*` --
+    and any absolute pattern. Its literal sibling reaches a verdict for both, so
+    without this the verdict turned on whether the entry carried a `*`.
+    """
+    try:
+        return sorted(path for path in root.glob(pattern) if path.is_dir())
+    except (ValueError, OSError, RuntimeError, NotImplementedError):
         return None
 
 
@@ -340,7 +360,10 @@ def workspace_members(root, manifest, problems):
             problems.append(f"Cargo.toml: members entry {pattern!r} is not a path")
             continue
         if any(character in pattern for character in "*?["):
-            matches = sorted(path for path in root.glob(pattern) if path.is_dir())
+            matches = matched(root, pattern)
+            if matches is None:
+                problems.append(f"Cargo.toml: members pattern {pattern!r} is not a pattern")
+                continue
             if not matches:
                 problems.append(f"Cargo.toml: members pattern {pattern!r} matches nothing")
         else:
