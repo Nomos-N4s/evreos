@@ -175,7 +175,19 @@ from rustlex import strip_non_code  # noqa: E402
 
 
 def relative(root, path):
-    return path.resolve().relative_to(root).as_posix() or "."
+    """`path` named from the workspace root, or absolutely when it is outside.
+
+    A workspace may list a member outside its root -- `members = ["../sibling"]`
+    is legal -- and `relative_to` raises on one. The path-dependency call site
+    already refuses to follow a dependency outside the root; the members call
+    site beside it did not, so a legal manifest ended the run with a ValueError
+    where a verdict belonged.
+    """
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(root).as_posix() or "."
+    except ValueError:
+        return str(resolved)
 
 
 def path_dependencies(manifest):
@@ -188,7 +200,7 @@ def path_dependencies(manifest):
     failed workspaces that cargo builds cleanly.
     """
     tables = [manifest.get(table, {}) for table in DEPENDENCY_TABLES]
-    for target in manifest.get("target", {}).values():
+    for target in as_table(as_table(manifest).get("target")).values():
         if not isinstance(target, dict):
             continue
         tables.extend(target.get(table, {}) for table in DEPENDENCY_TABLES)
@@ -221,7 +233,7 @@ def inherited_workspace_paths(root_manifest, member_manifest):
     # clauses, though cargo reports it in workspace_members and builds it --
     # the same omission `path_dependencies` beside this already avoids.
     member_tables = [member_manifest.get(table, {}) for table in DEPENDENCY_TABLES]
-    for target in member_manifest.get("target", {}).values():
+    for target in as_table(as_table(member_manifest).get("target")).values():
         if isinstance(target, dict):
             member_tables.extend(target.get(table, {}) for table in DEPENDENCY_TABLES)
     for entries in member_tables:

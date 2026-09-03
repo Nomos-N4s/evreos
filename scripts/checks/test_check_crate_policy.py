@@ -544,6 +544,27 @@ for label, root_toml, member_toml in (
     ("a members entry that is not a path",
      '[workspace]\nmembers = [1]\n[workspace.lints.rust]\nunsafe_code = "forbid"\n',
      BASE + "[lints]\nworkspace = true\n"),
+    # `target` is walked identically in two neighbouring functions, and the
+    # change that guarded `package` and `workspace` reached neither.
+    # A top-level key must precede EVERY table header, or TOML puts it inside
+    # the last one -- which is how the first two versions of these cases passed
+    # under the mutation they exist to catch, once inside `[lints]` and once
+    # inside `[package]`.
+    ("a member target key that is not a table", WORKSPACE_ROOT,
+     'target = "wasm32"\n[package]\nname = "a"\nversion = "0.0.0"\n'
+     'edition = "2021"\n[lints]\nworkspace = true\n'),
+    ("a root target key that is not a table",
+     'target = "wasm32"\n[workspace]\nmembers = ["crates/a"]\n'
+     '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    # A workspace may legally list a member outside its own root, and naming it
+    # from the root raises rather than returning a name.
+    ("a member outside the workspace root",
+     '[workspace]\nmembers = ["../sibling"]\n[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
+    ("a member named by absolute path",
+     '[workspace]\nmembers = ["/etc"]\n[workspace.lints.rust]\nunsafe_code = "forbid"\n',
+     BASE + "[lints]\nworkspace = true\n"),
     ("an exclude entry that is not a path",
      '[workspace]\nmembers = ["crates/a"]\nexclude = [7]\n'
      '[workspace.lints.rust]\nunsafe_code = "forbid"\n',
