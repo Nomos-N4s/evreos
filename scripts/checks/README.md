@@ -42,13 +42,21 @@ One check is two files, and the names are fixed by the workflow's globs:
 | `test_check_<name>.py` | its tests; exit non-zero when the check misbehaves |
 | `<name>.py` | a module two or more checks share, with `test_<name>.py` beside it |
 
-The third row is `rustlex.py`, the one Rust scanner, and it is here because two
-of them was the defect: a second, weaker copy grew up beside the first and made
-two checks wrong at once. A shared module is production logic that reaches every
-check importing it, so it carries tests on the same terms a check does. The
-workflow enforces that pairing over every module here, not over the `check_`
-prefix — while it keyed on the prefix, the one file that had already broken two
-checks was the one file nothing required tests for.
+The third row has two files, and both are there because a second copy was the
+defect. `rustlex.py` is the one Rust scanner: a weaker copy grew up beside the
+first and made two checks wrong at once. `casefs.py` is the one reader that asks
+the filesystem for a name — the checks run on a case-sensitive Linux runner and
+the release installers are built on Windows and macOS, whose filesystems fold
+case, so a name a check builds from a literal asks the wrong runner and gets
+silence rather than a failure. That question was asked in five different
+spellings before it was asked in one place.
+
+A shared module is production logic that reaches every check importing it, so it
+carries tests on the same terms a check does. The workflow enforces that pairing
+over every module here, not over the `check_` prefix — while it keyed on the
+prefix, the one file that had already broken two checks was the one file nothing
+required tests for. It caught `casefs.py` landing without its tests, which is
+the rule working rather than a hole in it.
 
 - **Underscores, not hyphens.** The workflow runs
   `python3 scripts/checks/test_check_<name>.py`, which puts this directory
