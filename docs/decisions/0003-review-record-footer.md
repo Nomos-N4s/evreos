@@ -79,4 +79,29 @@ without amendment.
 
 ## Corrections
 
-None.
+**2026-09-03** — Two claims in this record were wrong, found by the adversarial
+round that reviewed the change landing it. The decision is unaffected: the
+footer is still appended by the tool, the exception still reaches only that
+mechanism, and both rejected alternatives stand.
+
+- The Decision says the exception reaches no commit message, no pull request
+  title or body and no file in the tree, "all of which
+  `scripts/check-commit-hygiene.py` reads and refuses". It reads the first
+  three. It reads no file in the tree — it has two `open()` calls, both for
+  paths given on its command line — so attribution in a tree file is forbidden
+  by Principle I and rests on review, which is what `CLAUDE.md` already says of
+  the prose prohibition. This record is itself the counterexample: it quotes the
+  footer as evidence, `attribution_problems` reports it, and the check passes at
+  head because nothing hands it this file. An exception bounded by a claim about
+  enforcement is worth no more than that claim is true, and this one was
+  bounded by half of one. The constitution's copy of the sentence is corrected
+  in the change appending this entry.
+- The Evidence says "Twelve comments … ids `5512127095` through `5515274328`".
+  There were thirteen by the time this record landed, and the range end is no
+  longer the last. The count drifts with every round, exactly as
+  `decisions/0002`'s own Corrections entry warned a dated count would, one turn
+  after that entry was written and one turn after a round caught the same class
+  again. It is not restated with a number here: what the evidence rests on is
+  that comments composed without a footer arrive carrying one, and the three
+  ids naming those comments are stable. the pull request's own comment list
+  answers the count whenever it is wanted.

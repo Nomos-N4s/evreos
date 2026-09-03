@@ -143,10 +143,12 @@ written without one arrive carrying one. The prohibition therefore cannot be met
 surface by anyone posting through it, and the founder has accepted the footer there rather
 than move the records or stop posting them. The exception is exactly that mechanism and
 nothing else: a footer any author could have omitted is a breach as before, and the
-exception reaches no commit message, no pull request title or body, and no file in the
-tree, all of which the hygiene check reads and refuses. It is recorded here because an
-unstated exception to a NON-NEGOTIABLE principle is indistinguishable from the rule not
-holding.
+exception reaches no commit message and no pull request title or body, all of which the
+hygiene check reads and refuses; nor any file in the tree, where the prohibition stands
+exactly as before and rests on review, the check reading no file it does not receive on
+its command line. It is recorded here because an unstated exception to a NON-NEGOTIABLE
+principle is indistinguishable from the rule not holding — and because an exception
+bounded by a claim about enforcement is worth no more than that claim is true.
 
 Commit messages
 MUST follow Conventional Commits and reference the issue they serve. One pull request per
