@@ -1539,6 +1539,40 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# The predicate written to reject a value a gate cannot compare destroyed the
+# verdict on exactly such a value: `math.isfinite` converts an int to float
+# first, and raises on one too large to convert. An int is finite by
+# construction, so only a float needs asking.
+check("a huge int is a number, and asking does not raise",
+      budgets.is_number(int("1" + "0" * 400)))
+check("a float too large to represent is still not one",
+      not budgets.is_number(float("1e400")))
+check("nan and inf are still not", not budgets.is_number(float("nan"))
+      and not budgets.is_number(float("inf")))
+
+# A message must be printable for every value a gate can hold. Bounding one
+# factor of the wake product was not enough: the clamp bounded the firing count
+# and left the wake's own bound unbounded, so two large bounds reached the same
+# raise at the same line.
+check("a huge product renders rather than raising",
+      budgets.rendered(10 ** 308 * 3601).startswith("about 1e"))
+check("an ordinary number renders as before", budgets.rendered(50) == "50")
+check("a float renders as before", budgets.rendered(0.5) == "0.5")
+
+for label, field, value in (
+    ("a huge wake bound", "processor_time_bound", int("1" + "0" * 308)),
+    ("a huge figure", None, None),
+):
+    if field is None:
+        b = budget_file(entry={"figure": int("1" + "0" * 400)})
+    else:
+        b = budget_file(wake=[{
+            "name": "w", "period": 1.0, field: value, "requirement": "FR-001",
+        }])
+    gate = file_gate(b)
+    check(f"{label} reaches a verdict rather than raising while formatting it",
+          isinstance(gate.blocking, list))
+
 # The caller does not merely COMPARE the firing count -- it multiplies it by the
 # wake's bound and formats the product with `:g`, and a big enough int raises
 # there rather than converting. Returning an unbounded int moved the failure one

@@ -226,7 +226,11 @@ def is_number(value):
     """
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return False
-    return math.isfinite(value)
+    # An int is finite by construction, and asking `math.isfinite` costs a
+    # conversion to float that RAISES on one too large to convert -- so the
+    # predicate written to reject a value a gate cannot compare destroyed the
+    # verdict on exactly such a value. Only a float can be nan or inf.
+    return not isinstance(value, float) or math.isfinite(value)
 
 
 def is_positive_number(value):
@@ -354,6 +358,21 @@ def entry_identity(entry):
     if any(not is_text(entry.get(field)) for field in IDENTITY_FIELDS):
         return None
     return tuple(entry[field] for field in IDENTITY_FIELDS)
+
+
+def rendered(value):
+    """`value` for a message, whatever its magnitude.
+
+    `:g` converts to float and raises on an int too large to convert. Bounding
+    one factor of a product is not enough -- the clamp on the firing count left
+    the wake's own bound unbounded, and two large bounds reach the same raise at
+    the same line. A message must be printable for every value a gate can hold,
+    so the fallback states the magnitude rather than the digits.
+    """
+    try:
+        return f"{value:g}"
+    except OverflowError:
+        return f"about 1e{len(str(abs(value))) - 1}"
 
 
 def entry_label(entry):
@@ -757,18 +776,18 @@ def check_budget_file(budgets, gate):
             bound = wake["processor_time_bound"]
             if bound > WAKE_BOUND_CAP_MS:
                 gate.block(
-                    f"{label}: processor_time_bound {bound:g} ms is above the "
+                    f"{label}: processor_time_bound {rendered(bound)} ms is above the "
                     f"{WAKE_BOUND_CAP_MS} ms SC-005 caps a wake at"
                 )
             contributions.append((label, bound, firings_in_window(wake["period"])))
         total = sum(bound * firings for _, bound, firings in contributions)
         if total > WAKES_WINDOW_CAP_MS:
             breakdown = ", ".join(
-                f"{label} {bound:g} ms x {firings}"
+                f"{label} {rendered(bound)} ms x {firings}"
                 for label, bound, firings in contributions
             )
             gate.block(
-                f"the enumerated wakes' bounds sum to {total:g} ms of processor "
+                f"the enumerated wakes' bounds sum to {rendered(total)} ms of processor "
                 f"time in a 60-minute window ({breakdown}), above the "
                 f"{WAKES_WINDOW_CAP_MS} ms SC-005 allows; work that needs more is "
                 "a change to this file stating its cost, not an exception"
