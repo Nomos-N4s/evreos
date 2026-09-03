@@ -322,6 +322,25 @@ def label_of(criterion, name, platform):
     return f"{criterion} {name} ({platform})"
 
 
+# The three fields that name an entry. Read by three functions, and each of them
+# guarded the read separately -- two in almost the same words and the third not
+# at all, which is how a traceback came to replace a whole verdict. One reader
+# now, so a fourth cannot be written without the guard.
+IDENTITY_FIELDS = ("criterion", "name", "platform")
+
+
+def entry_identity(entry):
+    """The entry's (criterion, name, platform), or None when it has none.
+
+    None means the budget-file gate has a defect to report and every other
+    reader has nothing to say: a verdict over an entry that does not name
+    itself is a verdict on nothing.
+    """
+    if any(not is_text(entry.get(field)) for field in IDENTITY_FIELDS):
+        return None
+    return tuple(entry[field] for field in IDENTITY_FIELDS)
+
+
 def entry_label(entry):
     return label_of(entry["criterion"], entry["name"], entry["platform"])
 
@@ -511,18 +530,17 @@ def check_budget_file(budgets, gate):
 
     seen = set()
     for entry in entries:
-        identity = ("criterion", "name", "platform")
-        if any(not is_text(entry.get(field)) for field in identity):
+        key = entry_identity(entry)
+        if key is None:
             gate.block(f"an entry without a criterion, a name and a platform: {entry}")
             continue
 
         label = entry_label(entry)
-        key = (entry["criterion"], entry["name"], entry["platform"])
         if key in seen:
             gate.block(f"{label}: declared twice")
         seen.add(key)
 
-        if entry.get("status") not in {"ratified", "provisional"}:
+        if not is_text(entry.get("status")) or entry["status"] not in {"ratified", "provisional"}:
             gate.block(f"{label}: status must be ratified or provisional")
 
         for old in RETIRED_FIELDS:
@@ -548,13 +566,13 @@ def check_budget_file(budgets, gate):
             )
         if unit is None:
             gate.block(f"{label}: no unit; one of {units} is required")
-        elif unit not in UNITS:
+        elif not is_text(unit) or unit not in UNITS:
             gate.block(f"{label}: unit {unit!r} is not one of {units}")
         elif stated is not None and unit != stated:
             gate.block(
                 f"{label}: unit {unit}; {criterion} states its figures in {stated}"
             )
-        unit_text = unit if unit in UNITS else "(no unit)"
+        unit_text = unit if is_text(unit) and unit in UNITS else "(no unit)"
 
         # A ratified figure is one a recorded founder decision set, so a
         # ratified entry names that decision; a provisional entry names none,
@@ -849,6 +867,14 @@ def run_gates(budgets, measurements, host=None):
               for tier, runner in runners.items() if isinstance(runner, dict)}
 
     for entry in declared_entries(budgets):
+        identity = entry_identity(entry)
+        if identity is None:
+            # The budget-file gate reports it. Reading past it here replaced
+            # the whole run's output with a traceback -- including the message
+            # that gate had already produced about this very entry -- which is
+            # the failure the comment above this loop describes, in the loop
+            # below it.
+            continue
         label = entry_label(entry)
         figure = entry.get("figure")
         baseline = entry.get("baseline")
@@ -863,8 +889,8 @@ def run_gates(budgets, measurements, host=None):
             # quantities, so none is made; the budget-file gate reports it.
             continue
 
-        platform = entry["platform"]
-        measured = measurements.get((entry["criterion"], entry["name"], platform))
+        platform = identity[2]
+        measured = measurements.get(identity)
         if measured is None:
             # An unmeasured entry is not a pass. The one honest exception is a
             # hardware-dependent entry whose tier has no pinned runner: there is
@@ -986,12 +1012,11 @@ def unretired_exemptions(budgets):
     direction -- the budget-file gate has refused the file on it already, and
     a release that read past it would be a release on a technicality.
     """
-    identity = ("criterion", "name", "platform")
     found = []
     for entry in declared_entries(budgets):
         if "spike_exemption" not in entry:
             continue
-        if all(is_text(entry.get(field)) for field in identity):
+        if entry_identity(entry) is not None:
             label = entry_label(entry)
         else:
             label = f"an entry without a criterion, a name and a platform: {entry}"

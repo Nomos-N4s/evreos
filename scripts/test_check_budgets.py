@@ -1539,6 +1539,42 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# The identity triple is read by three functions. Two guarded it in almost the
+# same words; the third did not, and `main` calls it unconditionally after the
+# gate that reports the defect -- so a traceback replaced the whole run's output,
+# including the correct message the budget-file gate had already produced about
+# that very entry. The comment above that loop describes exactly this failure.
+IDENTITY_DEFECTS = [
+    ("a missing criterion", "criterion", None),
+    ("a platform that is not text", "platform", '["windows"]'),
+    ("a name that is not text", "name", "7"),
+    ("a unit that is not hashable", "unit", '["MB"]'),
+    ("a status that is not hashable", "status", "[]"),
+]
+REAL = (Path(__file__).resolve().parent.parent / "budgets.toml").read_text().split("\n")
+FIRST_ENTRY = next(n for n, line in enumerate(REAL) if line.strip() == "[[entry]]")
+for label, field, value in IDENTITY_DEFECTS:
+    edited = list(REAL)
+    at = next(n for n in range(FIRST_ENTRY, len(edited)) if edited[n].startswith(f"{field} = "))
+    if value is None:
+        del edited[at]
+    else:
+        edited[at] = f"{field} = {value}"
+    with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+        handle.write("\n".join(edited))
+        path = handle.name
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--budgets", path,
+         "--allow-unpinned-runners", "--allow-unmeasured"],
+        capture_output=True, text=True,
+    )
+    os.unlink(path)
+    check(f"{label} is reported, not raised",
+          "Traceback" not in result.stderr and result.returncode == 1)
+    check(f"...with the gate's verdict still printed: {label}",
+          "FAIL" in result.stderr)
+
+
 # `runners` and `wake` are both guarded on their shape and `entry` was not, so
 # `[entry]` written for `[[entry]]` -- the ordinary TOML slip -- replaced the
 # verdict with a traceback, which is neither a pass nor a breach.
