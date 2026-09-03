@@ -404,7 +404,14 @@ def end_to_end(failures):
             git("config", f"user.{key.split('_')[1].lower()}", value, cwd=tmp)
         (pathlib.Path(tmp) / "a").write_text("1")
         git("add", "-A", cwd=tmp)
-        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=tmp, env={**dict(PATH=sys.path and "/usr/bin:/bin"), **env_ok, "HOME": tmp})
+        # The same environment `commit` below builds, and built the same way:
+        # `PATH=sys.path and "/usr/bin:/bin"` stood here, which reads as a
+        # condition and is not one -- `sys.path` is never empty, so the
+        # conjunct only ever yielded the string. A dead conjunct in a suite
+        # whose whole discipline is that no assertion may be satisfied by both
+        # readings is exactly the shape that hides a live one.
+        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=tmp,
+            env={"PATH": "/usr/bin:/bin", "HOME": tmp, **env_ok})
         base = git("rev-parse", "HEAD", cwd=tmp).stdout.strip()
 
         def commit(msg, **override):
