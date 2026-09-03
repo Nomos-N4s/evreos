@@ -1539,6 +1539,33 @@ check("a directory given as the budget file exits 2",
       result.returncode == 2 and "is a directory" in result.stderr
       and "Traceback" not in result.stderr)
 
+# `runners` and `wake` are both guarded on their shape and `entry` was not, so
+# `[entry]` written for `[[entry]]` -- the ordinary TOML slip -- replaced the
+# verdict with a traceback, which is neither a pass nor a breach.
+for label, text in (
+    ("[entry] written for [[entry]]",
+     'wake = []\n[runners.tier1]\n[runners.tier2]\n[entry]\ncriterion = "SC-001"\n'),
+    ("an entry that is not a table",
+     'wake = []\nentry = ["SC-001"]\n[runners.tier1]\n[runners.tier2]\n'),
+    # A scalar, which is not iterable. The two above walk to an empty list on
+    # their own; only this one reaches the list guard, so only this one pins it.
+    ("an entry key that is a number",
+     'wake = []\nentry = 7\n[runners.tier1]\n[runners.tier2]\n'),
+):
+    with tempfile.NamedTemporaryFile("w", suffix=".toml", delete=False) as handle:
+        handle.write(text)
+        path = handle.name
+    result = subprocess.run(
+        [sys.executable, str(SCRIPT), "--budgets", path, "--allow-unmeasured"],
+        capture_output=True, text=True,
+    )
+    os.unlink(path)
+    check(f"{label} is reported, not raised",
+          "Traceback" not in result.stderr and result.returncode == 1)
+    check(f"...saying what the file should carry: {label}",
+          "array of tables" in result.stderr or "must be a table" in result.stderr)
+
+
 # The unmeasured branch's own undeclared-tier case, which had no test at all:
 # reverting the branch left the whole suite green. An entry on a tier the file
 # does not declare is BLOCKING-unmeasured, where one on a declared-but-unpinned

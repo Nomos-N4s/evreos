@@ -436,6 +436,22 @@ def firings_in_window(period):
     return int(WINDOW_SECONDS // period) + 1
 
 
+def declared_entries(budgets):
+    """The `[[entry]]` blocks, or an empty list when the key is not an array.
+
+    `runners` and `wake` are both guarded on their shape and `entry` was not,
+    so writing `[entry]` for `[[entry]]` -- the ordinary TOML slip -- replaced
+    the verdict with a traceback. That is the failure `load_budgets` exists to
+    prevent, one level further in: an unrun gate is not a pass, and a stack
+    trace is not a verdict either. The shape is reported by `check_budget_file`;
+    the two measuring readers take the empty list and have nothing to compare.
+    """
+    entries = budgets.get("entry", [])
+    if not isinstance(entries, list):
+        return []
+    return [entry for entry in entries if isinstance(entry, dict)]
+
+
 def check_budget_file(budgets, gate):
     """The file must describe a state a gate can be run against."""
     runners = budgets.get("runners", {})
@@ -482,7 +498,14 @@ def check_budget_file(budgets, gate):
                 tag=UNPINNED_TAG,
             )
 
-    entries = budgets.get("entry", [])
+    declared = budgets.get("entry", [])
+    if not isinstance(declared, list):
+        gate.block("entry must be an array of tables, written [[entry]] rather than "
+                   "[entry]; a verdict over a misread file is a verdict on nothing")
+    elif any(not isinstance(entry, dict) for entry in declared):
+        gate.block("every entry must be a table; a verdict over a misread file is a "
+                   "verdict on nothing")
+    entries = declared_entries(budgets)
     if not entries:
         gate.block("no entries declared")
 
@@ -825,7 +848,7 @@ def run_gates(budgets, measurements, host=None):
     pinned = {tier: not runner_missing(runner)
               for tier, runner in runners.items() if isinstance(runner, dict)}
 
-    for entry in budgets.get("entry", []):
+    for entry in declared_entries(budgets):
         label = entry_label(entry)
         figure = entry.get("figure")
         baseline = entry.get("baseline")
@@ -965,7 +988,7 @@ def unretired_exemptions(budgets):
     """
     identity = ("criterion", "name", "platform")
     found = []
-    for entry in budgets.get("entry", []):
+    for entry in declared_entries(budgets):
         if "spike_exemption" not in entry:
             continue
         if all(is_text(entry.get(field)) for field in identity):
