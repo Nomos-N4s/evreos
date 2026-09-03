@@ -284,7 +284,9 @@ COMMENT_STYLE = {
     ".ps1": "hash",
     ".cfg": "hash", ".ini": "hash", ".in": "hash", ".mk": "hash", ".cmake": "hash",
 }
-HASH_NAMED = {"Makefile", "justfile", "Justfile"}
+# Matched against a lowercased name, so `Makefile`, `makefile` and `GNUmakefile`
+# -- all three of which make itself reads -- are one entry rather than three.
+HASH_NAMED = {"makefile", "gnumakefile", "justfile"}
 # The suffixes whose contents are YAML, and so the only files whose lines fold
 # by YAML's rules. Every other file the acquisition clause reads has its own
 # syntax, in which indentation carries no meaning at all. These are also the
@@ -528,11 +530,26 @@ def read_text(path):
     return data.decode("utf-8", errors="replace")
 
 
+def suffix_of(path):
+    """A path's suffix, lowercased, which is the only way to ask it here.
+
+    Both platforms this project ships to have a case-insensitive filesystem by
+    default -- NTFS on tier 1, APFS on tier 2 -- so `MAIN.RS` is a Rust source
+    file that Cargo compiles and `SETUP.MSI` is an installer. Asking `suffix ==
+    ".rs"` made the verdict turn on how a file was named: a crate root carrying
+    `#![feature(let_chains)]` was not read at all when its name was upper case,
+    under the clause enforcing a NON-NEGOTIABLE principle. Every suffix test in
+    this file goes through here so that a new one cannot be written the other
+    way by accident.
+    """
+    return Path(path).suffix.lower()
+
+
 def comment_style(path):
     path = Path(path)
-    if path.name in HASH_NAMED:
+    if path.name.lower() in HASH_NAMED:
         return "hash"
-    return COMMENT_STYLE.get(path.suffix)
+    return COMMENT_STYLE.get(suffix_of(path))
 
 
 def code_lines(path):
@@ -579,7 +596,7 @@ def is_yaml(path):
     named `.yml` failed. Actions reads a workflow from `.yml` and `.yaml` and
     nothing else, so that set is the answer to both questions.
     """
-    return path.suffix in YAML_SUFFIXES
+    return suffix_of(path) in YAML_SUFFIXES
 
 
 def workflow_files(root):
@@ -636,7 +653,11 @@ def check_toolchain_file(root, path, problems):
         # this function applies eight lines below to a non-table [toolchain].
         # The extensionless file has no such guarantee: its legacy form is not
         # TOML and failing to parse is the normal case there.
-        if path.suffix == ".toml":
+        # This path is built from a literal name a few lines below, so its
+        # suffix cannot vary and no case can distinguish this from asking the
+        # raw one. It goes through the shared reader anyway, so that the next
+        # suffix test in this file is written the right way by default.
+        if suffix_of(path) == ".toml":
             problems.append(f"{where}: {error}")
             return
     if parsed is not None and "toolchain" in parsed:
@@ -1180,7 +1201,7 @@ def scan_nightly(root, member_dirs):
         read += 1
     for directory in member_dirs:
         for path in files_under(Path(directory), skip={"target"}):
-            if path.suffix == ".rs":
+            if suffix_of(path) == ".rs":
                 check_rust_source_nightly(root, path, problems)
                 read += 1
     return problems, read
@@ -1230,7 +1251,7 @@ def acquisition_files(metadata, root):
     files = []
 
     def add(path):
-        if path.is_file() and path.suffix not in NOT_READ and path not in files:
+        if path.is_file() and suffix_of(path) not in NOT_READ and path not in files:
             files.append(path)
 
     for package in member_packages(metadata):

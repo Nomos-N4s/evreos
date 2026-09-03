@@ -285,6 +285,13 @@ def rs(root, text, name="src/lib.rs"):
 
 
 check("#![feature(...)] fails", nightly_problems(lambda r: rs(r, "#![feature(specialization)]\n")))
+# Both platforms this project ships to have a case-insensitive filesystem by
+# default -- NTFS on tier 1, APFS on tier 2 -- so `mod util;` resolves `UTIL.RS`
+# and the file compiles into the build. Reading only a lower-case suffix let a
+# feature attribute past the clause enforcing a NON-NEGOTIABLE principle, on
+# nothing but how the file was named.
+check("...and in a file whose suffix is upper case too",
+      nightly_problems(lambda r: rs(r, "#![feature(specialization)]\n", "src/UTIL.RS")))
 # rustc reads `#! [feature(x)]` as the same attribute it reads `#![feature(x)]`
 # as -- verified against the compiler, which rejects both on stable with the
 # same E0554. Requiring them adjacent let one space put the release path on
@@ -844,6 +851,11 @@ for label, path, text in (
      "See https://x/chromium.zip for what we rejected.\n"),
     ("a text note", "crates/evreos-shell/src/NOTES.txt",
      "Do not fetch https://x/chromium.zip.\n"),
+    # And with the suffix in upper case, which on a case-insensitive filesystem
+    # is the same file. Read raw it is not prose, so a design note recording a
+    # rejected engine is reported as fetching one.
+    ("an upper-case markdown note", "crates/evreos-shell/src/NOTES.MD",
+     "See https://x/chromium.zip for what we rejected.\n"),
 ):
     check(f"{label} is prose and is not read",
           acquisition_problems(lambda r, p=path, t=text: write(r, p, t)) == [])
@@ -855,6 +867,8 @@ for label, path, text in (
      "# TODO: download https://x/chromium.zip\n"),
     ("a Makefile", "crates/evreos-shell/build/Makefile",
      "# TODO: download https://x/chromium.zip\n"),
+    ("a GNUmakefile", "crates/evreos-shell/build/GNUmakefile",
+     "# TODO: download https://x/chromium.zip\n"),
     ("a python script", "crates/evreos-shell/build/gen.py",
      "# do not download https://x/chromium.zip\n"),
     ("a shell script", "crates/evreos-shell/build/fetch.sh",
@@ -862,6 +876,11 @@ for label, path, text in (
     ("a powershell script", "crates/evreos-shell/build/fetch.ps1",
      "# do not download https://x/chromium.zip\n"),
     ("a yaml file", "crates/evreos-shell/build/conf.yaml",
+     "# do not download https://x/chromium.zip\n"),
+    # Both platforms this project ships to have a case-insensitive filesystem
+    # by default, so a suffix in upper case names the same kind of file and
+    # must be read as one.
+    ("an upper-case shell script", "crates/evreos-shell/build/FETCH.SH",
      "# do not download https://x/chromium.zip\n"),
 ):
     check(f"a hash comment in {label} is not an acquisition",
@@ -936,8 +955,18 @@ with tempfile.TemporaryDirectory() as tmp:
     for name in ("a.yml", "b.yaml", "c.yeml", "notes.md"):
         write(tmp, f".github/workflows/{name}", "jobs: {}\n")
     collected = [path.name for path in engine.workflow_files(Path(tmp))]
+# NTFS and APFS are case-insensitive by default, so a workflow named in upper
+# case is the same file to the two platforms this project ships to, and reading
+# it is the direction a prohibition should err in.
+workflow_case_dir = tempfile.TemporaryDirectory()
+workflow_case_root = Path(workflow_case_dir.name)
+for name in ("BUILD.YML", "a.yml"):
+    write(workflow_case_root, f".github/workflows/{name}", "jobs: {}\n")
 check("a suffix Actions does not run is not a workflow",
       collected == ["a.yml", "b.yaml"])
+check("...while an upper-case one is one",
+      [path.name for path in engine.workflow_files(workflow_case_root)]
+      == ["BUILD.YML", "a.yml"])
 
 check("an acquisition inside a block comment on one line passes",
       acquisition_problems(lambda r: rs(
