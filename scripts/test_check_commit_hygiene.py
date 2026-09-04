@@ -5,10 +5,15 @@ Cases come from three rounds of adversarial review. The must-PASS block matters
 most: this is a browser project, so "cursor", "AI panel" and vendor URLs are
 everyday vocabulary, and rejecting them would be worse than the miss it prevents.
 
+The signature cases generate throwaway keys with ssh-keygen and never touch the
+founder's key. They need ssh-keygen on PATH; without it they FAIL rather than
+skip, because a signature check whose tests cannot run is not a check.
+
 Run: python3 scripts/test_check_commit_hygiene.py
 """
 import importlib.util
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -20,6 +25,26 @@ spec.loader.exec_module(hygiene)
 
 FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 TRAILER = "Co-Authored-By: Claude <noreply@anthropic.com>"
+
+# Every co-authorship trailer is refused, whoever it names. CLAUDE.md's
+# Authorship section is explicit -- "NO `Co-Authored-By` trailer of any kind,
+# including one naming a human" -- and is stricter than Principle I on purpose.
+# Each of these passed until the key capture took in the `-by` suffix and the
+# trailer match became case-insensitive: the key of `Co-Authored-By:` read as
+# `Co-Authored`, so no rule keyed on the full name could see it.
+VALID = "feat(x): a thing\n\nCloses #1\n\n"
+CO_AUTHORSHIP = [
+    "Co-Authored-By: GitHub Copilot <copilot@github.com>",
+    "Co-authored-by: Cursor <hi@cursor.com>",
+    "Co-Authored-By: A Human <a@b.c>",
+    "co-authored-by: someone <x@y.z>",
+    "CO-AUTHORED-BY: SHOUTING <x@y.z>",
+]
+AI_TRAILERS = [
+    "Assisted-By: Claude <a@b.c>",
+    "Helped-With: Codex <a@b.c>",
+    "Reported-By: Devin <a@b.c>",
+]
 
 MUST_FAIL = [
     ("canonical footer", FOOTER),
@@ -48,31 +73,345 @@ MUST_PASS = [
     # Description of the tooling this repo integrates with.
     ("naming the integration", "chore(speckit): update the Claude Code integration\n\nCloses #2"),
     ("recording a review ran", "docs(x): note the round\n\nRound 2: 3 lenses, 29 agents, 13 refuted.\n\nCloses #11"),
+    # Principle I expressly permits recording that a review ran, and a
+    # sign-off is not a co-authorship claim.
+    ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
+    ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
 ]
+
+# Asserted against the attribution matcher ALONE. `check_text` also runs the
+# Conventional-Commits and issue-reference rules, so a bare footer string fails
+# it whether or not the attribution matcher fires -- which is why every fixture
+# below carries a valid subject and issue reference, and why these are checked
+# through `attribution_problems` rather than through `check_message`.
+ATTRIBUTION_MUST_FAIL = (
+    [(f"co-authorship trailer: {t[:36]}", VALID + t) for t in CO_AUTHORSHIP]
+    + [(f"AI identity in {t.split(':')[0]}", VALID + t) for t in AI_TRAILERS]
+    + [("a trailer above a later paragraph",
+        "feat(x): a thing\n\nCo-Authored-By: X <a@b.c>\n\nCloses #1\n")]
+    + [("the canonical footer with a valid message around it", VALID + FOOTER)]
+)
+
+# The Conventional-Commits and issue-reference rules. CLAUDE.md names both as
+# gated for every commit whose subject does not begin `Merge `, `Revert "`,
+# `fixup! ` or `squash! `, and neither had a test that could fail: every fixture
+# in the lists above carries a valid subject AND a valid issue reference, so
+# both rules could be deleted with the suite staying green. ISSUE_REF was
+# exercised only as a bare regex, which passes with the rule that uses it gone.
+SUBJECT_MUST_FAIL = [
+    ("no type", "add a thing\n\nCloses #1"),
+    ("unknown type", "improve(x): a thing\n\nCloses #1"),
+    ("no colon", "feat(x) a thing\n\nCloses #1"),
+    ("capitalised subject", "feat(x): Add a thing\n\nCloses #1"),
+    ("empty subject", "feat(x): \n\nCloses #1"),
+    ("scope with a space", "feat(the ui): a thing\n\nCloses #1"),
+    # The separator is a colon and exactly one space. Relaxing it to any run of
+    # whitespace admits `fix:a thing`, which is not the convention and which
+    # every other tool reading these messages would parse differently.
+    # Folding the WHOLE message before splitting deletes a first line made only
+    # of format characters, handing the subject to line two -- while
+    # `git log --oneline` still shows the invisible one. The line is chosen
+    # first and folded second, so an empty-looking subject stays the subject.
+    ("a first line of only a word joiner", "\u2060\nfeat(x): a thing\n\nCloses #1"),
+    ("no space after the colon", "fix:a thing\n\nCloses #1"),
+    ("two spaces after the colon", "fix:  a thing\n\nCloses #1"),
+]
+SUBJECT_MUST_PASS = [
+    # Every type the rule admits. Five of the eleven -- revert, style, perf,
+    # test, build -- were exercised by no fixture, so each could be dropped
+    # from the pattern unnoticed.
+    *[(f"the {kind} type", f"{kind}(x): a thing\n\nCloses #1")
+      for kind in ("feat", "fix", "docs", "style", "refactor", "perf",
+                   "test", "build", "ci", "chore", "revert")],
+    ("plain type", "feat: a thing\n\nCloses #1"),
+    ("type and scope", "feat(ui): a thing\n\nCloses #1"),
+    ("breaking marker", "feat(ui)!: a thing\n\nCloses #1"),
+    ("scope with a slash", "ci(github/workflows): a thing\n\nCloses #1"),
+    # Exempt by subject prefix, so neither rule applies and both are absent.
+    ("a merge subject", "Merge pull request #7 from x/y"),
+    ("a revert subject", 'Revert "feat(x): a thing"'),
+    ("a fixup subject", "fixup! feat(x): a thing"),
+    # git writes both; only `fixup! ` was fixtured, so the other could be
+    # dropped from the exemption and a message git itself produced would be
+    # refused for the shape git gives it.
+    ("a squash subject", "squash! feat(x): a thing"),
+    # The subject is read from the STRIPPED message, so leading blank lines do
+    # not make the subject empty and the whole message unreadable.
+    ("a message with leading blank lines", "\n\nfeat(x): a thing\n\nCloses #1"),
+    # git stores and returns a byte-order mark. It is `Cf`, so `normalise` drops
+    # it and the attribution and issue rules never saw it; the subject was taken
+    # from the raw text, so one message was judged on two different texts and a
+    # conventional subject read as unreadable.
+    ("a subject behind a byte-order mark", "\ufefffeat(x): a thing\n\nCloses #1"),
+]
+ISSUE_MUST_FAIL = [
+    ("no reference at all", "feat(x): a thing\n\nA body with no link."),
+    # A reference inside an inline code span is a quotation, not a link. The
+    # fenced form was covered and the inline form was not, so the span half of
+    # the stripping pattern was never the sole reason a message failed.
+    ("a reference only inside an inline code span",
+     "feat(x): a thing\n\nSee `Closes #12` in the documentation."),
+    ("a bare number", "feat(x): a thing\n\nSee the ticket 42."),
+    ("a colour, not an issue", "feat(x): a thing\n\nTweak the palette to #000000."),
+    ("a URL fragment", "feat(x): a thing\n\nhttps://example.com/guide#2-setup"),
+    ("a reference only inside a code fence",
+     "feat(x): a thing\n\n```\nCloses #1\n```"),
+    # The keyword and the number are separated by whitespace, and the keyword
+    # starts a word. Both bounds are what keep the pattern from reading an
+    # issue link out of text that has none, and neither was pinned.
+    ("a keyword run into the number", "feat(x): a thing\n\nCloses#12"),
+    ("a keyword inside a longer word", "feat(x): a thing\n\nThe autocloses #12 path."),
+    ("refs inside a longer word", "feat(x): a thing\n\nIt unrefs #3 on drop."),
+    # The number ends at a word bound, so a reference run into a word is not one.
+    ("a number run into a word", "feat(x): a thing\n\nCloses #12abc"),
+]
+ISSUE_MUST_PASS = [
+    ("Closes", "feat(x): a thing\n\nCloses #1"),
+    ("Refs", "feat(x): a thing\n\nRefs #1"),
+    ("Fixes", "feat(x): a thing\n\nFixes #1"),
+    ("See", "feat(x): a thing\n\nSee #1"),
+    # The singular and past forms the pattern admits. Four of the linking
+    # keywords GitHub accepts were exercised by no fixture, so each could be
+    # dropped and a legitimate message would be refused for having no link.
+    ("Close", "feat(x): a thing\n\nClose #1"),
+    ("Fixed", "feat(x): a thing\n\nFixed #1"),
+    ("Resolves", "feat(x): a thing\n\nResolves #1"),
+    ("Resolve", "feat(x): a thing\n\nResolve #1"),
+    ("Ref", "feat(x): a thing\n\nRef #1"),
+    # The issue search runs over the FOLDED message, the same text the
+    # attribution rules read. A keyword split by an invisible character is
+    # therefore still a link -- which is the reading that matches what a person
+    # sees, and the alternative would refuse a message whose reference is
+    # visibly there. Nothing pinned the fold on this path.
+    ("a keyword split by a zero-width space",
+     "feat(x): a thing\n\nClo\u200bses #12"),
+]
+
+# Read directly against the pattern rather than through a whole message, so a
+# `#` that is not an issue reference is judged on the pattern alone.
+ISSUE_REF_DIRECT = [
+    ("Closes #7", True), ("Refs #7", True), ("See #7", True),
+    ("tweak the palette to #000000", False),
+    ("https://example.com/guide#2-setup", False),
+]
+ISSUE_REF_CASES = len(ISSUE_REF_DIRECT)
+
+ATTRIBUTION_MUST_PASS = [
+    ("a reviewed-by trailer naming a human", VALID + "Reviewed-by: A Human <a@b.c>"),
+    ("a sign-off by the founder", VALID + "Signed-off-by: xcoder-es <capintobe@gmail.com>"),
+    ("prose naming an integrated tool", VALID + "Note: the Claude Code integration lives in .claude/"),
+    # A message explaining what this check refuses must itself pass. The
+    # unanchored form of the co-authorship branch rejected exactly that, which
+    # is the over-reach CLAUDE.md records as issue #25: a descriptive sentence
+    # is not an attribution, and Principle I's carve-out permits it in terms.
+    ("prose quoting a co-authorship trailer mid-sentence",
+     "fix(x): close a gap\n\nA `Co-Authored-By: GitHub Copilot <c@g.com>` trailer\n"
+     "passed, which is the mechanical case this check exists for.\n\nRefs #1"),
+    # A bullet of ordinary prose is not a trailer, so stripping the marker
+    # must not make one of it.
+    ("a bulleted prose line naming an integrated tool",
+     VALID + "- the Claude Code integration lives in .claude/"),
+    # Behind a marker, a trailer-shaped line whose value is prose is prose.
+    # Without this the marker stripping turned a bullet describing the rule
+    # into a breach of it -- and a commit message describing that very change
+    # was rejected by it.
+    ("a bulleted sentence beginning with the key",
+     VALID + "- Co-authored-by: in a bulleted list is read as the trailer it is."),
+    ("a blockquoted sentence beginning with the key",
+     VALID + "> Co-authored-by: is rejected however it is spelled."),
+    ("a bulleted key with a name but no address",
+     VALID + "- Co-authored-by: nobody in particular here"),
+    # The co-authorship key is matched whole. A longer key that merely begins
+    # with it is a different trailer and is judged on its value like any other.
+    # The key is matched WHOLE. A longer key that merely begins with it is a
+    # different trailer and is judged on its value like any other -- and it has
+    # to end in `-by` or `-with` to be read as a trailer at all, which is why
+    # the fixture is shaped this way rather than as an obvious near-miss.
+    ("a longer key beginning with the co-authorship key",
+     VALID + "Co-authored-by-and-reviewed-by: A Human <a@b.c>"),
+    # The identity a marked line must carry is anchored to the FRONT of the
+    # value: a real trailer names its author first, and prose does not. Both
+    # anchors carry the whole of that distinction, and nothing held them --
+    # unanchored, any bulleted sentence that happens to cite an address
+    # anywhere in it is read as a trailer, which is the over-reach the marked
+    # cases above exist to prevent.
+    ("a bulleted sentence citing an address at the end",
+     VALID + "- Reviewed-by: the checker rejects claude; write to me@example.com"),
+    ("a bulleted sentence citing an address mid-line",
+     VALID + "- Co-authored-by: a line like a@b.example is prose, not a trailer."),
+    # The two alternatives are anchored separately, and the cases above reach
+    # only the second: a bare address. This one carries an address IN ANGLES
+    # with prose before it, which is the first alternative's shape, so it is
+    # the only case that can tell whether that anchor is there.
+    ("a bulleted sentence citing an angle-bracketed address after prose",
+     VALID + "- Reviewed-by: use <angle> markers, ask claude <a@b.example>"),
+    # A signature block QUOTED in a message body is not a signature: the kind
+    # is read from the object header, not from anywhere in the text.
+    ("a message quoting a signature block",
+     VALID + "```\n-----BEGIN SSH SIGNATURE-----\n-----END SSH SIGNATURE-----\n```"),
+    ("prose quoting the canonical footer mid-sentence",
+     "docs(x): explain the rule\n\nTooling appends a footer reading "
+     "\u201cGenerated with a tool\u201d to the body.\n\nRefs #1"),
+]
+
+# The same trailer at the start of a line IS a trailer, wherever it sits --
+# including inside a code fence, which still renders as a visible attribution.
+ATTRIBUTION_MUST_FAIL_EXTRA = [
+    # Two identity lists whose members were mostly reached by some other
+    # branch. Deleting either name leaves the suite green and the identity
+    # unrecognised, which is a false pass in the check's whole subject.
+    ("a generator footer naming cursor",
+     VALID + "\n\nGenerated with Cursor"),
+    ("an AI identity in a non-co-authorship trailer, gemini",
+     VALID + "Reviewed-by: Gemini <g@example.com>"),
+    ("an AI identity in a non-co-authorship trailer, openai",
+     VALID + "Reviewed-by: OpenAI <o@example.com>"),
+    ("a cursor agent in a non-co-authorship trailer",
+     VALID + "Reviewed-by: Cursor Agent <c@example.com>"),
+    # The footer branch admits a linked tool name and any run of whitespace
+    # after the verb, which is what a wrapped or bulleted footer looks like.
+    ("a generator footer with the tool name linked",
+     VALID + "\n\nGenerated with [Claude Code](https://claude.com/claude-code)"),
+    ("a generator footer with doubled spacing",
+     VALID + "\n\nGenerated  with Claude Code"),
+    ("a generator footer wrapped onto the next line",
+     VALID + "\n\nGenerated\nwith Claude Code"),
+    ("a co-authorship trailer inside a code fence",
+     VALID + "```\nCo-authored-by: Copilot <b@github.com>\n```"),
+    ("a co-authorship trailer as the only body line",
+     "fix(x): a thing\n\nRefs #1\n\nCo-Authored-By: Claude <noreply@anthropic.com>"),
+    # A blockquote renders as visibly as a code fence, and a bullet list is how
+    # a pull request body quotes a commit. Anchoring the footer branch to the
+    # line start was right for prose, and left these two behind.
+    ("a blockquoted co-authorship trailer",
+     VALID + "> Co-authored-by: Copilot <b@github.com>"),
+    ("a bulleted co-authorship trailer",
+     VALID + "- Co-authored-by: Copilot <b@github.com>"),
+    ("an indented co-authorship trailer",
+     VALID + "    Co-Authored-By: A Human <a@b.c>"),
+    ("a bare-address trailer behind a bullet",
+     VALID + "- Co-authored-by: bot@github.com"),
+    ("a diff line removing a trailer",
+     VALID + "-Co-authored-by: A Human <a@b.c>"),
+    # Every robot-emoji fixture in this file is also matched by the
+    # "generated with [claude" branch, so that branch was never the sole
+    # catcher and could be deleted with the suite green. This one has no tool
+    # name in it, so only the emoji branch can catch it.
+    ("a robot-emoji footer naming no tool", VALID + "\U0001F916 Generated by hand"),
+    # Decorated forms of a real trailer behind a marker. Anchoring the whole
+    # value meant a full stop, a parenthetical, a second co-author or a
+    # plus-tagged address all failed the identity test -- and a failed test
+    # skips the line, so a genuine attribution passed.
+    ("a bulleted trailer with a trailing full stop",
+     VALID + "- Co-authored-by: Copilot <copilot@github.com>."),
+    ("a bulleted trailer with a parenthetical",
+     VALID + "- Co-authored-by: Copilot <copilot@github.com> (AI)"),
+    ("two co-authors on one bulleted line",
+     VALID + "- Co-authored-by: Devin <d@x.example>, Copilot <c@y.example>"),
+    ("a plus-tagged address behind a bullet",
+     VALID + "- Co-authored-by: Bot <bot+ci@github.com>"),
+    ("an indented decorated trailer",
+     VALID + "    Co-Authored-By: Copilot <copilot@github.com>."),
+    # A column-zero trailer needs no identity, and a trailing space must not
+    # make it look marked.
+    ("a column-zero trailer with a trailing space",
+     VALID + "Co-Authored-By: A Human <a@b.c> "),
+    # A column-zero trailer needs no identity. Comparing the leading strip
+    # against a TRAILING strip made any line ending in whitespace read as
+    # marked, so such a line was then skipped for want of one. U+1680 is
+    # whitespace that survives normalise(), splitlines() and the value strip.
+    # Each of the six below was the sole catcher of a rule no fixture pinned:
+    # mutating that rule left the suite green.
+    ("a cursor identity in a non-co-authorship trailer",
+     VALID + "Reviewed-by: cursor <a@b.example>"),
+    ("the anthropic no-reply address in prose",
+     VALID + "Mail went to noreply@anthropic.com yesterday."),
+    ("a co-authorship trailer behind a star bullet",
+     VALID + "* Co-authored-by: Copilot <copilot@github.com>"),
+    ("a co-authorship trailer behind a plus bullet",
+     VALID + "+ Co-authored-by: Copilot <copilot@github.com>"),
+    # Under a NON-co-authorship key, so the identity test is the only thing
+    # that can fire. Written with `Co-Authored-By:` these prove nothing: that
+    # key is refused whatever its value, so the unicode folding never has to
+    # work -- which is how the whole of `normalise()` came to have no test.
+    ("an identity behind a fullwidth letter",
+     VALID + "Reviewed-by: \uff23laude <a@b.example>"),
+    ("an identity split by a zero-width space",
+     VALID + "Reviewed-by: Cl\u200baude <a@b.example>"),
+    ("an identity split by a soft hyphen",
+     VALID + "Reviewed-by: Cl\u00adaude <a@b.example>"),
+    ("an identity split by a combining grapheme joiner",
+     VALID + "Reviewed-by: Cl\u034faude <a@b.example>"),
+    ("a column-zero trailer ending in exotic whitespace",
+     VALID + "Co-Authored-By: nobody in particular\u1680"),
+]
+
+FOUNDER_ENV = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
+               "GIT_COMMITTER_NAME": "xcoder-es", "GIT_COMMITTER_EMAIL": "capintobe@gmail.com"}
 
 
 def check_text(text):
-    """True when the message would be rejected."""
+    """True when the message would be rejected, for any reason."""
     problems = []
     hygiene.check_message(text, "test", problems)
     return bool(problems)
+
+
+def attributed(text):
+    """True when the message is rejected FOR ATTRIBUTION specifically.
+
+    `check_text` also runs the Conventional-Commits and issue-reference rules,
+    so a bare footer string fails it whether or not the attribution matcher
+    fires. A fixture proving an attribution rule must be tested against this.
+    """
+    return bool(hygiene.attribution_problems(text, "test"))
 
 
 def git(*args, cwd, **kw):
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, **kw)
 
 
+def run_check(cwd, *args, env=None):
+    return subprocess.run(
+        [sys.executable, str(ROOT / "check-commit-hygiene.py"), *args],
+        cwd=cwd, capture_output=True, text=True, env=env,
+    )
+
+
 def end_to_end(failures):
-    """Exercise author, committer, exit codes and the hook in a real repo."""
+    """Exercise author, committer, exit codes and the hook in a real repo.
+
+    Returns the number of cases, so the summary line counts what actually ran.
+    It was a literal `10` while twelve assertions sat here, which is the same
+    defect as any other number nobody recomputes -- and in a test suite it
+    misreports the one figure the suite exists to report.
+
+    One case is one `run_check` invocation whose outcome is asserted, and the
+    count is one `cases += 1` immediately above each. A case may carry two
+    assertions -- an exit code and the text it printed -- and that is still one
+    case; the counter's first version incremented twice for those, which put the
+    number back out of step with what runs, in the counter written to end that.
+    """
+    cases = 0
+
+    def failed(label):
+        failures.append(f"end-to-end: {label}")
+
     with tempfile.TemporaryDirectory() as tmp:
-        env_ok = {"GIT_AUTHOR_NAME": "xcoder-es", "GIT_AUTHOR_EMAIL": "capintobe@gmail.com",
-                  "GIT_COMMITTER_NAME": "xcoder-es", "GIT_COMMITTER_EMAIL": "capintobe@gmail.com"}
+        env_ok = FOUNDER_ENV
         git("init", "-q", "-b", "main", cwd=tmp)
         for key, value in env_ok.items():
             git("config", f"user.{key.split('_')[1].lower()}", value, cwd=tmp)
         (pathlib.Path(tmp) / "a").write_text("1")
         git("add", "-A", cwd=tmp)
-        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=tmp, env={**dict(PATH=sys.path and "/usr/bin:/bin"), **env_ok, "HOME": tmp})
+        # The same environment `commit` below builds, and built the same way:
+        # `PATH=sys.path and "/usr/bin:/bin"` stood here, which reads as a
+        # condition and is not one -- `sys.path` is never empty, so the
+        # conjunct only ever yielded the string. A dead conjunct in a suite
+        # whose whole discipline is that no assertion may be satisfied by both
+        # readings is exactly the shape that hides a live one.
+        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=tmp,
+            env={"PATH": "/usr/bin:/bin", "HOME": tmp, **env_ok})
         base = git("rev-parse", "HEAD", cwd=tmp).stdout.strip()
 
         def commit(msg, **override):
@@ -81,23 +420,102 @@ def end_to_end(failures):
             git("add", "-A", cwd=tmp)
             git("commit", "-q", "-m", msg, cwd=tmp, env=env)
 
-        def run_check(*args):
-            return subprocess.run(
-                [sys.executable, str(ROOT / "check-commit-hygiene.py"), *args],
-                cwd=tmp, capture_output=True, text=True,
-            ).returncode
-
         commit("feat(a): good commit\n\nCloses #2")
-        if run_check("--range", f"{base}..HEAD") != 0:
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
             failures.append("end-to-end: a compliant commit was rejected")
+
+        # Placed HERE, while the range is still clean: every commit the
+        # fixture makes after this one is a deliberate breach, so the run
+        # would fail and print no pass summary at all. The first version of
+        # these cases sat at the end and failed for that reason -- the fifth
+        # insertion on this branch to land in the wrong place in a fixture.
+        # Every other check in this tree reports what it read -- crates,
+        # packages, files -- and this one said only "passed", so a run that read
+        # nothing looked exactly like a run that read a hundred commits. A stale
+        # local `main` is enough to make `main..HEAD` empty, and the operator
+        # reads a pass. Three shapes, because the first version of the summary
+        # had two and the second was wrong for its sibling: handed
+        # `--range HEAD..HEAD` it announced that no rev range was given.
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD")
+        if "read" not in result.stdout or "commit(s)" not in result.stdout:
+            failed("a passing run did not say how many commits it read")
+
+        cases += 1
+        result = run_check(tmp, "--range", "HEAD..HEAD")
+        if result.returncode != 0 or "having read nothing" not in result.stdout:
+            failed("an empty range did not report itself as having read nothing")
+        elif "no rev range" in result.stdout:
+            failed("an empty range claimed no rev range was given")
+
+        cases += 1
+        result = run_check(tmp)
+        if result.returncode != 0 or "no rev range" not in result.stdout:
+            failed("a run given no input at all did not say so")
+
 
         commit("feat(b): wrong author\n\nCloses #3",
                GIT_AUTHOR_NAME="Someone Else", GIT_AUTHOR_EMAIL="x@y.z")
-        if run_check("--range", f"{base}..HEAD") != 1:
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 1:
             failures.append("end-to-end: a wrong-author commit was accepted")
 
+        # The committer half of the identity rule. CLAUDE.md names the allowed
+        # set explicitly -- the founder, and the forge, which is infrastructure
+        # rather than a third party -- and nothing tested it: every commit the
+        # suite made set GIT_COMMITTER_* to the founder, so the branch could be
+        # deleted with the suite staying green.
+        git("reset", "-q", "--hard", base, cwd=tmp)
+        commit("feat(c): committed by a bot\n\nCloses #4",
+               GIT_COMMITTER_NAME="Some Bot", GIT_COMMITTER_EMAIL="bot@example.com")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD")
+        if result.returncode != 1:
+            failures.append("end-to-end: a wrong-committer commit was accepted")
+        elif "committer is" not in result.stdout + result.stderr:
+            failures.append("end-to-end: a wrong committer was not named as such")
+
+        # The forge is the one committer permitted beside the founder, because
+        # a merge it creates records itself as committer.
+        git("reset", "-q", "--hard", base, cwd=tmp)
+        commit("feat(d): committed by the forge\n\nCloses #5",
+               GIT_COMMITTER_NAME="GitHub", GIT_COMMITTER_EMAIL="noreply@github.com")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
+            failures.append("end-to-end: the forge as committer was rejected")
+
+        # The founder's other display name is an allowed author AND committer.
+        git("reset", "-q", "--hard", base, cwd=tmp)
+        commit("feat(e): the founder's other display name\n\nCloses #6",
+               GIT_AUTHOR_NAME="Carlos Pinto", GIT_COMMITTER_NAME="Carlos Pinto")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD").returncode != 0:
+            failures.append("end-to-end: the founder's other display name was rejected")
+
+        # The two sets are NOT the same set, and this is the case that says so.
+        # The forge is an allowed committer and is not an allowed author: it is
+        # infrastructure recording that it performed a merge, never a party that
+        # wrote anything. Every existing case pairs a permitted author with a
+        # permitted committer or a forbidden one with a forbidden one, so the
+        # author test could have read `ALLOWED_COMMITTERS` and the suite would
+        # not have noticed -- which is exactly the distinction this branch spent
+        # two rounds settling.
+        git("reset", "-q", "--hard", base, cwd=tmp)
+        commit("feat(f): authored by the forge\n\nCloses #7",
+               GIT_AUTHOR_NAME="GitHub", GIT_AUTHOR_EMAIL="noreply@github.com")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD")
+        if result.returncode != 1:
+            failures.append("end-to-end: the forge as AUTHOR was accepted")
+        elif "author is" not in result.stdout + result.stderr:
+            failures.append("end-to-end: the forge as author was not named as such")
+
+        git("reset", "-q", "--hard", base, cwd=tmp)
+
         # An unresolvable range exits 2, not a traceback.
-        if run_check("--range", "nope..alsonope") != 2:
+        cases += 1
+        if run_check(tmp, "--range", "nope..alsonope").returncode != 2:
             failures.append("end-to-end: unresolvable range did not exit 2")
 
         # The hook must ignore git's comment block and -v diff.
@@ -108,15 +526,288 @@ def end_to_end(failures):
             "# ------------------------ >8 ------------------------\n"
             f"diff --git a/x b/x\n+{FOOTER}\n"
         )
-        if run_check("--commit-msg", str(msg)) != 0:
+        cases += 1
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook flagged git's comment block or diff")
         msg.write_text(f"feat(x): add thing\n\nCloses #1\n\n{TRAILER}\n")
-        if run_check("--commit-msg", str(msg)) != 1:
+        cases += 1
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 1:
             failures.append("end-to-end: hook accepted a co-author trailer")
         # A merge subject is exempt from the subject and issue rules.
         msg.write_text("Merge branch 'main' into feature\n")
-        if run_check("--commit-msg", str(msg)) != 0:
+        cases += 1
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook rejected a merge subject")
+
+        # The pull request title and body. CI writes each to a file and passes
+        # it, and the script reads both through the same loop -- which nothing
+        # ran: every invocation in this suite passed a range or a message, so
+        # either half of that tuple could be dropped and the attribution rules
+        # would stop reaching the text a reviewer actually reads first.
+        body = pathlib.Path(tmp) / "pr-body.txt"
+        title = pathlib.Path(tmp) / "pr-title.txt"
+        body.write_text("A clean description.\n")
+        title.write_text("feat(x): a clean title\n")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD",
+                     "--pr-body", str(body), "--pr-title", str(title)).returncode != 0:
+            failed("a clean pull request title and body were rejected")
+
+        body.write_text(f"A description.\n\n{FOOTER}\n")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-body", str(body))
+        if result.returncode != 1:
+            failed("a generator footer in the pull request BODY was accepted")
+        elif "pull request body" not in result.stdout + result.stderr:
+            failed("the pull request body was not named as the source")
+
+        body.write_text("A description.\n")
+        title.write_text(f"feat(x): {FOOTER}\n")
+        cases += 1
+        result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title))
+        if result.returncode != 1:
+            failed("a generator footer in the pull request TITLE was accepted")
+        elif "pull request title" not in result.stdout + result.stderr:
+            failed("the pull request title was not named as the source")
+
+        # Only attribution is applied to them. A title is not a commit subject
+        # and carries no issue reference, so running the message rules over it
+        # would refuse every pull request this repository opens.
+        title.write_text("Some title with no conventional prefix\n")
+        cases += 1
+        if run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title)).returncode != 0:
+            failed("the pull request title was held to the commit-message rules")
+
+        # CI writes the title and body from webhook data, so those bytes are
+        # outside this repository's control, and a hook hands over the commit
+        # message. None of the three failing to decode is a breach: it is an
+        # input the check could not read, which is exit 2. It was a traceback,
+        # which an operator cannot tell from the check crashing.
+        for flag, name in (("--pr-body", "body"), ("--pr-title", "title"),
+                           ("--commit-msg", "commit message")):
+            undecodable = pathlib.Path(tmp) / f"bad-{name.split()[0]}.txt"
+            undecodable.write_bytes("caf\u00e9\n".encode("latin-1"))
+            arguments = ([flag, str(undecodable)] if flag == "--commit-msg"
+                         else ["--range", f"{base}..HEAD", flag, str(undecodable)])
+            cases += 1
+            result = run_check(tmp, *arguments)
+            if result.returncode != 2:
+                failed(f"an undecodable {name} exited {result.returncode}, expected 2")
+            elif "Traceback" in result.stderr or "not valid UTF-8" not in result.stderr:
+                failed(f"an undecodable {name} did not say why it could not be read")
+
+        # The other two branches of the same reader. Only the decode branch was
+        # reached, so either of these could be deleted and the traceback would
+        # come back with the suite green -- three guards landed together and one
+        # case covered one of them.
+        # Every commit, every signature and the rev range itself come from git.
+        # With git absent the wrapper raised FileNotFoundError and the script
+        # exited 1 -- the code that means a breach was found, under a traceback
+        # an operator cannot tell from a crash. The engine prohibition check
+        # answers the same question about cargo with exit 2 and a message, and
+        # the two checks in one tree should not answer it differently.
+        cases += 1
+        empty_dir = pathlib.Path(tmp) / "no-tools"
+        empty_dir.mkdir()
+        result = run_check(
+            tmp, "--range", f"{base}..HEAD",
+            env={"PATH": str(empty_dir), "HOME": tmp},
+        )
+        if result.returncode != 2 or "git not found" not in result.stderr:
+            failed(f"a missing git exited {result.returncode}, expected 2 saying why")
+        elif "Traceback" in result.stderr:
+            failed("a missing git raised rather than reporting")
+
+        # The third is the clause the reader was missing. FileNotFoundError and
+        # IsADirectoryError are the two OSErrors that were thought of; a path
+        # whose parent is an ordinary file arrives as NotADirectoryError, and
+        # produced a traceback and exit 1 where this reader promises a message
+        # and exit 2. The budget script's loader was fixed for exactly this and
+        # this one was not swept with it.
+        (pathlib.Path(tmp) / "a-file.txt").write_text("x", encoding="utf-8")
+        for flag, target, fragment in (
+            ("--commit-msg", str(pathlib.Path(tmp) / "not-here.txt"), "no such file"),
+            ("--pr-body", tmp, "is a directory"),
+            ("--pr-title", str(pathlib.Path(tmp) / "a-file.txt" / "under.txt"),
+             "Not a directory"),
+            ("--commit-msg", str(pathlib.Path(tmp) / "a-file.txt" / "under.txt"),
+             "Not a directory"),
+        ):
+            arguments = ([flag, target] if flag == "--commit-msg"
+                         else ["--range", f"{base}..HEAD", flag, target])
+            cases += 1
+            result = run_check(tmp, *arguments)
+            if result.returncode != 2 or fragment not in result.stderr:
+                failed(f"{flag} {fragment}: exited {result.returncode}, expected 2 saying so")
+            elif "Traceback" in result.stderr:
+                failed(f"{flag} {fragment} raised rather than reporting")
+
+    return cases
+
+
+def signatures(failures):
+    """Prove the signature check with throwaway keys. Returns the number of
+    cases, so the summary line counts them even when ssh-keygen is missing."""
+    cases = 0
+
+    def case(label, result, expected_code, expected_text=None):
+        nonlocal cases
+        cases += 1
+        output = result.stdout + result.stderr
+        if result.returncode != expected_code:
+            failures.append(
+                f"signatures: {label}: exit {result.returncode}, expected {expected_code}"
+                f" ({output.strip().splitlines()[-1] if output.strip() else 'no output'})"
+            )
+        elif expected_text and expected_text not in output:
+            failures.append(f"signatures: {label}: output lacks {expected_text!r}")
+
+    if shutil.which("ssh-keygen") is None:
+        cases += 1
+        failures.append("signatures: ssh-keygen is not on PATH, so no signature case could run")
+        return cases
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp = pathlib.Path(tmp)
+        env = {"PATH": "/usr/bin:/bin", "HOME": str(tmp), **FOUNDER_ENV}
+        for name in ("founder", "stranger"):
+            subprocess.run(
+                ["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-C", name, "-f", str(tmp / name)],
+                check=True, capture_output=True, env=env,
+            )
+        founder_key = " ".join((tmp / "founder.pub").read_text().split()[:2])
+
+        allowed = tmp / "allowed-signers"
+        allowed.write_text(f"# the founder's key\ncapintobe@gmail.com {founder_key}\n")
+        not_enabled = tmp / "not-enabled"
+        not_enabled.write_text("# the founder's key goes here\n")
+        other_principal = tmp / "other-principal"
+        other_principal.write_text(f"someone@else.example {founder_key}\n")
+        pasted_pub = tmp / "pasted-pub"
+        pasted_pub.write_text(f"{founder_key} founder\n")
+
+        repo = tmp / "repo"
+        repo.mkdir()
+        git("init", "-q", "-b", "main", cwd=repo)
+        (repo / "a").write_text("1")
+        git("add", "-A", cwd=repo)
+        git("commit", "-q", "-m", "chore(init): start\n\nCloses #1", cwd=repo, env=env)
+
+        def commit(msg, key=None):
+            (repo / "a").write_text(msg[:8])
+            git("add", "-A", cwd=repo)
+            signing = ["-c", "gpg.format=ssh", "-c", f"user.signingkey={tmp / key}",
+                       "-c", "commit.gpgsign=true"] if key else []
+            result = git(*signing, "commit", "-q", "-m", msg, cwd=repo, env=env)
+            if result.returncode:
+                raise RuntimeError(f"could not create commit {msg!r}: {result.stderr}")
+
+        def check(*args, env=None):
+            return run_check(repo, "--range", "HEAD~1..HEAD", *args, env=env)
+
+        commit("feat(a): signed by the founder\n\nCloses #2", key="founder")
+        case("a commit signed by the listed key", check("--allowed-signers-file", str(allowed)),
+             0, "Verified 1 signature(s)")
+        case("the same key under another principal",
+             check("--allowed-signers-file", str(other_principal)), 1, "not the founder's address")
+        case("a file with no key entry skips and says so",
+             check("--allowed-signers-file", str(not_enabled)), 0, "signing is not yet enabled")
+        case("a file that does not exist is an error, not a skip",
+             check("--allowed-signers-file", str(tmp / "missing")), 2, "does not exist")
+        case("a pasted .pub line has no principal and is an error",
+             check("--allowed-signers-file", str(pasted_pub)), 2, "no principal")
+
+        # Every key type OpenSSH writes, not just `ssh-`. A hardware-backed or
+        # ECDSA public key pasted without a principal must be refused for the
+        # same reason, and only the `ssh-` prefix was fixtured.
+        for label, line in (
+            ("a pasted sk- hardware key", "sk-ssh-ed25519@openssh.com AAAAtest"),
+            ("a pasted ecdsa key", "ecdsa-sha2-nistp256 AAAAtest"),
+        ):
+            pasted = tmp / f"pasted-{label.split()[-2]}.txt"
+            pasted.write_text(line + "\n")
+            case(f"{label} has no principal and is an error",
+                 check("--allowed-signers-file", str(pasted)), 2, "no principal")
+
+        # A signature block quoted in the MESSAGE is not a signature. The kind
+        # is read from the object header, before the first blank line, and
+        # nothing pinned that: reading the whole object instead made this
+        # commit look ssh-signed.
+        commit("feat(q): quotes a signature block\n\nCloses #9\n\n"
+               "-----BEGIN SSH SIGNATURE-----\n-----END SSH SIGNATURE-----")
+        # The substring must be unique to the unsigned verdict. Both verdicts
+        # contain "is not signed" -- the mutant's reads "signature by key
+        # (unknown) does not verify ... the commit is not signed" -- so the
+        # first version of this case passed whether the header was read or the
+        # whole object was.
+        case("a message quoting a signature block is still unsigned",
+             check("--allowed-signers-file", str(allowed)), 1,
+             "is not signed; Principle I requires a signature")
+
+        commit("feat(b): unsigned\n\nCloses #3")
+        case("an unsigned commit", check("--allowed-signers-file", str(allowed)), 1, "is not signed")
+        case("an unsigned commit passes when signatures are not asked for", check(), 0)
+        case("an unsigned commit passes while signing is not yet enabled",
+             check("--allowed-signers-file", str(not_enabled)), 0, "signing is not yet enabled")
+
+        commit("feat(c): signed by a key not in the file\n\nCloses #4", key="stranger")
+        case("a commit signed by a key not in the file",
+             check("--allowed-signers-file", str(allowed)), 1, "is not in the allowed-signers file")
+
+        # An OpenPGP signature cannot be checked against an allowed_signers
+        # file, whatever key made it. The object is written by hand so the case
+        # needs no gpg and no keyring; git never has to verify it, because the
+        # checker reads the signature's kind from the object header first.
+        tree = git("rev-parse", "HEAD^{tree}", cwd=repo).stdout.strip()
+        parent = git("rev-parse", "HEAD", cwd=repo).stdout.strip()
+        stamp = "xcoder-es <capintobe@gmail.com> 1700000000 +0000"
+        pgp = git("hash-object", "-t", "commit", "-w", "--stdin", cwd=repo, input=(
+            f"tree {tree}\nparent {parent}\nauthor {stamp}\ncommitter {stamp}\n"
+            "gpgsig -----BEGIN PGP SIGNATURE-----\n \n iQEzBAABCAAdFiEE\n"
+            " -----END PGP SIGNATURE-----\n\nfeat(d): openpgp signed\n\nCloses #5\n"
+        )).stdout.strip()
+        case("an OpenPGP signature",
+             run_check(repo, "--range", f"{parent}..{pgp}", "--allowed-signers-file", str(allowed)),
+             1, "carries an openpgp signature")
+
+        # A `gpgsig` header whose armour is none of the three named ones. The
+        # kind is "unknown" and the verdict says so rather than "not signed",
+        # which is the difference between "sign this commit" and "this is
+        # signed with something that cannot be checked here". Dropping the
+        # branch leaves the exit code alone and changes only the diagnosis, so
+        # no exit-code assertion could have caught it.
+        novel = git("hash-object", "-t", "commit", "-w", "--stdin", cwd=repo, input=(
+            f"tree {tree}\nparent {parent}\nauthor {stamp}\ncommitter {stamp}\n"
+            "gpgsig -----BEGIN NOVEL SIGNATURE-----\n \n AAAA\n"
+            " -----END NOVEL SIGNATURE-----\n\nfeat(e): novel armour\n\nCloses #6\n"
+        )).stdout.strip()
+        case("an unrecognised signature armour is unknown, not unsigned",
+             run_check(repo, "--range", f"{parent}..{novel}",
+                       "--allowed-signers-file", str(allowed)),
+             1, "carries an unknown signature")
+
+        # ssh-keygen absent with a populated allowed-signers file. Git needs it
+        # to check an SSH signature, so the check has no verdict to give and
+        # exits 2. Without the guard it exits 1 and reports every commit as
+        # unverified -- a wrong answer rather than no answer, and the one the
+        # log would be read as a real breach. PATH holds git and nothing else.
+        bindir = tmp / "bin"
+        bindir.mkdir(exist_ok=True)
+        git_path = shutil.which("git")
+        if git_path and not (bindir / "git").exists():
+            (bindir / "git").symlink_to(git_path)
+        case("ssh-keygen missing is an error, not a wall of failures",
+             check("--allowed-signers-file", str(allowed),
+                   env={**env, "PATH": str(bindir)}),
+             2, "ssh-keygen is not on PATH")
+
+        # The hook path never sees a signature and must be unaffected by the flag.
+        msg = tmp / "MSG"
+        msg.write_text("feat(x): add thing\n\nCloses #1\n")
+        case("the hook ignores the flag",
+             run_check(repo, "--commit-msg", str(msg), "--allowed-signers-file", str(allowed)), 0)
+
+    return cases
 
 
 def main():
@@ -130,19 +821,51 @@ def main():
             hygiene.check_message(text, "t", problems)
             failures.append(f"{label}: expected PASS, got FAIL ({problems})")
 
-    for text, should_match in [
-        ("Closes #7", True), ("Refs #7", True), ("See #7", True),
-        ("tweak the palette to #000000", False),
-        ("https://example.com/guide#2-setup", False),
-    ]:
+    # The attribution matcher on its own, so a case cannot be satisfied by the
+    # subject or issue-reference rule firing instead.
+    for label, text in ATTRIBUTION_MUST_FAIL + ATTRIBUTION_MUST_FAIL_EXTRA:
+        if not hygiene.attribution_problems(text, "t"):
+            failures.append(f"{label}: expected an ATTRIBUTION problem, got none")
+    for label, text in ATTRIBUTION_MUST_PASS:
+        found = hygiene.attribution_problems(text, "t")
+        if found:
+            failures.append(f"{label}: expected no attribution problem, got {found}")
+
+    def problems_of(text):
+        found = []
+        hygiene.check_message(text, "t", found)
+        return found
+
+    for label, text in SUBJECT_MUST_FAIL:
+        if not any("Conventional Commit" in p for p in problems_of(text)):
+            failures.append(f"subject {label}: expected a Conventional Commit problem")
+    for label, text in SUBJECT_MUST_PASS:
+        found = [p for p in problems_of(text) if "Conventional Commit" in p]
+        if found:
+            failures.append(f"subject {label}: expected none, got {found}")
+    for label, text in ISSUE_MUST_FAIL:
+        if not any("issue" in p for p in problems_of(text)):
+            failures.append(f"issue {label}: expected an issue-reference problem")
+    for label, text in ISSUE_MUST_PASS:
+        found = [p for p in problems_of(text) if "issue" in p]
+        if found:
+            failures.append(f"issue {label}: expected none, got {found}")
+
+    for text, should_match in ISSUE_REF_DIRECT:
         if bool(hygiene.ISSUE_REF.search(text)) != should_match:
             failures.append(f"issue ref {text!r}: expected {should_match}")
 
-    end_to_end(failures)
+    end_to_end_cases = end_to_end(failures)
+    signature_cases = signatures(failures)
 
     for failure in failures:
         print(f"FAIL  {failure}")
-    total = len(MUST_FAIL) + len(MUST_PASS) + 5 + 6
+    total = (len(MUST_FAIL) + len(MUST_PASS)
+             + len(ATTRIBUTION_MUST_FAIL) + len(ATTRIBUTION_MUST_FAIL_EXTRA)
+             + len(ATTRIBUTION_MUST_PASS)
+             + len(SUBJECT_MUST_FAIL) + len(SUBJECT_MUST_PASS)
+             + len(ISSUE_MUST_FAIL) + len(ISSUE_MUST_PASS)
+             + ISSUE_REF_CASES + end_to_end_cases + signature_cases)
     print(f"\n{total - len(failures)}/{total} passed")
     return 1 if failures else 0
 

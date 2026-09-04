@@ -36,11 +36,33 @@ jobs:
           pathlib.Path("pr-title.txt").write_text(os.environ.get("PR_TITLE") or "", encoding="utf-8")
           PY
 
-      - name: Check commits, title and body
+      - name: Take the allowed-signers file from the base branch
+        # The keys a signature is verified against come from the base branch,
+        # never from the pull request: a pull request that could add its own
+        # key to .github/allowed-signers would authorise its own signatures. A
+        # key therefore takes effect one merge after it lands. A base branch
+        # with no such file, or one that lists no key, is the not-yet-enabled
+        # case the checker reports and skips, which is what lets the mechanism
+        # land before the founder's key does.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          if git cat-file -e "origin/${BASE_REF}:.github/allowed-signers" 2>/dev/null; then
+            git show "origin/${BASE_REF}:.github/allowed-signers" > allowed-signers.txt
+          else
+            echo "origin/${BASE_REF} carries no .github/allowed-signers; signing is not yet enabled."
+            : > allowed-signers.txt
+          fi
+
+      - name: Check commits, signatures, title and body
+        # Signature verification runs through git and ssh-keygen, which the
+        # hosted runner image carries. The checker exits 2, not 0, if either
+        # is missing while a key is listed.
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |
           python3 scripts/check-commit-hygiene.py \
             --range "origin/${BASE_REF}..HEAD" \
+            --allowed-signers-file allowed-signers.txt \
             --pr-title pr-title.txt \
             --pr-body pr-body.txt

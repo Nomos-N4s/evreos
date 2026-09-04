@@ -62,8 +62,8 @@ release path fails at resolve time. Python 3.11 or later for the budget gate
 path dependencies, and the workspace pulls no third-party crate at all. That is
 a property worth keeping deliberately: the first change that adds a real
 dependency tree is also the first change that meets SC-001's 20 MB download
-entry with something other than our own code, and A6 explains why today's
-measured number does not yet test that.
+entry with something other than our own code, and A6 explains why no
+download-size figure is measured against it today.
 
 ## A1. Build
 
@@ -173,10 +173,13 @@ FR-044, which requires the headless implementation kept working from M0).
 python3 scripts/test_check_budgets.py
 ```
 
-**Pass**: `24/24 passed`, exit 0. The gate is CI's authority to fail a build, so
-its own behaviour is tested rather than assumed. The four cases beyond the
-twenty this document first recorded are the ones covering the unmeasured-entry
-block A5 describes.
+**Pass**: `194/194 passed`, exit 0. The gate is CI's authority to fail a build,
+so its own behaviour is tested rather than assumed. Beyond each gate clause, the
+cases prove the script's closed list against an independent statement of the
+preamble's eighteen, the schema of every sub-table, SC-005's wake arithmetic at
+the count a closed hour holds, the release refusal, the measurement key — that
+one host's artefact satisfies its own platform's entry and no other — and the
+committed budget file itself, which fails only on its two unpinned runners.
 
 ## A5. The budget gate, and the deliberate failure
 
@@ -186,52 +189,81 @@ preamble.
 Run it in the two modes CI runs it in. The full report first:
 
 ```
-cargo build --release
 python3 scripts/check-budgets.py
 ```
 
+It needs no build ahead of it: the gate reads nothing off the release binary
+(A6).
+
 **Pass condition today is a failure, and the failure is the point.** Expect exit
-1 and these lines. The `FAIL` lines go to stderr and the rest to stdout, so the
-order you see depends on how you capture them; this is the order a terminal
-shows:
+1 and these lines, as a Linux host prints them. The `FAIL` lines go to stderr
+and the rest to stdout, so the order you see depends on how you capture them;
+this is the order a terminal shows:
 
 ```
-  FAIL     [budget file] runner tier1 (8th-generation Intel i3/i5 laptop, 8 GB) has no durable identity; until it is procured and pinned no hardware-dependent figure is reproducible
-  FAIL     [budget file] runner tier2 (MacBook Pro (2017), 8 GB) has no durable identity; until it is procured and pinned no hardware-dependent figure is reproducible
-  unmeasured on this machine: 2 entries
-    - SC-001 installed footprint (windows)  (no measurement produced)
-    - SC-001 installed footprint (macos)  (no measurement produced)
-  FAIL     [budget file] SC-001 installed footprint (windows): no measurement was produced; an unmeasured entry is not a pass
-  FAIL     [budget file] SC-001 installed footprint (macos): no measurement was produced; an unmeasured entry is not a pass
-  measured: download size 0.297 MB
+  FAIL     [budget file] runner tier1 (8th-generation Intel i3/i5 laptop, 8 GB) is not pinned: no durable identity, no runner_label, display_refresh not recorded; until it is procured and pinned no hardware-dependent figure is reproducible and no workflow job can resolve it
+  FAIL     [budget file] runner tier2 (MacBook Pro (2017), 8 GB) is not pinned: no durable identity, no runner_label, display_refresh not recorded; until it is procured and pinned no hardware-dependent figure is reproducible and no workflow job can resolve it
+  unmeasured on this machine: 18 entries
+    - SC-001 download size (windows)  (a windows figure is measured on a windows host; this host builds no tier's artefact)
+    - SC-001 installed footprint (windows)  (a windows figure is measured on a windows host; this host builds no tier's artefact)
+    - SC-001 download size (macos)  (a macos figure is measured on a macos host; this host builds no tier's artefact)
+    - SC-001 installed footprint (macos)  (a macos figure is measured on a macos host; this host builds no tier's artefact)
+    - SC-002 warm start (windows)  (no pinned runner for this tier)
+    - SC-002 cold start (windows)  (no pinned runner for this tier)
+    - SC-002 warm start (macos)  (no pinned runner for this tier)
+    - SC-002 cold start (macos)  (no pinned runner for this tier)
+    - SC-004 ten-tab memory (windows)  (no pinned runner for this tier)
+    - SC-004 ten-tab memory (macos)  (no pinned runner for this tier)
+    - SC-005 60-minute window (windows)  (no pinned runner for this tier)
+    - SC-005 wake-free 1-second sample (windows)  (no pinned runner for this tier)
+    - SC-005 60-minute window (macos)  (no pinned runner for this tier)
+    - SC-005 wake-free 1-second sample (macos)  (no pinned runner for this tier)
+    - SC-006 tab switch (windows)  (no pinned runner for this tier)
+    - SC-006 address-field keystroke (windows)  (no pinned runner for this tier)
+    - SC-006 tab switch (macos)  (no pinned runner for this tier)
+    - SC-006 address-field keystroke (macos)  (no pinned runner for this tier)
+  FAIL     [budget file] SC-001 download size (windows): a windows figure is measured on a windows host; this host builds no tier's artefact; an unmeasured entry is not a pass
+  FAIL     [budget file] SC-001 installed footprint (windows): a windows figure is measured on a windows host; this host builds no tier's artefact; an unmeasured entry is not a pass
+  FAIL     [budget file] SC-001 download size (macos): a macos figure is measured on a macos host; this host builds no tier's artefact; an unmeasured entry is not a pass
+  FAIL     [budget file] SC-001 installed footprint (macos): a macos figure is measured on a macos host; this host builds no tier's artefact; an unmeasured entry is not a pass
+  measured: nothing on this linux host; this host builds no tier's installer artefact
 
 Budget gates FAILED: budget file
 ```
 
-Four `FAIL` lines, not two. Read them as three separate statements.
+Six `FAIL` lines, not two. Read them as three separate statements.
 
 1. **The two runner failures are correct and are meant to be there.** Q-E9a
 settled the rule and the models; procurement is what remains, and the
 Assumptions entry on reference hardware records that pinning the two machines
 "is what remains before a hardware-dependent absolute gate blocks the build".
-The budget-file gate fails on a missing runner identity precisely so that the
-advisory period on the absolute gates is bounded by a gate rather than by good
-intentions. These two lines go away when the machines are procured and their
-durable identifiers are written into `budgets.toml`, and not before.
-2. **"unmeasured" is not "passed," and the gate now blocks on it rather than
-only saying so.** An entry the script cannot measure honestly on the machine it
-is running on is reported as unmeasured and fails the budget-file gate. The one
-exception is a hardware-dependent entry on a tier with no pinned runner — there
-is no machine to measure it on, and the runner condition above already reports
-that — which is why SC-002, SC-004, SC-005 and SC-006 do not appear here at all:
-they are not in `budgets.toml` yet (A6). SC-001's two installed-footprint
-entries are declared, are not hardware-dependent, and have no measurement, so
-they block. They will keep blocking until an installer exists to produce the
-disk delta they are measured from.
-3. **The measured number is this machine's release binary, not a budget
-   figure.**
-0.297 MB is the size of a Linux ELF built from a workspace with no dependencies.
-See A6.
+Pinned means all three recorded — a durable identity, the `runner_label` a
+workflow's `runs-on` resolves, and the display refresh SC-006's condition
+needs — and the budget-file gate fails on a runner lacking any of them
+precisely so that the advisory period on the absolute gates is bounded by a
+gate rather than by good intentions. These two lines go away when the machines
+are procured and pinned in `budgets.toml`, and not before.
+2. **"unmeasured" is not "passed," and the gate blocks on it rather than only
+saying so.** Eighteen entries are listed, each with the reason it is unmeasured
+here. Fourteen are hardware-dependent entries on a tier with no pinned runner:
+there is no machine to measure them on, the runner condition above already
+reports that, and they do not block. SC-001's four are not hardware-dependent
+and have no measurement, so they block, and each line says why: an SC-001
+figure is measured on a host of the entry's platform — the download size where
+the artefact is built, the installed footprint where it is installed — and a
+Linux host is neither. On a Windows or macOS developer machine the two entries
+of that host's own platform read `no measurement was produced` instead, the
+download size because no installer artefact exists where that platform's
+packaging build publishes it and the installed footprint because no harness
+produces it; the other platform's two read as above. All four keep blocking
+until an installer exists per platform.
+3. **Nothing is measured, and the last line says so and why.** The download
+size is "the installer artefact CI publishes", read from
+`target/packaging/windows/*.msi` or `target/packaging/macos/*.pkg` on the host
+that builds it and declared for that platform; this host builds neither, and
+the release binary is not read. On a tier's host with a built installer the
+line reads `measured: download size (<platform>) N MB`, and the figure is
+compared against that platform's entry alone (A6).
 
 Then the blocking mode, which is what CI's merge-blocking step runs. It carries
 two flags, not one:
@@ -241,10 +273,10 @@ python3 scripts/check-budgets.py --allow-unpinned-runners --allow-unmeasured
 ```
 
 **Pass**: exit 0 and `Budget gates passed.`, with the two runner failures
-demoted to `advisory` and the two installed-footprint entries annotated
-`(deferred by --allow-unmeasured)`. Run with `--allow-unpinned-runners` alone
-the script still exits 1: that flag suppresses only the runner condition, and
-the two unmeasured entries fail regardless.
+demoted to `advisory` and the four SC-001 entries annotated `deferred by
+--allow-unmeasured`. Run with `--allow-unpinned-runners` alone the script still
+exits 1: that flag suppresses only the runner condition, and the four unmeasured
+entries fail regardless.
 
 Both flags are in `.github/workflows/build.yml` today, and removing each is a
 release prerequisite rather than a preference, with a named thing that satisfies
@@ -252,9 +284,11 @@ it. `--allow-unpinned-runners` is the only thing suppressing the budget-file
 gate's runner condition, and it is satisfied by procuring and pinning the two
 machines Q-E9a names. `--allow-unmeasured` is the only thing suppressing the
 budget-file gate's unmeasured condition, and it is satisfied by building the
-harness that produces each figure — today that is SC-001's installed footprint,
-which is the disk delta after first run completes and so needs an installer that
-does not exist yet.
+harness that produces each figure — today that is both SC-001 quantities on
+both platforms: the download size, which is the installer artefact CI publishes
+for that platform and is measured on the host that builds it, and the installed
+footprint, which is the disk delta after first run completes; each needs an
+installer that does not exist yet.
 
 The workflow runs the full report at `continue-on-error: true` and the blocking
 mode as a gate, so both outputs appear on every pull request and only the second
@@ -262,48 +296,43 @@ can fail the build.
 
 ## A6. What today's gate output does not yet mean
 
-Four things are true of the gate as it stands, each verified by running it. They
-are recorded here because a validation guide that presents a green gate as a
-green product is the failure Principle II exists to prevent.
+Three things are true of the gate as it stands, each verified by running it.
+They are recorded here because a validation guide that presents a green gate as
+a green product is the failure Principle II exists to prevent.
 
-- **One Linux binary is compared against both platform entries.**
-`measure_download_size()` reads `target/release/evreos-shell` and the
-measurement is keyed on `(criterion, name)` with no platform, so the single
-number is checked against the `windows` and the `macos` download-size entries
-alike. Neither entry's stated condition — "the installer artefact CI publishes"
-— is met by it, and Linux is the deferred platform. Until an installer is built
-per platform, SC-001's download entries are not being tested by this number
-whatever verdict it prints.
-- **Fourteen of the eighteen entries are absent, and the gate does not fail on
-their absence.** The Success Criteria preamble closes the list at nine entries
-per platform — SC-001's two, SC-002's two, SC-004's one, SC-005's two and
-SC-006's two — and requires the budget-file gate to fail "when an entry a
-criterion below states is missing from the budget file". `budgets.toml` carries
-SC-001's four. `check_budget_file` iterates over the entries that are declared
-and never compares them against the closed list, so the missing fourteen are not
-reported. That is a required gate behaviour that is not yet implemented, not a
-gap in the specification.
-- **The regression half is inert.** Every SC-001 entry records
-`baseline_mb = 0.0`, and the comparison is guarded on `baseline > 0`, so no
-entry currently has a regression gate that can fire. The commit that first
-measures an entry honestly must also write its baseline, or the gate stays inert
-indefinitely.
-- **The schema has no unit, no founder-decision field, no cross-check margin, no
-wake enumeration and no spike-exemption field.** `figure_mb`/`baseline_mb` is
-the whole schema, but SC-002 and SC-006 are milliseconds and SC-005 is a
-percentage of one core plus two processor-time bounds. The preamble separately
-requires the budget-file gate to fail when an entry recorded `ratified` names no
-founder decision (all four SC-001 entries are ratified and name none), when a
-declared cross-check margin on SC-004 exceeds its limit, and when SC-005's wake
-enumeration is absent or a wake in it lacks a period, a processor-time bound or
-a justifying requirement. It also requires the release job to refuse an artefact
-built from a commit whose budget file records an unretired spike exemption. None
-of those five is implemented.
+- **No download-size figure exists, and the gate prints none.** The merged gate
+read `target/release/evreos-shell` — a Linux ELF built on a hosted Linux runner
+— and keyed the figure on `(criterion, name)` with no platform, so one number
+was compared against both the `windows` and the `macos` download-size entries,
+and neither entry's stated condition — "the installer artefact CI publishes" —
+was met by it. Measurements are now keyed on `(criterion, name, platform)`, an
+entry's whole identity; the download size is read from the platform's own
+published installer artefact on the host that builds it and declared for that
+platform, so an entry of another platform is reported unmeasured with that
+reason rather than compared against it, and a Linux host, being no tier's,
+measures nothing. Neither installer exists, so both download-size entries stand
+unmeasured until the installer each entry's condition names is built, and a
+green blocking step says nothing about SC-001's download size on any host.
+- **The regression half is inert.** Every entry records `baseline = 0.0`, and
+the comparison is guarded on `baseline > 0`, so no entry currently has a
+regression gate that can fire. The commit that first measures an entry
+honestly must also write its baseline, or the gate stays inert indefinitely.
+- **Every hardware-dependent absolute gate is advisory.** Fourteen of the
+eighteen entries are measured on a tier's pinned runner, and neither runner is
+pinned, so a breach of their stated figure cannot yet fail a build: a figure
+measured on an unnamed machine is not reproducible under SC-013. The
+budget-file gate's runner condition is what bounds that period, and
+`--allow-unpinned-runners` is the only thing holding it open.
 
-Landing the schema before the first real measurement is therefore an ordering
-constraint on the plan, not tidying: an incomplete budget file is a gate that
-cannot fail, and the budget-file gate is the thing bounding the advisory period
-on every other gate.
+The schema the preamble's budget-file gate is defined over — the closed list of
+eighteen, a unit on every figure, a founder decision on every ratified entry,
+SC-004's cross-check margin, the spike exemption and the release job's refusal
+of a build carrying one, SC-005's wake enumeration, and the display refresh in
+each runner block — is in place ahead of the first real measurement, which is
+the ordering the gate needs: an incomplete budget file is a gate that cannot
+fail, and the budget-file gate is the thing bounding the advisory period on
+every other gate. What remains is measurement, and each point above names what
+produces it.
 
 ## A7. What cannot be validated on a machine with no system webview
 
@@ -895,7 +924,7 @@ Eighteen entries, nine per platform, and the list is closed. What each needs:
 
 | Entry | Runner needed | Gates from M0 | Notes |
 | --- | --- | --- | --- |
-| SC-001 download size ×2 | No runner, but the **target platform's installer** | Absolute and regression block from M0 (not hardware-dependent) | Measured today from a Linux binary against both entries — see A6 |
+| SC-001 download size ×2 | No runner, but the **target platform's installer** | Absolute and regression block from M0 (not hardware-dependent) | Unmeasured with its reason until each platform's installer exists; then read from that platform's published artefact on the host that builds it, keyed by platform — see A6 |
 | SC-001 installed footprint ×2 | No runner, but a **clean machine image** of the target platform | Both block from M0 | Disk delta after first run completes, excluding member data; a compiled blocking rule list materialised at first run lands inside this measurement |
 | SC-002 warm start ×2 | Tier runner | Regression blocks; absolute advisory until the runner is pinned | All four **provisional**, pending the cold-start spike (B12) |
 | SC-002 cold start ×2 | Tier runner | As above | Cold start is "first launch after installation, on a fresh profile"; **[gap]** the machine's own cache and prefetch state is not fixed by the criterion, and two labs following the text exactly will differ |

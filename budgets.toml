@@ -4,15 +4,104 @@
 # defines the gates and is the only place that states them.
 #
 # An ENTRY is one number, for one criterion, on one platform, under one stated
-# measurement condition. Every entry carries its figure, its status, its
-# baseline, its declared tolerance, and the runner it is measured on.
+# measurement condition. Every entry carries its figure and the unit that figure
+# is stated in, its status, its baseline, its declared tolerance, and the runner
+# it is measured on. The fields of an entry:
+#
+#   criterion, name, platform
+#       The entry's identity. No two entries share one.
+#   figure, unit
+#       The stated figure and its unit. `unit` is `MB`, `ms` or
+#       `percent-of-core`, and is the unit the criterion states its figures in:
+#       SC-001 and SC-004 in MB, SC-002 and SC-006 in ms, SC-005 in
+#       percent-of-core. A figure with no unit is not a number a gate can
+#       compare against a measurement, so the unit is required rather than
+#       inferred from the criterion.
+#   condition
+#       The stated measurement condition, part of the entry's identity.
+#   status
+#       `ratified` or `provisional`, see below.
+#   founder_decision
+#       The recorded founder decision that set the figure, in the decision
+#       register's citation form, decisions/NNNN. A ratified figure is one such
+#       a decision set, so every ratified entry names one: today decisions/0001,
+#       the record of Q-E9's ratification. A provisional entry names none,
+#       because no decision has set its figure -- that is what provisional
+#       means -- and it gains one in the change that ratifies it. The
+#       budget-file gate fails a ratified entry that names none, and any entry
+#       whose citation is not in that form.
+#   baseline, tolerance_pct
+#       What the regression gate compares against, in the entry's unit, and
+#       the tolerance around it as a percentage of the baseline, at most 5.
+#       An undeclared tolerance is zero. A baseline of 0.0 is one no
+#       measurement has written yet, and the regression gate is inert on it
+#       until the commit that first measures the entry also writes it. A
+#       tolerance is justified by measured run-to-run variation on the pinned
+#       runner, so an entry with no measurement declares 0.0 there too.
+#   cross_check_margin
+#       SC-004 only: the margin for that criterion's whole-machine
+#       cross-check, declared and justified exactly as a tolerance is -- a
+#       percentage of the summed per-process figure the cross-check compares
+#       against, at most 5. An undeclared margin is zero, and the budget-file
+#       gate fails an SC-004 entry that declares none.
+#   spike_exemption = { pull_request, figure }
+#       Present only while a spike is establishing a figure that does not yet
+#       exist. It exempts this one entry's absolute gate and nothing else --
+#       never the regression gate, never the budget-file gate, never another
+#       entry -- and stays recorded until the figure lands. `pull_request` is
+#       the number of the pull request carrying the spike; `figure` names the
+#       figure it measures, as the criterion states it. A build produced while
+#       one is recorded is not released or tagged.
+#   baseline_reset = { date, measured_cost, requirement_served,
+#                      founder_decision }
+#       The provenance of a baseline moved upward, which only a recorded
+#       founder decision may do: the TOML date of the reset, the measured cost
+#       in the entry's unit, the requirement that cost serves, and the decision
+#       cited as above. A reset lands as its own commit, never in the commit
+#       that consumes the headroom, and never places a baseline above the
+#       entry's stated figure.
 #
 # STATUS is `ratified` (set by a recorded founder decision, tighten-only
 # thereafter) or `provisional` (standing until such a decision replaces it). It
 # describes the figure alone and never whether a gate exists.
 #
-# Adding an entry is an amendment to the specification, made in the change that
-# states the figure.
+# The ENTRIES are the eighteen the preamble closes over, nine per platform:
+# SC-001's download size and installed footprint; SC-002's warm start and cold
+# start; SC-004's ten-tab memory; SC-005's 60-minute window and wake-free
+# 1-second sample; and SC-006's tab switch and address-field keystroke. SC-003
+# states no figure and carries no entry. Adding an entry is an amendment to
+# the specification, made in the change that states the figure.
+#
+# A RUNNER block records each tier's pinned benchmark runner: the machine every
+# hardware-dependent figure for that platform is measured on and reported
+# against. Beside the model and operating-system floor it carries:
+#
+#   display_refresh
+#       The rate, in Hz, the display is driven at while measuring. SC-006 is
+#       stated on a display driven at 60 Hz whatever the panel's native rate.
+#       0 until the machine is procured and the rate recorded.
+#   runner_label
+#       The label a workflow's `runs-on` resolves to this machine. Every job
+#       that measures on a tier's runner names this label and never the
+#       machine, so that swapping the machine changes this file and no
+#       workflow. Empty until the machine is procured.
+#   identity
+#       The durable machine identifier SC-013 reproduction is reported
+#       against. Empty until the machine is procured.
+#
+# A runner is PINNED when all three are recorded. Until then the budget-file
+# gate fails on it, which is what bounds the advisory period on the
+# hardware-dependent absolute gates rather than leaving it to good intentions.
+#
+# The WAKE enumeration is SC-005's: every scheduled wake on the idle path, with
+# its `name`, its `period` in seconds, its `processor_time_bound` in
+# milliseconds of processor time, and its `justifying_requirement`. No periodic
+# timer outside it may exist on the idle path. Each wake is added by the change
+# that states its cost, which is why the enumeration lives here and not in the
+# criterion. It stands at the end of this file, one `[[wake]]` table per wake.
+# An empty enumeration would be written `wake = []` ahead of the first table
+# header, since TOML places a bare key before any table; it is a statement
+# that nothing on the idle path is scheduled, never an omission.
 
 [meta]
 milestone = "M0"
@@ -23,61 +112,409 @@ spec = "specs/001-evreos-v1/spec.md"
 # memory, held as that tier's pinned benchmark runner of stable identity. The
 # rule binds and the models follow from it.
 #
-# Neither runner is procured yet. Until each is, its `identity` stays empty and
-# the budget-file gate fails on it, which is what bounds the advisory period on
-# the absolute gates rather than leaving it to good intentions.
+# Neither runner is procured yet. Until each is, its `identity`,
+# `runner_label`, `os_version` and `memory` stay empty and its
+# `display_refresh` stays 0, and the budget-file gate fails on it.
+#
+# `os_version` and `memory` are here because FR-043's own sentence names them:
+# the budget file MUST record both machines "by model, operating-system
+# version, memory configuration and a durable machine identifier". `os_floor`
+# is the tier's declared floor and is not that -- it is what the tier admits,
+# not what a figure was measured on, and an operating-system update moves a
+# figure without changing the floor. `os_build` and `storage` are recorded for
+# SC-013 reproducibility rather than gated, because FR-043's list does not name
+# them; `latency_rig` likewise, since the rig is shared across tiers and its
+# absence is a stated limitation of SC-006 rather than an unpinned runner.
 
 [runners.tier1]
 platform = "windows"
 os_floor = "Windows 11"
 model = "8th-generation Intel i3/i5 laptop, 8 GB"
-identity = ""   # durable machine identifier — set when procured
+os_version = ""       # the release measured on, not the floor -- set when procured
+os_build = ""         # the exact build of that release -- set when procured
+memory = ""           # the memory configuration -- set when procured
+storage = ""          # storage type; it moves start-up figures -- set when procured
+display_refresh = 0   # Hz the display is driven at -- set when procured
+runner_label = ""     # what `runs-on` resolves -- set when procured
+identity = ""         # durable machine identifier -- set when procured
+latency_rig = ""      # photodiode and capture device, and the published design
 
 [runners.tier2]
 platform = "macos"
 os_floor = "macOS 13"
 model = "MacBook Pro (2017), 8 GB"
-identity = ""   # durable machine identifier — set when procured
+os_version = ""       # the release measured on, not the floor -- set when procured
+os_build = ""         # the exact build of that release -- set when procured
+memory = ""           # the memory configuration -- set when procured
+storage = ""          # storage type; it moves start-up figures -- set when procured
+display_refresh = 0   # Hz the display is driven at -- set when procured
+runner_label = ""     # what `runs-on` resolves -- set when procured
+identity = ""         # durable machine identifier -- set when procured
+latency_rig = ""      # photodiode and capture device, and the published design
 
 # --- SC-001: size. Measured from build output and from the disk delta after
 # first run completes. Not hardware-dependent, so both gates block from M0.
+# All four entries ratified (Q-E9).
 
 [[entry]]
 criterion = "SC-001"
 name = "download size"
 platform = "windows"
-figure_mb = 20
+figure = 20
+unit = "MB"
 status = "ratified"
+founder_decision = "decisions/0001"
 condition = "the installer artefact CI publishes"
-baseline_mb = 0.0
+baseline = 0.0
 tolerance_pct = 0.0
 
 [[entry]]
 criterion = "SC-001"
 name = "installed footprint"
 platform = "windows"
-figure_mb = 60
+figure = 60
+unit = "MB"
 status = "ratified"
+founder_decision = "decisions/0001"
 condition = "disk delta after first run completes, excluding member data"
-baseline_mb = 0.0
+baseline = 0.0
 tolerance_pct = 0.0
 
 [[entry]]
 criterion = "SC-001"
 name = "download size"
 platform = "macos"
-figure_mb = 20
+figure = 20
+unit = "MB"
 status = "ratified"
+founder_decision = "decisions/0001"
 condition = "the installer artefact CI publishes"
-baseline_mb = 0.0
+baseline = 0.0
 tolerance_pct = 0.0
 
 [[entry]]
 criterion = "SC-001"
 name = "installed footprint"
 platform = "macos"
-figure_mb = 60
+figure = 60
+unit = "MB"
 status = "ratified"
+founder_decision = "decisions/0001"
 condition = "disk delta after first run completes, excluding member data"
-baseline_mb = 0.0
+baseline = 0.0
 tolerance_pct = 0.0
+
+# --- SC-002: start-up. Hardware-dependent: measured by the benchmark harness
+# on the tier's pinned runner, so the absolute gate is advisory until that
+# runner is pinned; the regression and budget-file gates block from M0. All
+# four entries are provisional (Q-E9): a large share of each figure is the
+# engine's own initialisation rather than Evreos's code, so each is ratified
+# only after the cold-start spike measures that floor on the reference machine
+# for its tier, and until then no decision has set it and none is named. Both
+# figures are measured to the moment "an interactive window appears", which
+# the specification does not yet define; the amendment that defines it is the
+# founder's, and until it lands no SC-002 figure is reproducible under SC-013.
+
+[[entry]]
+criterion = "SC-002"
+name = "warm start"
+platform = "windows"
+figure = 800
+unit = "ms"
+status = "provisional"
+condition = """\
+  an interactive window appears on a warm start: a launch on an existing \
+  profile, after the browser has already run on that machine since boot, \
+  with the system web runtime already present"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-002"
+name = "cold start"
+platform = "windows"
+figure = 2000
+unit = "ms"
+status = "provisional"
+condition = """\
+  an interactive window appears on a cold start: the first launch after \
+  installation, on a fresh profile, with no Evreos process running and no \
+  cached profile state on the machine, with the system web runtime already \
+  present"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-002"
+name = "warm start"
+platform = "macos"
+figure = 800
+unit = "ms"
+status = "provisional"
+condition = """\
+  an interactive window appears on a warm start: a launch on an existing \
+  profile, after the browser has already run on that machine since boot, \
+  with the system web runtime already present"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-002"
+name = "cold start"
+platform = "macos"
+figure = 2000
+unit = "ms"
+status = "provisional"
+condition = """\
+  an interactive window appears on a cold start: the first launch after \
+  installation, on a fresh profile, with no Evreos process running and no \
+  cached profile state on the machine, with the system web runtime already \
+  present"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+# --- SC-004: memory at ten tabs. Hardware-dependent, as above. One figure
+# under two entries whose statuses differ: ratified on tier 1 (Q-E9), and
+# provisional on tier 2 because ADR-0001 records that what governs macOS
+# memory at ten tabs is unestablished and belongs to the spikes. The two
+# counters are different quantities -- Private Bytes on Windows, phys_footprint
+# on macOS -- so the figures are never compared across platforms, and each
+# entry's condition names its own. cross_check_margin bounds the whole-machine
+# cross-check: the machine's total committed memory immediately before launch,
+# subtracted from the same total at each sample, which fails when that delta
+# exceeds the summed per-process figure by more than the margin. It is
+# declared and justified exactly as a tolerance is, from measured variation on
+# the pinned runner, so it is 0.0 until the first measurement writes it, for
+# the same reason the tolerance is.
+
+[[entry]]
+criterion = "SC-004"
+name = "ten-tab memory"
+platform = "windows"
+figure = 150
+unit = "MB"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  ten tabs open; Private Bytes (PROCESS_MEMORY_COUNTERS_EX.PrivateUsage) \
+  summed over every process Evreos causes to exist, shared sections counted \
+  once, sampled every 5 seconds from the first tab opening until the session \
+  is closed; the maximum sample over a soak of at least 8 hours before \
+  release, and of at least 60 minutes for the per-change regression gate"""
+baseline = 0.0
+tolerance_pct = 0.0
+cross_check_margin = 0.0
+
+[[entry]]
+criterion = "SC-004"
+name = "ten-tab memory"
+platform = "macos"
+figure = 150
+unit = "MB"
+status = "provisional"
+condition = """\
+  ten tabs open; phys_footprint (task_vm_info) summed over every process \
+  Evreos causes to exist, shared sections counted once, sampled every \
+  5 seconds from the first tab opening until the session is closed; the \
+  maximum sample over a soak of at least 8 hours before release, and of at \
+  least 60 minutes for the per-change regression gate"""
+baseline = 0.0
+tolerance_pct = 0.0
+cross_check_margin = 0.0
+
+# --- SC-005: idle processor use. Hardware-dependent, as above; all four
+# entries ratified (Q-E9). One figure, 0.5 percent of one core, under two
+# conditions per platform that are two entries because they bound different
+# things: the window figure, which no wake is exempt from, and the wake-free
+# sample, which only an enumerated wake may exceed. Each condition states what
+# the figure is in processor time at its own scale -- 0.5 percent of an hour
+# is 18 s and 0.5 percent of a second is 5 ms -- because a harness reports
+# processor time and a reader comparing its figure needs the equivalence.
+
+[[entry]]
+criterion = "SC-005"
+name = "60-minute window"
+platform = "windows"
+figure = 0.5
+unit = "percent-of-core"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  idle, background tabs suspended; processor time of the same processes \
+  SC-004 counts, across a window of at least 60 minutes, where 0.5 percent \
+  of one core is 18 s of processor time; no wake is exempt from it"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-005"
+name = "wake-free 1-second sample"
+platform = "windows"
+figure = 0.5
+unit = "percent-of-core"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  idle, background tabs suspended; processor time of the same processes \
+  SC-004 counts, in every 1-second sample that contains no enumerated wake, \
+  where 0.5 percent of one core is 5 ms of processor time; the gate reports \
+  the highest such sample"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-005"
+name = "60-minute window"
+platform = "macos"
+figure = 0.5
+unit = "percent-of-core"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  idle, background tabs suspended; processor time of the same processes \
+  SC-004 counts, across a window of at least 60 minutes, where 0.5 percent \
+  of one core is 18 s of processor time; no wake is exempt from it"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-005"
+name = "wake-free 1-second sample"
+platform = "macos"
+figure = 0.5
+unit = "percent-of-core"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  idle, background tabs suspended; processor time of the same processes \
+  SC-004 counts, in every 1-second sample that contains no enumerated wake, \
+  where 0.5 percent of one core is 5 ms of processor time; the gate reports \
+  the highest such sample"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+# --- SC-006: chrome input latency. Hardware-dependent, as above; all four
+# entries ratified (Q-E9). The figure is both the 99th-percentile bar and the
+# hard maximum -- no trial may exceed it -- and the discard rules are the
+# criterion's, not this file's. It is measured on a display driven at 60 Hz
+# whatever the panel's native rate, which is why each runner block records
+# display_refresh: a bar relative to the panel is not reproducible under
+# SC-013.
+
+[[entry]]
+criterion = "SC-006"
+name = "tab switch"
+platform = "windows"
+figure = 16
+unit = "ms"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  a visible response to switching tabs, on a display driven at 60 Hz on the \
+  tier's pinned runner, at the 99th percentile of at least 1000 trials, with \
+  no trial over 16 ms"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-006"
+name = "address-field keystroke"
+platform = "windows"
+figure = 16
+unit = "ms"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  a visible response to a keystroke in the address field, on a display \
+  driven at 60 Hz on the tier's pinned runner, at the 99th percentile of at \
+  least 1000 trials, with no trial over 16 ms"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-006"
+name = "tab switch"
+platform = "macos"
+figure = 16
+unit = "ms"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  a visible response to switching tabs, on a display driven at 60 Hz on the \
+  tier's pinned runner, at the 99th percentile of at least 1000 trials, with \
+  no trial over 16 ms"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+[[entry]]
+criterion = "SC-006"
+name = "address-field keystroke"
+platform = "macos"
+figure = 16
+unit = "ms"
+status = "ratified"
+founder_decision = "decisions/0001"
+condition = """\
+  a visible response to a keystroke in the address field, on a display \
+  driven at 60 Hz on the tier's pinned runner, at the 99th percentile of at \
+  least 1000 trials, with no trial over 16 ms"""
+baseline = 0.0
+tolerance_pct = 0.0
+
+# --- SC-005's wake enumeration. Two wakes, each bounded at the 50 ms of
+# processor time SC-005 caps a wake at, because neither has been measured and
+# a tighter bound would be a claim about an implementation that does not
+# exist; each tightens in the change that first measures it, as a baseline is
+# written by the change that first measures its entry. The period is stated
+# here because SC-005 places it here: each wake is added by the change that
+# states its cost, and this is that change for both. With these periods no
+# 60-minute window contains more than one firing of either, so the enumerated
+# bounds sum to 100 ms in any such window against the 500 ms SC-005 allows,
+# leaving 400 ms for wakes later changes add.
+#
+# Each wake MUST be coalesced with the platform's own scheduler and MUST NOT
+# wake the machine from sleep. Both are SC-005's terms, verified by design
+# review and by instrumentation of scheduled work rather than by this file.
+# Work a wake needs beyond its bound is a change to this file stating the
+# cost, never an exception to SC-005.
+#
+# Not enumerated, deliberately: the FR-039a retention evaluation. FR-039a has
+# the client evaluate its own retention "whenever it runs", so it is evaluated
+# on every browser run and needs no timer, and an implementation with no timer
+# for it enumerates none -- which SC-005 permits in terms: "none of the three
+# is required to BE a scheduled wake". It is not omitted here; it is not a
+# wake. Should an implementation ever give it a timer, that is a third table
+# below, added by the change that states its cost.
+
+[[wake]]
+name = "update check"
+period = 21600                 # seconds: every 6 hours
+processor_time_bound = 50      # ms of processor time, SC-005's cap
+justifying_requirement = "FR-014"
+# FR-014 requires the browser to update itself and to release to a proportion
+# of users at a time. The check fetches the signed manifest carrying the
+# rollout fraction and decides its own inclusion locally, so the period is what
+# bounds how long a hold or a widening of that fraction takes to reach every
+# running install: six hours, four checks a day. The bound covers the check
+# itself -- the fetch, the signature verification and the version comparison.
+# Where the manifest names an update, fetching and applying it is work the
+# check hands off, bounded by SC-005's window figure like everything else on
+# the idle path.
+
+[[wake]]
+name = "blocking-list refresh"
+period = 86400                 # seconds: every 24 hours
+processor_time_bound = 50      # ms of processor time, SC-005's cap
+justifying_requirement = "FR-008"
+# FR-008 requires blocking active on first launch with no configuration, so
+# the corpus ships in the release -- SC-001 counts its bytes -- and this wake
+# is what keeps the held revision current afterwards. A revision a day keeps
+# the lists current for a member who leaves the browser open all day, the
+# cohort SC-004's soak is modelled on, and a shorter period buys little: a
+# stale list fails soft, since the blocking that shipped still blocks, while
+# every extra wake is a cost SC-005 counts. The bound covers the check for a
+# newer revision than the one held. Whether a new revision can also be fetched
+# and compiled inside it is unestablished -- tier 2 compiles WebKit rule lists
+# of up to 150,000 rules per partition -- and where it cannot, that work is
+# not this wake's: it runs off the idle path, or it is a change to this file
+# stating its cost.

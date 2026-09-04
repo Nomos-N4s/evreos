@@ -37,8 +37,11 @@ jobs:
         run: python3 scripts/test_check_budgets.py
 
       - name: Build the release artefact
-        # SC-001 counts the bytes Evreos ships, so the figure the budget gate
-        # reads has to come from a release build, not a debug one.
+        # Principle III's release path, proved to build on every change. SC-001
+        # reads no figure off this binary: its download size is the installer
+        # artefact CI publishes for each platform, measured on the host that
+        # builds it, and this Linux runner builds none -- Linux is the deferred
+        # platform, and a Linux ELF meets neither entry's condition.
         run: cargo build --release
 
       - name: Budgets, full report
@@ -62,12 +65,48 @@ jobs:
         #     hardware-dependent absolute gates.
         #
         #   --allow-unmeasured  satisfied by building the harness that produces
-        #     each figure. Today that is SC-001's installed footprint, which is
-        #     the disk delta after first run completes and so needs an installer
-        #     that does not exist yet.
+        #     each figure. Today that is both SC-001 quantities on both
+        #     platforms: the download size, which is the installer artefact CI
+        #     publishes for that platform and is measured on the host that
+        #     builds it, and the installed footprint, which is the disk delta
+        #     after first run completes -- each needing an installer that does
+        #     not exist yet, and neither measurable on this runner, which builds
+        #     no tier's artefact.
         #
         # Removing either is a release prerequisite, not a preference.
         run: >
           python3 scripts/check-budgets.py
           --allow-unpinned-runners
           --allow-unmeasured
+
+  release:
+    name: Release
+    # A commit on main is the only release candidate, so this job runs on the
+    # push that lands one and is skipped on a pull request: a spike's pull
+    # request carries its exemption for as long as the spike runs and is
+    # mergeable with it. What it may not be is released.
+    if: github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Refuse a build carrying an unretired spike exemption
+        # The Success Criteria preamble: a build produced while a spike
+        # exemption is unretired MUST NOT be released or tagged, and the
+        # release job refuses an artefact built from a commit whose budget file
+        # records one. The file read here is the file at the commit the
+        # artefact was built from, since this job and the build job check out
+        # the same SHA. It refuses on every recorded exemption, well formed or
+        # not; retiring one is deleting it, in the change that lands the
+        # figure. While a spike is open on main this job is red, and that is
+        # the statement it makes -- the commit is not releasable -- beside a
+        # green build job, which is how a reader tells the two apart.
+        run: python3 scripts/check-budgets.py --refuse-exemptions
+
+      # No step publishes or tags yet. SC-001's download-size condition names
+      # an installer artefact CI publishes, and no installer exists; no tag
+      # scheme has been decided either. When either lands it lands in this
+      # job, below the refusal, and nowhere else: a publish or tag step in
+      # another job, or above the refusal in this one, is not behind it, and
+      # that placement is the whole of what the refusal's guarantee rests on.

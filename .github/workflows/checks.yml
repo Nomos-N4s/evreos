@@ -1,0 +1,111 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  checks:
+    # The job name is what a required-status-check setting on main refers to.
+    # Renaming it would un-require every check in scripts/checks/ at once, and
+    # silently, so it changes only together with that setting.
+    name: Repository checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        # A check that reads `cargo metadata` reasons over the graph Cargo
+        # resolves, so the toolchain is named here for the reason build.yml
+        # names it: a runner image update must not silently change what a
+        # check reads. Minimal profile, because no check compiles anything.
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          cargo --version
+
+      - name: Every module has its tests
+        # One <name>.py beside one test_<name>.py, the convention
+        # scripts/checks/README.md states. A check with no tests is a gate
+        # whose own behaviour nobody has proved, so the pair is enforced here
+        # rather than asked for in review. The rule is one-way: a test file
+        # with no module is not an error.
+        #
+        # Every module, not every check_*.py. rustlex.py is production logic
+        # both checks read Rust through, and while this loop keyed on the
+        # check_ prefix it was the one file here the rule could not reach --
+        # so the module that had already caused two checks to be wrong at once
+        # was also the module nothing required tests for.
+        #
+        # BOTH directories, not just this one. The two scripts in scripts/ are
+        # checks by every measure that matters -- one gates the budgets, one
+        # gates authorship -- and each carries a suite that a workflow runs by
+        # name. What they did not carry was this rule, so a THIRD script added
+        # there would have had neither: no pairing to require a suite, and no
+        # step naming one to run. The reason those two live outside
+        # scripts/checks/ is that each needs inputs its own workflow supplies,
+        # which is about how they RUN, not about whether their behaviour is
+        # proved. The rule that caught a module landing here without its tests
+        # had no reach one directory across.
+        run: |
+          shopt -s nullglob
+          missing=0
+          for module in scripts/checks/*.py scripts/*.py; do
+            directory="$(dirname "$module")"
+            name="$(basename "$module")"
+            case "$name" in test_*) continue;; esac
+            # Hyphens become underscores, which is the whole difference between
+            # the two directories' names: scripts/ is hyphenated and pays for it
+            # with an importlib preamble in each suite, scripts/checks/ is not.
+            # check-budgets.py -> test_check_budgets.py; casefs.py is unchanged.
+            expected="$directory/test_${name//-/_}"
+            if [ ! -f "$expected" ]; then
+              echo "MISSING  $expected, the tests for $module" >&2
+              missing=1
+            fi
+          done
+          exit "$missing"
+
+      - name: Every check's own tests
+        # Every file runs to completion even after one fails, so one red file
+        # does not hide another; the step fails at the end. An empty glob
+        # passes, which is what let this harness land before its first check;
+        # checks have since landed, so the step runs them.
+        #
+        # Both directories, as the pairing step above requires of both. That
+        # step alone would have demanded a suite for a new script in scripts/
+        # and left nothing running it -- half a rule, which is the shape this
+        # branch keeps finding. The two suites already there are also run by
+        # their own workflows, beside the check each gates, because a check
+        # whose tests fail has no verdict worth reading; running them here too
+        # costs seconds and is what makes the rule whole.
+        run: |
+          shopt -s nullglob
+          files=(scripts/checks/test_*.py scripts/test_*.py)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No tests under scripts/checks/ yet."
+          fi
+          failed=0
+          for file in "${files[@]}"; do
+            echo "== $file"
+            python3 "$file" || { echo "FAILED  $file" >&2; failed=1; }
+          done
+          exit "$failed"
+
+      - name: Every check
+        # Reached only if every test above passed: a check whose tests fail
+        # has no verdict worth reading. Otherwise the same shape as the step
+        # above, for the same reasons.
+        run: |
+          shopt -s nullglob
+          files=(scripts/checks/check_*.py)
+          if [ "${#files[@]}" -eq 0 ]; then
+            echo "No checks under scripts/checks/ yet."
+          fi
+          failed=0
+          for file in "${files[@]}"; do
+            echo "== $file"
+            python3 "$file" || { echo "FAILED  $file" >&2; failed=1; }
+          done
+          exit "$failed"

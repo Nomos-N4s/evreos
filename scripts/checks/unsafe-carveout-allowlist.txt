@@ -1,0 +1,9 @@
+# Crates permitted to lift the workspace `unsafe_code = "forbid"`, one package
+# name per line. Read by scripts/checks/check_crate_policy.py on every run.
+#
+# An entry records a carve-out taken, not one granted ahead of it: the check
+# fails on an entry naming a crate that still forbids `unsafe`, so the entry
+# lands in the same commit as the first `unsafe` line and never before it.
+# Empty today, by design, so the first entry is a visible diff in this file,
+# and the pull request that writes it says why -- the reasoning it must meet
+# is section 2.9 of specs/001-evreos-v1/research.md.
