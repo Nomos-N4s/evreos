@@ -6,6 +6,7 @@ resolver = "3"
 members = [
     "crates/evreos-engine",
     "crates/evreos-engine-headless",
+    "crates/evreos-net",
     "crates/evreos-shell",
 ]
 
