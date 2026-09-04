@@ -1,0 +1,17 @@
+[package]
+name = "evreos-i18n"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# No dependencies, deliberately. FR-016a's neutral menu entry is drawn from
+# these catalogues and must render at first run, with no account, no network
+# and no Apivo state, so resolution is a pure function over text compiled into
+# the binary. The catalogue file format is provisional until the N10
+# measurement settles it; the option that costs bytes enters here, in the
+# change that states its cost under FR-043, never quietly.
+
+[lints]
+workspace = true
