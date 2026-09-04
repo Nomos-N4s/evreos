@@ -1,0 +1,23 @@
+# The fixture brand: a complete, deliberately fictional brand whose only job
+# is to prove the seam. CI builds it in the release profile on every change
+# (Principle VIII, FR-042), so every field here is set -- an `unset` sentinel
+# in this file is a red build by design.
+#
+# The values are this file's own and mean nothing: hosts sit under the
+# reserved `.invalid` top-level domain so none of them can ever resolve, and
+# the names are invented words no real product carries. Every set field MUST
+# differ from every set field in brands/evreos.toml -- the unit tests in
+# crates/evreos-shell/src/brand.rs hold that line, because a shared value
+# would let a hardcoded copy of it hide from scripts/checks/check_brand.py
+# behind the wrong file.
+
+product_name = "Fixtureweave"
+money_service_name = "Fixturepurse"
+primary_colour = "#1a2b3c"
+accent_colour = "#c3b2a1"
+search_endpoint = "https://search.fixture.invalid/"
+money_endpoint = "https://money.fixture.invalid/"
+update_endpoint = "https://update.fixture.invalid/"
+surface_endpoint = "https://surfaces.fixture.invalid/"
+diagnostics_endpoint = "https://relay.fixture.invalid/"
+support_address = "support@fixture.invalid"
