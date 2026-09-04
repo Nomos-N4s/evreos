@@ -9,11 +9,32 @@
 //! a machine with no system webview, which is the point of the second
 //! implementation Principle III requires.
 
-use evreos_engine::{Engine, LoadError, Request};
+use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Request};
 use evreos_engine_headless::HeadlessEngine;
 
 fn engine_failing_with(address: &str, error: LoadError) -> HeadlessEngine {
     HeadlessEngine::new().with_failure(address, error)
+}
+
+/// Start one navigation and drain the queue to quiescence, returning the id
+/// and everything the engine had to say.
+fn drive<E: Engine>(engine: &mut E, address: &str) -> (NavigationId, Vec<NavigationEvent>) {
+    let id = engine.start_navigation(&Request::new(address));
+    let mut events = Vec::new();
+    while let Some(event) = engine.poll_event() {
+        events.push(event);
+    }
+    (id, events)
+}
+
+fn failure_of(events: &[NavigationEvent], id: NavigationId) -> Option<LoadError> {
+    events.iter().find_map(|event| match event {
+        NavigationEvent::Failed {
+            id: event_id,
+            error,
+        } if *event_id == id => Some(error.clone()),
+        _ => None,
+    })
 }
 
 #[test]
@@ -49,14 +70,15 @@ fn each_of_the_four_causes_is_distinguishable() {
     let mut seen = Vec::new();
     for (address, error) in cases {
         let mut engine = engine_failing_with(address, error.clone());
-        let result = engine.load(&Request::new(address));
+        let (id, events) = drive(&mut engine, address);
+        let failure = failure_of(&events, id);
         assert_eq!(
-            result,
-            Err(error.clone()),
+            failure.as_ref(),
+            Some(&error),
             "{address} did not fail as scripted"
         );
 
-        let described = result.unwrap_err().to_string();
+        let described = failure.expect("asserted present above").to_string();
         assert!(
             described.contains(address),
             "the error state must name the address it concerns: {described}"
@@ -87,10 +109,15 @@ fn a_failed_load_is_never_a_successful_empty_page() {
         },
     );
 
+    let (id, events) = drive(&mut engine, "https://unresolvable.invalid/");
+    assert!(failure_of(&events, id).is_some());
     assert!(
-        engine
-            .load(&Request::new("https://unresolvable.invalid/"))
-            .is_err()
+        !events.iter().any(|event| matches!(
+            event,
+            NavigationEvent::Committed { id: event_id, .. }
+            | NavigationEvent::Succeeded { id: event_id } if *event_id == id
+        )),
+        "a failed navigation must neither commit nor succeed"
     );
     assert!(
         engine.current().is_none(),
@@ -109,12 +136,17 @@ fn a_failure_does_not_replace_the_page_the_member_was_on() {
             },
         );
 
-    engine
-        .load(&Request::new("https://good.invalid/"))
-        .expect("scripted page");
+    let (good_id, good_events) = drive(&mut engine, "https://good.invalid/");
+    assert!(
+        good_events
+            .iter()
+            .any(|event| matches!(event, NavigationEvent::Succeeded { id } if *id == good_id)),
+        "the scripted page did not load"
+    );
     assert_eq!(engine.current().map(|p| p.title()), Some("Good"));
 
-    assert!(engine.load(&Request::new("https://bad.invalid/")).is_err());
+    let (bad_id, bad_events) = drive(&mut engine, "https://bad.invalid/");
+    assert!(failure_of(&bad_events, bad_id).is_some());
     assert_eq!(
         engine.current().map(|p| p.title()),
         Some("Good"),
@@ -128,8 +160,11 @@ fn an_unscripted_address_fails_rather_than_silently_succeeding() {
     // to script a page must get a visible failure, not an empty success — the
     // same defect FR-015 forbids, one level down in the test tooling.
     let mut engine = HeadlessEngine::new();
-    let result = engine.load(&Request::new("https://unscripted.invalid/"));
-    assert!(matches!(result, Err(LoadError::Unresolvable { .. })));
+    let (id, events) = drive(&mut engine, "https://unscripted.invalid/");
+    assert!(matches!(
+        failure_of(&events, id),
+        Some(LoadError::Unresolvable { .. })
+    ));
 }
 
 #[test]
@@ -137,10 +172,19 @@ fn the_shell_sees_the_address_that_loaded_not_the_one_requested() {
     // An address bar that shows the request while displaying the response is
     // how a browser lies about where the member is.
     let mut engine = HeadlessEngine::new().with_page("https://site.invalid/", "Site");
-    let page = engine
-        .load(&Request::new("https://site.invalid/"))
-        .expect("scripted");
-    assert_eq!(page.address(), "https://site.invalid/");
+    let (id, events) = drive(&mut engine, "https://site.invalid/");
+    let committed = events.iter().find_map(|event| match event {
+        NavigationEvent::Committed {
+            id: event_id,
+            address,
+        } if *event_id == id => Some(address.clone()),
+        _ => None,
+    });
+    assert_eq!(committed.as_deref(), Some("https://site.invalid/"));
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://site.invalid/")
+    );
 }
 
 #[test]
@@ -148,7 +192,7 @@ fn every_load_the_shell_asks_for_is_observable() {
     // FR-007a bounds what may leave the machine. A test asserting on outbound
     // behaviour needs to see what was actually requested.
     let mut engine = HeadlessEngine::new().with_page("https://a.invalid/", "A");
-    let _ = engine.load(&Request::new("https://a.invalid/"));
-    let _ = engine.load(&Request::new("https://b.invalid/"));
+    let _ = drive(&mut engine, "https://a.invalid/");
+    let _ = drive(&mut engine, "https://b.invalid/");
     assert_eq!(engine.loads(), ["https://a.invalid/", "https://b.invalid/"]);
 }
