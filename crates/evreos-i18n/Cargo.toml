@@ -9,9 +9,11 @@ publish.workspace = true
 # No dependencies, deliberately. FR-016a's neutral menu entry is drawn from
 # these catalogues and must render at first run, with no account, no network
 # and no Apivo state, so resolution is a pure function over text compiled into
-# the binary. The catalogue file format is provisional until the N10
-# measurement settles it; the option that costs bytes enters here, in the
-# change that states its cost under FR-043, never quietly.
+# the binary. N10 is settled: the plain keyed table, adopted over
+# fluent-bundle on the figures at
+# specs/001-evreos-v1/measurements/n10-catalogue-format.md. A format that
+# costs a dependency enters here, in the change that re-states its byte cost
+# under FR-043, never quietly.
 
 [lints]
 workspace = true

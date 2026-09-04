@@ -27,11 +27,15 @@
 //! call site, never as text of a catalogue file, which is how FR-042's rule
 //! that no brand name is hardcoded outside the brand configuration holds here.
 //!
-//! The catalogue file format is provisional. N10 — plain keyed table against
-//! Fluent — is settled by the measurement recorded at
-//! `specs/001-evreos-v1/measurements/n10-catalogue-format.md`, so nothing in
-//! this crate's API names a format, and the embedded files carry a
-//! format-neutral name until that measurement adopts one.
+//! The catalogue file format is the plain keyed table, adopted on the N10
+//! measurement recorded at
+//! `specs/001-evreos-v1/measurements/n10-catalogue-format.md`: the plain
+//! table adds 16,896 bytes to the tier-1 release build of `evreos-shell`
+//! where `fluent-bundle` adds 121,856, and no shipped message uses the
+//! plural or formatting machinery the difference buys. Nothing in this
+//! crate's API names the format — a later adoption of Fluent is a change to
+//! the parser and the three files, re-stating its byte cost under FR-043,
+//! and every caller resolves through the same two calls.
 
 #![forbid(unsafe_code)]
 
@@ -400,12 +404,13 @@ fn parse_message(message: &str) -> Option<Vec<Piece>> {
 // The three catalogues, embedded at build time. `include_str!` is what makes
 // FR-016a's first-run guarantee structural: the text is in the binary, so
 // there is nothing to fetch, nothing to install and nothing a missing profile
-// can withhold. The filenames carry the format-neutral `.catalogue` name
-// until the N10 measurement adopts a format; renaming them is that
-// measurement's task and touches these three lines and nothing else.
-const DE_TEXT: &str = include_str!("../catalogues/de.catalogue");
-const EL_TEXT: &str = include_str!("../catalogues/el.catalogue");
-const EN_TEXT: &str = include_str!("../catalogues/en.catalogue");
+// can withhold. `.messages` is the plain keyed table's extension, adopted by
+// the N10 measurement at
+// specs/001-evreos-v1/measurements/n10-catalogue-format.md; a change of
+// format renames these three files and re-states its cost there.
+const DE_TEXT: &str = include_str!("../catalogues/de.messages");
+const EL_TEXT: &str = include_str!("../catalogues/el.messages");
+const EN_TEXT: &str = include_str!("../catalogues/en.messages");
 
 static DE: OnceLock<Catalogue> = OnceLock::new();
 static EL: OnceLock<Catalogue> = OnceLock::new();
