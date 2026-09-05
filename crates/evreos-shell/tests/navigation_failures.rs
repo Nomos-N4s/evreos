@@ -9,7 +9,7 @@
 //! a machine with no system webview, which is the point of the second
 //! implementation Principle III requires.
 
-use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Request};
+use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Page, Request};
 use evreos_engine_headless::HeadlessEngine;
 
 fn engine_failing_with(address: &str, error: LoadError) -> HeadlessEngine {
@@ -35,6 +35,21 @@ fn failure_of(events: &[NavigationEvent], id: NavigationId) -> Option<LoadError>
         } if *event_id == id => Some(error.clone()),
         _ => None,
     })
+}
+
+/// The other half of every failure assertion. The old trait's `Err` excluded
+/// success by its type; an event stream does not, so a failure that also
+/// committed or succeeded must be excluded by name — for every cause, not just
+/// the one a single test happens to exercise.
+fn assert_no_success(events: &[NavigationEvent], id: NavigationId, address: &str) {
+    assert!(
+        !events.iter().any(|event| matches!(
+            event,
+            NavigationEvent::Committed { id: event_id, .. }
+            | NavigationEvent::Succeeded { id: event_id } if *event_id == id
+        )),
+        "{address} failed and must neither commit nor succeed"
+    );
 }
 
 #[test]
@@ -76,6 +91,12 @@ fn each_of_the_four_causes_is_distinguishable() {
             failure.as_ref(),
             Some(&error),
             "{address} did not fail as scripted"
+        );
+
+        assert_no_success(&events, id, address);
+        assert!(
+            engine.current().is_none(),
+            "{address} failed and must not become the current page"
         );
 
         let described = failure.expect("asserted present above").to_string();
@@ -165,6 +186,70 @@ fn an_unscripted_address_fails_rather_than_silently_succeeding() {
         failure_of(&events, id),
         Some(LoadError::Unresolvable { .. })
     ));
+    assert_no_success(&events, id, "https://unscripted.invalid/");
+    assert!(engine.current().is_none());
+}
+
+#[test]
+fn current_reflects_a_commit_before_it_is_drained() {
+    // The contract's visibility clause: current() reflects emission, not
+    // drain — the page changes when a navigation commits, not when the shell
+    // reads about it. Nothing is polled here before the assertion, which is
+    // the whole point.
+    let mut engine = HeadlessEngine::new().with_page("https://site.invalid/", "Site");
+    engine.start_navigation(&Request::new("https://site.invalid/"));
+    let page = engine.current().expect("committed before any drain");
+    assert_eq!(page.address(), "https://site.invalid/");
+    assert_eq!(page.title(), "Site");
+}
+
+/// An engine holding an `Rc`, so it is not `Send`. Driving it through this
+/// file's generic helper is the consumer-side half of the no-`Send` guard: a
+/// `Send` bound added to `drive`'s generics stops this compiling, which the
+/// engine crate's own guard cannot see.
+struct PinnedEngine {
+    _pinned: std::rc::Rc<()>,
+    queue: Vec<NavigationEvent>,
+    next: NavigationId,
+}
+
+impl Engine for PinnedEngine {
+    fn name(&self) -> &'static str {
+        "pinned"
+    }
+
+    fn start_navigation(&mut self, request: &Request) -> NavigationId {
+        let id = self.next;
+        self.next = id.next();
+        self.queue.push(NavigationEvent::Started {
+            id,
+            address: request.address().to_owned(),
+        });
+        id
+    }
+
+    fn poll_event(&mut self) -> Option<NavigationEvent> {
+        if self.queue.is_empty() {
+            None
+        } else {
+            Some(self.queue.remove(0))
+        }
+    }
+
+    fn current(&self) -> Option<&Page> {
+        None
+    }
+}
+
+#[test]
+fn the_generic_entry_points_carry_no_send_bound() {
+    let mut engine = PinnedEngine {
+        _pinned: std::rc::Rc::new(()),
+        queue: Vec::new(),
+        next: NavigationId::FIRST,
+    };
+    let (id, events) = drive(&mut engine, "https://pinned.invalid/");
+    assert_eq!(events.first().map(NavigationEvent::id), Some(id));
 }
 
 #[test]
