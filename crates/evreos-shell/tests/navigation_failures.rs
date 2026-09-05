@@ -168,6 +168,7 @@ fn a_failure_does_not_replace_the_page_the_member_was_on() {
 
     let (bad_id, bad_events) = drive(&mut engine, "https://bad.invalid/");
     assert!(failure_of(&bad_events, bad_id).is_some());
+    assert_no_success(&bad_events, bad_id, "https://bad.invalid/");
     assert_eq!(
         engine.current().map(|p| p.title()),
         Some("Good"),
