@@ -85,21 +85,24 @@ runs anything else, so a failure here fails the build.
 cargo test --all
 ```
 
-**Pass**: six tests in `crates/evreos-shell/tests/navigation_failures.rs`, all
-passing; every other target reports zero tests.
+**Pass**: eight tests in `crates/evreos-shell/tests/navigation_failures.rs`,
+three in the engine crate's own module and one inside the shell binary — all
+passing, with no other target reporting tests.
 
 ```
-running 6 tests
-test an_unscripted_address_fails_rather_than_silently_succeeding ... ok
-test a_failure_does_not_replace_the_page_the_member_was_on ... ok
+running 8 tests
 test a_failed_load_is_never_a_successful_empty_page ... ok
-test every_load_the_shell_asks_for_is_observable ... ok
-test the_shell_sees_the_address_that_loaded_not_the_one_requested ... ok
+test a_failure_does_not_replace_the_page_the_member_was_on ... ok
+test an_unscripted_address_fails_rather_than_silently_succeeding ... ok
+test current_reflects_a_commit_before_it_is_drained ... ok
 test each_of_the_four_causes_is_distinguishable ... ok
+test every_load_the_shell_asks_for_is_observable ... ok
+test the_generic_entry_points_carry_no_send_bound ... ok
+test the_shell_sees_the_address_that_loaded_not_the_one_requested ... ok
 ```
 
-What those six actually establish, stated narrowly because SC-009 asks for more
-than they give:
+What those eight actually establish, stated narrowly because SC-009 asks for
+more than they give:
 
 - each of FR-015's four causes — unresolvable, certificate, intercepted,
 authentication-required — is a distinct value producing a distinct message that
@@ -128,7 +131,13 @@ for, and not a record of what left the machine: it observes an engine that opens
 no socket. FR-007a's boundary is outbound traffic, and B10 states the only
 instrument for it — a capture on real hardware, because WebView2 and WKWebView
 open their own sockets and no in-process recorder sees them. This test is a
-precondition for an assertion about that boundary, not the assertion.
+precondition for an assertion about that boundary, not the assertion;
+- a committed page is visible through `current()` before its events are drained
+— the contract's emission-time clause, pinned so the update cannot silently
+move to drain time;
+- the engine-generic entry points carry no `Send` bound, proved by an engine
+holding an `Rc` driven through them, which is the consumer-side half of the
+guard the engine crate's own test module carries for the trait itself.
 
 What they do **not** establish: anything about a real platform, and nothing
 about the shell's own code. The file sits under `crates/evreos-shell/tests/`,
@@ -137,10 +146,10 @@ it drives the headless engine directly. What it exercises is the seam's contract
 — `LoadError`'s closed set of four causes and its `Display` — and the headless
 implementation of that contract, on a machine with no system webview. The
 shell's own handling is `navigate()` in `crates/evreos-shell/src/main.rs`; it
-lives in a binary crate, so an integration test cannot import it, no test calls
-it, and A3's `cargo run` is the only thing that exercises it today. Giving the
-shell's half a test means first moving `navigate()` into a library target, and
-that is a change the plan owes. SC-009 separately requires the four causes
+lives in a binary crate, so an integration test cannot import it, and what
+exercises it today is the unit test inside that binary plus A3's `cargo run`.
+Giving the shell's half integration tests means moving its machinery into a
+library target, and that is a change the plan owes. SC-009 separately requires the four causes
 exercised "on every supported platform"; that exercise is B4 and needs a real
 backend on a real machine of each tier.
 
@@ -601,8 +610,8 @@ indistinguishable-cause state FR-015 exists to forbid, dressed as a pass.
 The 30-second clause has no home in `LoadError` at all: a stalled load is an
 absence of an event, not a cause. It is the shell's timeout policy, and it is
 testable only against a seam that can express an in-flight load — which the
-merged trait cannot. That is one of the three changes the seam owes before a
-backend is written.
+event contract now can: a navigation with no terminal event is that state, and
+the shell-side bound lands with the consumer that applies it.
 
 ## B5. SC-009a — the tier-2 floor
 
