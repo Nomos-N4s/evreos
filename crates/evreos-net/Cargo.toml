@@ -1,0 +1,20 @@
+# The sole egress chokepoint. Deliberately dependency-free: the crate performs
+# no networking today -- the typed front door lands first, the transport lands
+# with the story that needs it -- and scripts/checks/check_egress_chokepoint.py
+# holds every OTHER crate away from the network-capable crates, so this
+# manifest staying empty is what keeps the workspace's egress surface at zero
+# until a transport is reviewed in.
+#
+# evreos-net MUST NOT depend on evreos-shell: the shell depends on net, so the
+# binding of brand configuration to `Endpoint` happens on the shell side, in
+# crates/evreos-shell/src/brand.rs, and never here.
+[package]
+name = "evreos-net"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
