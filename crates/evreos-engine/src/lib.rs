@@ -177,18 +177,22 @@ impl NavigationId {
 /// - `Redirected` appears zero or more times, strictly between `Started` and
 ///   `Committed`.
 /// - `Committed` appears at most once. It is the moment the engine is rendering
-///   the response and the moment [`Engine::current`] changes: by the time the
-///   shell drains it, `current()` is the new page, at the committed address,
-///   with an empty title until the first `TitleChanged`. The address it carries
-///   is the one that actually loaded — after redirects, the final one — and is
-///   what the shell displays.
+///   the response and the moment [`Engine::current`] changes: from this event's
+///   emission, `current()` returns this page — at the committed address, with
+///   an empty title until the first `TitleChanged` — until a newer navigation
+///   commits. A shell draining behind the engine reads about the change after
+///   it happened; `current()` never waits for the drain. The address the event
+///   carries is the one that actually loaded — after redirects, the final one —
+///   and is what the shell displays.
 /// - Each navigation ends with at most one of `Succeeded`, `Failed` or
 ///   `NavigatedAway` — or never ends, which is the load that never resolves.
 ///   The bound on how long the shell waits is the shell's policy under SC-009,
 ///   deliberately not an engine invariant, so no engine event expresses it.
 /// - `Succeeded` only ever follows `Committed`. It carries no page and no
-///   title: the page is `current()`, and the title arrives on `TitleChanged`
-///   — before or after `Succeeded`, with no ordering promised between them.
+///   title: the committed page is read from `current()`, which still returns it
+///   unless a newer navigation has since committed, and the title arrives on
+///   `TitleChanged` — before or after `Succeeded`, with no ordering promised
+///   between them.
 /// - `Failed` and `Committed` are mutually exclusive for one id. Each of the
 ///   four causes [`LoadError`] enumerates is a condition established before
 ///   anything replaces the page being viewed, which is what makes "a failure
@@ -344,9 +348,12 @@ mod tests {
     }
 
     /// An engine that cannot cross threads, because it holds an `Rc`. If a
-    /// `Send` bound ever lands on the engine path, this implementation stops
-    /// compiling and the bound is caught here rather than by the first
-    /// platform backend that cannot satisfy it.
+    /// `Send` bound ever lands on this trait — a supertrait or a method-level
+    /// bound — this implementation stops compiling, and the bound is caught
+    /// here rather than by the first platform backend that cannot satisfy it.
+    /// This guards the trait alone: a bound added to a consumer's generic
+    /// entry point is invisible to this crate, so each such entry point in
+    /// the shell carries its own non-`Send` engine where it lives.
     struct ThreadAffine {
         _pinned: Rc<()>,
         queue: Vec<NavigationEvent>,
