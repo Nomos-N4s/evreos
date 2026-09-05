@@ -1,0 +1,21 @@
+# The German interface catalogue. FR-035 keys interface text by the primary
+# language subtag alone, so this file is named `de` and nothing longer: a
+# region subtag in the filename would re-fuse language and place.
+#
+# One message per line, `key = text`. A `{name}` is a named argument supplied
+# at resolution, never text of this file, which is how FR-042 keeps brand
+# names out of message text.
+
+# FR-015's four navigation failures: each cause named, each with a next step.
+error.unresolvable.cause = Die Adresse {address} wurde nicht gefunden.
+error.unresolvable.next_step = Prüfen Sie die Schreibweise der Adresse und versuchen Sie es erneut.
+error.certificate.cause = Die Identität von {host} konnte nicht bestätigt werden: das Zertifikat ist nicht vertrauenswürdig oder abgelaufen.
+error.certificate.next_step = Kehren Sie zur vorherigen Seite zurück. Fahren Sie nur fort, wenn Sie diesem Netz vertrauen.
+error.intercepted.cause = Etwas in diesem Netz antwortet anstelle von {host}.
+error.intercepted.next_step = Melden Sie sich im Netz an, oder wechseln Sie zu einer vertrauenswürdigen Verbindung.
+error.authentication.cause = {host} verlangt eine Anmeldung, bevor die Seite geladen wird.
+error.authentication.next_step = Melden Sie sich an, um fortzufahren.
+
+# FR-016a: the one neutral entry point to the home surface, present in the
+# browser's own menus from first run. A static label, no brand name, no state.
+menu.home_surface = Apps
