@@ -638,9 +638,10 @@ chrome** — the tab strip, address field and app surfaces carry their own
 obligation, and what renders them is spike S4's output. So this pass is owed on
 both tiers and cannot be inherited from the engine on either.
 
-**Prerequisites**: the chrome exists (S4 decided). Every candidate chrome
-renderer is disqualified by SC-006 before it reaches this scenario, so B9's
-SC-006 measurement precedes it.
+**Prerequisites**: the chrome exists (S4 decided — provisionally, under
+decisions/0004, until the pinned-runner re-run confirms it). B9's SC-006
+measurement precedes this scenario, and a selected candidate that misses there
+reopens ADR-0002 rather than being grandfathered.
 
 **Command** *(does not exist yet)*:
 
@@ -1053,8 +1054,11 @@ configuration that tier's floor admits at 8 GB — a modern laptop passing is no
 evidence that the reference machine passes.
 
 **Procurement is on the critical path for validation, not only for the gates.**
-SC-002, SC-004, SC-005 and SC-006 all wait on it; so does the chrome decision,
-because S4's candidates are discriminated by SC-006 on the tier-1 runner; so
+SC-002, SC-004, SC-005 and SC-006 all wait on it. The chrome decision no longer
+does — decisions/0004 lets S4's comparison run first on the named interim
+instrument, as indicative figures with the pinned-runner re-run owed and
+carried by ADR-0002 as a named reopen condition — though its confirmation
+still does; so
 does the SC-005 idle floor, whose answer may be a specification amendment. Buy a
 cold spare of identical configuration per tier and write the swap procedure
 down: the budget file records a durable machine identifier, so swapping in a

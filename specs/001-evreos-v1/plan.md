@@ -291,8 +291,10 @@ specification, and the two-level key design is unimplementable without it.
 *Settled by*: a founder decision recorded as an ADR.
 - **NEEDS CLARIFICATION: spike S4 — the windowing crate and what renders the
 chrome.** ADR-0001 makes both its output. *Settled by*: a measured candidate
-comparison on the tier-1 runner against SC-006 and SC-004, plus the
-screen-reader, dead-key and 200% passes. It is on the critical path for SC-006's
+comparison against SC-006 and SC-004 — taken first on the interim instrument
+decisions/0004 names, as indicative figures, with the tier-1 pinned-runner
+re-run owed — plus the screen-reader, dead-key and 200% passes, which stay with
+the pinned-runner demonstration. It is on the critical path for SC-006's
 instrumentation, which has no shell-side marker to timestamp until it is taken.
 - **NEEDS CLARIFICATION: whether to adopt EN 301 549 with the WCAG2ICT
   mapping**,
@@ -780,7 +782,10 @@ accessibility tree, and nodes cannot reference nodes in a different tree, so a
 chrome node cannot be `labelled-by` a content node. That is exactly the boundary
 the specification's own Edge Case names as where this class of interface
 commonly fails, against a release-blocking principle. N6 measures it before the
-drawn-chrome candidate can be chosen. Separately, FR-034 states WCAG 2.1 AA and
+drawn-chrome candidate can be chosen — on the interim instrument for tier 1
+under decisions/0004, with the pinned-runner runs owed and a tier-2 failure a
+named reopen condition of ADR-0002 rather than an admission precondition.
+Separately, FR-034 states WCAG 2.1 AA and
 names no mapping for non-web software, which is a founder decision (G10).
 *Complexity Tracking, row 8.*
 

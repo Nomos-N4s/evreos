@@ -2258,9 +2258,10 @@ affected requirement is stated.
 - **S4 (ADR-0001; not one of the four specification spikes).** The windowing
   crate and what renders the chrome. §5.2 gives the criteria and §5.3 the
   accessibility exposure. *Settled by*: a measured candidate comparison on the
-  tier-1 runner against SC-006 and SC-004, plus the screen-reader, dead-key and
-  200% passes — taken first on the interim instrument decisions/0004 names, as
-  indicative figures, with the pinned-runner re-run owed.
+  tier-1 runner against SC-006 and SC-004 — taken first on the interim
+  instrument decisions/0004 names, as indicative figures, with the
+  pinned-runner re-run owed — plus the screen-reader, dead-key and 200% passes,
+  which stay with the pinned-runner demonstration.
 
 ### 12.2 New measurements this research opens
 
