@@ -139,10 +139,12 @@ impl Page {
 /// Identifies one navigation for the lifetime of one engine instance.
 ///
 /// Minted by the engine and opaque to the shell, which only ever stores,
-/// compares and hashes it. There is no public constructor from an integer:
-/// a shell that could forge an id could ask about a navigation no engine
-/// started, and an engine with platform navigation identifiers of its own
-/// maps them to these rather than exposing them.
+/// compares and hashes it. There is no public constructor from an integer,
+/// so no integer semantics enter the seam — the id is a correlation token,
+/// not a capability, and [`NavigationId::FIRST`] with [`NavigationId::next`]
+/// makes the minting sequence public rather than secret. An engine with
+/// platform navigation identifiers of its own maps them to these rather than
+/// exposing them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct NavigationId(u64);
 
@@ -203,8 +205,9 @@ impl NavigationId {
 /// - `TitleChanged` appears only after `Committed` for the same id, any number
 ///   of times, including after `Succeeded` — script retitles pages long after
 ///   they load. When the id is the navigation whose page `current()` returns,
-///   the engine updates that page's title before the event is drained. A
-///   `TitleChanged` for a superseded navigation never alters the current page.
+///   the engine updates that page's title at the event's emission — `current()`
+///   reflects it whether or not the event has been drained. A `TitleChanged`
+///   for a superseded navigation never alters the current page.
 /// - `NavigatedAway` means the engine abandoned the navigation without an
 ///   outcome — a newer navigation superseded it, or it was stopped. No further
 ///   events for that id ever follow.
