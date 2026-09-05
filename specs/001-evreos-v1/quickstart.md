@@ -119,8 +119,9 @@ comment in `crates/evreos-engine/src/lib.rs` reads "the address that actually
 loaded, which may differ from the requested one after a redirect" — but the test
 does not yet prove it. A redirect case is a test worth adding, and adding it
 needs a headless engine that can script a response whose address differs from
-the request, which `HeadlessEngine::load` cannot do today: it builds the `Page`
-from the requested address;
+the request, which the headless engine cannot script today: it commits at the
+requested address, and the scripted event sequences that can express a redirect
+land with the contract's sequence support;
 - every address the *engine* was asked to load is observable to a test, through
 `HeadlessEngine::loads()`. That is a record of what the shell asked the engine
 for, and not a record of what left the machine: it observes an engine that opens
@@ -358,13 +359,14 @@ binds every measured figure to that tier's pinned runner and to no other
 machine, so a fast laptop producing a green number produces nothing that may be
 recorded, published under SC-013, or used to reset a baseline.
 - Neither shipping tier's backend exists yet. Phase 0 research established that
-the merged `Engine` trait's synchronous `load` cannot be implemented over either
-shipping backend without a nested message loop SC-006 forbids, that it cannot
-represent navigation the shell did not initiate, that it cannot express an
-in-flight load SC-009 requires to be testable, and that it has no construction
-seam where the shared platform context SC-004 depends on can live. The trait
-changes before the first backend is written, so scenarios in Part B that name a
-backend are gated on that change landing first.
+the merged `Engine` trait's synchronous `load` could not be implemented over
+either shipping backend without a nested message loop SC-006 forbids, that it
+could not represent navigation the shell did not initiate, and that it could
+not express an in-flight load SC-009 requires to be testable — which is why the
+trait changed to the event contract before the first backend was written. What
+it still lacks is the construction seam where the shared platform context
+SC-004 depends on can live, and scenarios in Part B that name a backend are
+gated on the remaining owed seam changes landing first.
 
 ---
 

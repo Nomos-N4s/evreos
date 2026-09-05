@@ -305,9 +305,11 @@ than a conformance obligation.
 
 #### The merged `Engine` trait is the wrong shape, and its revision precedes the first platform backend
 
-The trait on `main` is `load(&mut self, &Request) -> Result<Page, LoadError>`
-with `current() -> Option<&Page>`. Phase 0 read it against both shipping
-backends at pinned versions and it does not survive that reading.
+The trait this plan read on `main` was `load(&mut self, &Request) ->
+Result<Page, LoadError>` with `current() -> Option<&Page>`. Phase 0 read it
+against both shipping backends at pinned versions and it did not survive that
+reading; the revision this section argues for has since landed as the event
+contract, and the argument stays as the record of why.
 
 *Synchronous `load` has exactly one implementation route on either backend, and
 that route breaks SC-006 by construction.* `wry::WebView::load_url` returns as
