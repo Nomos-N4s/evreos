@@ -328,9 +328,9 @@ causes. This model keeps it unchanged and wraps it.
 
 | Field | Type | Notes |
 | --- | --- | --- |
-| `navigation_id` | id | Correlates a request with its outcome, so an outcome for a navigation the member abandoned is distinguishable from the current one. **[design]** — `research.md` §1.2 establishes that the merged synchronous `load` (`fn load(&mut self, request: &Request) -> Result<Page, LoadError>`) carries no request-to-outcome correlation, so an outcome for a navigation the member abandoned cannot be told from the current one; the reshaping is the plan's, not this document's. |
+| `navigation_id` | id | Correlates a request with its outcome, so an outcome for a navigation the member abandoned is distinguishable from the current one. **[design]** — `research.md` §1.2 established that the merged synchronous `load` (`fn load(&mut self, request: &Request) -> Result<Page, LoadError>`) carried no request-to-outcome correlation; the reshaping was the plan's and has since landed as the event contract, whose `NavigationId` is this id. |
 | `requested` | address | What the shell asked for. |
-| `outcome` | `Succeeded { address, title } \| Failed(LoadError)` | |
+| `outcome` | `Succeeded \| Failed(LoadError) \| NavigatedAway` | As landed, an outcome carries no address and no title: the committed address arrives on its own event before the outcome, and the title on `TitleChanged`, never inside an outcome. |
 | `LoadError` | `Unresolvable \| Certificate { detail } \| Intercepted \| AuthenticationRequired` | The four causes **FR-015** names, exercised on every supported platform by **SC-009**. |
 
 **Validation**

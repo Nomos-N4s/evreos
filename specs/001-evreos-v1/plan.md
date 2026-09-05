@@ -305,9 +305,11 @@ than a conformance obligation.
 
 #### The merged `Engine` trait is the wrong shape, and its revision precedes the first platform backend
 
-The trait on `main` is `load(&mut self, &Request) -> Result<Page, LoadError>`
-with `current() -> Option<&Page>`. Phase 0 read it against both shipping
-backends at pinned versions and it does not survive that reading.
+The trait this plan read on `main` was `load(&mut self, &Request) ->
+Result<Page, LoadError>` with `current() -> Option<&Page>`. Phase 0 read it
+against both shipping backends at pinned versions and it did not survive that
+reading; the revision this section argues for has since landed as the event
+contract, and the argument stays as the record of why.
 
 *Synchronous `load` has exactly one implementation route on either backend, and
 that route breaks SC-006 by construction.* `wry::WebView::load_url` returns as
@@ -346,10 +348,12 @@ and ten tabs each minting their own context loses SC-004 before any product code
 exists; an addressable rendering-surface handle with create, activate, suspend,
 close and a data-store selector, because FR-001, FR-002, FR-007 and FR-016 each
 need independently addressable contexts and the merged trait is single-surface;
-a blocking policy surface rather than a per-request veto, because a veto is
+and a blocking policy surface rather than a per-request veto, because a veto is
 implementable on tier 1 and not on tier 2 and so would make the seam
-Windows-shaped; and no `Send` bound anywhere on the engine path, which is
-unimplementable on either tier and cheaper to forbid now than to unwind later.
+Windows-shaped. The no-`Send` rule — unimplementable on either tier and cheaper
+to forbid than to unwind — landed with the event contract itself rather than
+beside it, stated on the trait and guarded by non-`Send` test engines at both
+ends of the path.
 
 **Why this is the seam working rather than the seam failing.** ADR-0001's own
 revisit triggers record that the trait's backend-swap intention "is untested
