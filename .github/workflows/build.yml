@@ -44,6 +44,16 @@ jobs:
         # platform, and a Linux ELF meets neither entry's condition.
         run: cargo build --release
 
+      - name: Build the fixture brand
+        # Principle VIII and FR-042: a fixture brand MUST build in CI on every
+        # change, proving the brand seam rather than asserting it -- a
+        # rebrandability claim CI does not exercise is discovered to be false
+        # at the worst possible moment. Release profile on purpose: the gate
+        # in crates/evreos-shell/build.rs refuses a release-profile build
+        # whose selected brand carries an `unset` field on a shipping
+        # platform, so this step also proves brands/fixture.toml is complete.
+        run: cargo build --release -p evreos-shell --features fixture-brand
+
       - name: Budgets, full report
         # Every gate, including the budget-file gate's requirement that each
         # tier's runner carry a durable identity. Informational until the
