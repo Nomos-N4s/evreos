@@ -772,6 +772,10 @@ candidate must demonstrate on the tier-1 pinned runner: SC-006's 16 ms with no
 trial over 16 ms across ≥1000 trials for both tab switch and address-field
 keystroke; a screen-reader pass with Narrator and NVDA; correct German dead-key
 and Greek entry in the FR-003 field; legible layout at 200% with no clipping.
+Decisions/0004 lets the comparison run first on the named interim instrument,
+as indicative figures under that record's closed claim scope; what a candidate
+must demonstrate is unchanged, and the demonstration on the pinned runner is
+owed rather than replaced.
 ADR-0001 states the limit of its own accessibility rationale — the OS-engine
 argument "covers page content, not the shell's own chrome … and what renders
 them is an output of spike S4, not settled here" — and SC-006, being ratified,
@@ -2254,8 +2258,10 @@ affected requirement is stated.
 - **S4 (ADR-0001; not one of the four specification spikes).** The windowing
   crate and what renders the chrome. §5.2 gives the criteria and §5.3 the
   accessibility exposure. *Settled by*: a measured candidate comparison on the
-  tier-1 runner against SC-006 and SC-004, plus the screen-reader, dead-key and
-  200% passes.
+  tier-1 runner against SC-006 and SC-004 — taken first on the interim
+  instrument decisions/0004 names, as indicative figures, with the
+  pinned-runner re-run owed — plus the screen-reader, dead-key and 200% passes,
+  which stay with the pinned-runner demonstration.
 
 ### 12.2 New measurements this research opens
 
@@ -2313,7 +2319,9 @@ specification statement that lands as an amendment there.
   coherently with an embedded WebView2 or WKWebView tree** — one reading order,
   one focus order, no orphaned subtree — under Narrator, NVDA and VoiceOver?
   *Settled by*: a spike building a minimal AccessKit chrome with one embedded
-  webview on each tier's runner, driven by each platform's own assistive
+  webview on each tier's runner — first on the interim instrument decisions/0004
+  names for tier 1, with each tier's pinned-runner run owed and tier 2 open
+  until measured there — driven by each platform's own assistive
   technology, with the resulting tree captured from Accessibility Insights (UIA)
   and Accessibility Inspector (NSAccessibility) and committed. AccessKit's
   merged multiple-tree support explicitly does not cover native webview trees,
