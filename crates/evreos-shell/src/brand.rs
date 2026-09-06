@@ -132,8 +132,12 @@ mod tests {
 
     #[test]
     fn the_fixture_brand_has_every_field_set() {
-        // T034's CI step builds the fixture in the release profile, so one
-        // `unset` here is a red build on every change -- deliberately.
+        // This test is what holds the fixture complete on every runner:
+        // T034's ubuntu step builds the fixture in the release profile, but
+        // its target is linux, where the unset gate deliberately never
+        // binds, so that step cannot refuse an `unset` field. The gate
+        // itself refuses one only in build.yml's release-gate job, which
+        // builds the fixture on windows, where the gate is live.
         let fixture = parse(FIXTURE).expect("brands/fixture.toml parses");
         assert_eq!(unset_fields(&fixture), Vec::<&str>::new());
     }

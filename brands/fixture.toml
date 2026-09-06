@@ -1,7 +1,13 @@
 # The fixture brand: a complete, deliberately fictional brand whose only job
-# is to prove the seam. CI builds it in the release profile on every change
-# (Principle VIII, FR-042), so every field here is set -- an `unset` sentinel
-# in this file is a red build by design.
+# is to prove the seam. CI builds it on every change (Principle VIII, FR-042),
+# and every field here is set. Two provers hold that line: the
+# the_fixture_brand_has_every_field_set unit test in
+# crates/evreos-shell/src/brand.rs makes an `unset` sentinel here a red test
+# on every change, and the release-gate job in .github/workflows/build.yml
+# builds this brand on windows, where the unset gate in
+# crates/evreos-shell/build.rs binds, so the sentinel is a red build there
+# too. The ubuntu fixture-build step alone cannot refuse an unset field: its
+# target is linux, the gate's deliberate carve-out.
 #
 # The values are this file's own and mean nothing: hosts sit under the
 # reserved `.invalid` top-level domain so none of them can ever resolve, and

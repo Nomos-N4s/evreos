@@ -48,10 +48,14 @@ jobs:
         # Principle VIII and FR-042: a fixture brand MUST build in CI on every
         # change, proving the brand seam rather than asserting it -- a
         # rebrandability claim CI does not exercise is discovered to be false
-        # at the worst possible moment. Release profile on purpose: the gate
-        # in crates/evreos-shell/build.rs refuses a release-profile build
-        # whose selected brand carries an `unset` field on a shipping
-        # platform, so this step also proves brands/fixture.toml is complete.
+        # at the worst possible moment. The release profile is the one T034
+        # names, but on this runner it proves only that the fixture selection
+        # builds: the unset gate in crates/evreos-shell/build.rs binds on a
+        # shipping platform and this runner's target is linux, the gate's
+        # deliberate carve-out. brands/fixture.toml's completeness is held by
+        # the the_fixture_brand_has_every_field_set unit test in the Test
+        # step above, and the gate itself fires in the release-gate job
+        # below, which builds the fixture where the gate is live.
         run: cargo build --release -p evreos-shell --features fixture-brand
 
       - name: Budgets, full report
