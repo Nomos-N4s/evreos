@@ -142,7 +142,7 @@ problems, _ = run(source=purpose_source(non_history=NON_HISTORY + ["TokenRenewal
 check("a new non-history purpose beyond the known ten passes", problems == [])
 
 # SHAPE: the wrapper must be exactly the two sets, in the structural form the
-# reachability argument rests on.
+# reachability argument rests on -- payload types included, not just names.
 problems, _ = run(source=purpose_source(
     wrapper=("HistoryBearing(HistoryBearing)", "NonHistory(NonHistory)", "Other(u8)")))
 check("a third Purpose variant fails", mentions(problems, "Purpose's variants"))
@@ -150,6 +150,12 @@ problems, _ = run(source=purpose_source(
     wrapper=("NonHistory(NonHistory)", "HistoryBearing(HistoryBearing)")))
 check("a reordered wrapper fails too; the convention is the exact shape",
       mentions(problems, "Purpose's variants"))
+# The payload swap: every variant NAME in place, yet every non-history purpose
+# would construct the history-typed request path. The payload is the breach.
+problems, _ = run(source=purpose_source(
+    wrapper=("HistoryBearing(NonHistory)", "NonHistory(NonHistory)")))
+check("a wrapper payload swap fails; the payload types are read too",
+      mentions(problems, "Purpose's variants", "HistoryBearing(NonHistory)"))
 
 # --- what is read as a variant ------------------------------------------------
 

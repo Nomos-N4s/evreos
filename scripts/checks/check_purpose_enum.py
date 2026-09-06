@@ -37,16 +37,19 @@ fails until the enum catches up. It reads the tree and fails on:
                when their type does.
 
   SHAPE        a `Purpose` enum whose variants are not exactly
-               `HistoryBearing` and `NonHistory`. This is the structural
-               convention the whole check parses, and it is also what
-               discharges the reachability half of the rule: the workspace's
-               one request path is typed on `Purpose`, so a request path typed
-               as history-bearing is reachable only through a `HistoryBearing`
-               value, and this check has just held that set to FR-007a's
-               four -- a non-history purpose cannot reach it without first
-               appearing in the enum body this check reads. A third variant
-               would be a third category of transmission no requirement
-               defines.
+               `HistoryBearing(HistoryBearing)` and `NonHistory(NonHistory)`
+               -- payload types included, not just variant names, because the
+               payload is what the reachability half of the rule rests on:
+               the workspace's one request path is typed on `Purpose`, so a
+               request path typed as history-bearing is reachable only
+               through a `HistoryBearing` value, and this check has just held
+               that set to FR-007a's four -- a non-history purpose cannot
+               reach it without first appearing in the enum body this check
+               reads. A wrapper variant named `HistoryBearing` but carrying a
+               `NonHistory` payload would break exactly that while leaving
+               every variant NAME in place, which is why the payload is read
+               too. A third variant would be a third category of transmission
+               no requirement defines.
 
 THE SPEC SIDE is anchored on FR-007a's own enumeration text in
 specs/001-evreos-v1/spec.md, located as: the literal `**FR-007a**`, then after
@@ -202,10 +205,9 @@ def enum_body(source, enum_name):
     return source[match.end():i - 1]
 
 
-def variant_names(body):
-    """The variant names of one enum body: the first identifier of each
-    top-level comma-separated segment, attributes skipped."""
-    names = []
+def variant_segments(body):
+    """The top-level comma-separated segments of one enum body, attributes
+    dropped -- `#[deprecated] Name` is one segment reading ` Name`."""
     segments, depth, start = [], 0, 0
     for i, ch in enumerate(body):
         if ch in "{([":
@@ -216,13 +218,32 @@ def variant_names(body):
             segments.append(body[start:i])
             start = i + 1
     segments.append(body[start:])
-    for segment in segments:
-        # An attribute on a variant -- `#[deprecated] Name` -- is not its name.
-        segment = re.sub(r"#\s*\[[^\]]*\]", " ", segment)
+    return [re.sub(r"#\s*\[[^\]]*\]", " ", segment) for segment in segments]
+
+
+def variant_names(body):
+    """The variant names of one enum body: the first identifier of each
+    top-level segment."""
+    names = []
+    for segment in variant_segments(body):
         match = re.match(r"\s*([A-Za-z_]\w*)", segment)
         if match:
             names.append(match.group(1))
     return names
+
+
+def variant_shapes(body):
+    """Each top-level variant of one enum body in its written form, whitespace
+    dropped -- `HistoryBearing ( HistoryBearing )` reads as
+    `HistoryBearing(HistoryBearing)`. The SHAPE clause compares these, because
+    the wrapper's payload types, not just its variant names, are what type the
+    request path."""
+    shapes = []
+    for segment in variant_segments(body):
+        condensed = re.sub(r"\s+", "", segment)
+        if condensed:
+            shapes.append(condensed)
+    return shapes
 
 
 def enum_sets(purpose_path):
@@ -242,7 +263,9 @@ def enum_sets(purpose_path):
                 f"{purpose_path.name}: no `enum {name}`; the structural convention "
                 "this check parses is the two sets nested inside Purpose"
             )
-        sets[name] = variant_names(body)
+        # The wrapper is read as full shapes -- name AND payload -- because
+        # SHAPE pins both; the two sets are read as names.
+        sets[name] = variant_shapes(body) if name == WRAPPER_ENUM else variant_names(body)
     return sets
 
 
@@ -253,12 +276,20 @@ def compare(spec, sets, purpose_name):
     history = sets[HISTORY_ENUM]
     non_history = sets[NON_HISTORY_ENUM]
 
-    # SHAPE first: everything else reasons from the two-set structure.
-    if sets[WRAPPER_ENUM] != [HISTORY_ENUM, NON_HISTORY_ENUM]:
+    # SHAPE first: everything else reasons from the two-set structure. The
+    # payload types are compared, not just the variant names: a wrapper
+    # variant named HistoryBearing carrying a NonHistory payload would let
+    # every non-history purpose construct the history-typed request path.
+    wrapper_required = [
+        f"{HISTORY_ENUM}({HISTORY_ENUM})",
+        f"{NON_HISTORY_ENUM}({NON_HISTORY_ENUM})",
+    ]
+    if sets[WRAPPER_ENUM] != wrapper_required:
         problems.append(
             f"{purpose_name}: Purpose's variants are {sets[WRAPPER_ENUM]!r}, not exactly "
-            f"[{HISTORY_ENUM!r}, {NON_HISTORY_ENUM!r}]; the request path is typed on this "
-            "wrapper, so its shape is what keeps the two sets the only two categories"
+            f"{wrapper_required!r}; the request path is typed on this wrapper, and its "
+            "variant names AND payload types are what keep the two sets the only two "
+            "categories"
         )
 
     for spec_name, variant in spec:
