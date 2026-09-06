@@ -134,6 +134,12 @@ problems, _, _, _ = tree(passing_tree({
 report("a lowercase-region key fails for a shipped language", mentions(problems, "en-us"))
 
 problems, _, _, _ = tree(passing_tree({
+    "crates/x/catalogues/de.messages": CLEAN_CATALOGUE + "wallet.DE-AT.title = Konto\n",
+}))
+report("an uppercase-language key fails, its region canonically cased",
+       mentions(problems, "DE-AT"))
+
+problems, _, _, _ = tree(passing_tree({
     "crates/x/catalogues/es.messages": "wallet.es-419.title = Cuenta\n",
 }))
 report("a numeric region subtag in a key fails", mentions(problems, "es-419"))
@@ -160,6 +166,14 @@ problems, _, _, _ = tree(passing_tree({
     "crates/x/src/state.rs": 'pub const DEFAULT: &str = "en_US";\n',
 }))
 report("a fused default in interface state fails", mentions(problems, "en_US"))
+
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/src/state.rs": 'pub const DEFAULTS: &str = "EN_US De-CH El-GR";\n',
+}))
+report("uppercase-language spellings of the fusion fail",
+       mentions(problems, "EN_US")
+       and mentions(problems, "De-CH")
+       and mentions(problems, "El-GR"))
 
 problems, _, _, _ = tree(passing_tree({
     "crates/x/src/lib.rs":

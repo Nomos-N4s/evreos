@@ -37,9 +37,12 @@ the tree and fails on:
                   configuration value. Two patterns, matched everywhere:
                   any 2-3-letter lowercase subtag joined by `-` or `_` to a
                   canonically-spelled region -- two uppercase letters or
-                  three digits -- and, because BCP-47 folds case, the three
-                  shipped languages `de`, `el` and `en` joined to a region in
-                  ANY case. Rust source is read with comments stripped and
+                  three digits -- and, because BCP-47 folds case over the
+                  WHOLE tag, the three shipped languages `de`, `el` and `en`
+                  with both halves in ANY case: `DE-DE`, `De-DE` and `de-de`
+                  are all `de-DE` in other spellings, and so is
+                  `wallet.EN-us.title` a fused key in another spelling.
+                  Rust source is read with comments stripped and
                   literals kept, through the one shared scanner, so a doc
                   comment naming `de-DE` as the forbidden example is not a
                   breach and a string carrying it is.
@@ -108,13 +111,16 @@ CANONICAL_FUSION = re.compile(
     r"(?<![A-Za-z0-9])[a-z]{2,3}[-_](?:[A-Z]{2}|[0-9]{3})(?![A-Za-z0-9])"
 )
 
-# The same fusion for the three shipped languages with the region in ANY
-# case, because BCP-47 folds case and `de-de` is `de-DE` in another spelling.
-# Restricted to the shipped subtags so that ordinary hyphenated words --
-# `to-do`, `opt-in` -- are not read as tags; a fourth language extends this
-# alternation in the change that adds its catalogue.
+# The same fusion for the three shipped languages with the WHOLE tag in any
+# case -- the language half folded exactly as the region half is, because
+# BCP-47 folds case over the whole tag and `DE-DE`, `De-DE` and `de-de` are
+# all `de-DE` in other spellings. Restricted to the shipped subtags so that
+# ordinary hyphenated words -- `to-do`, `opt-in` -- are not read as tags; a
+# fourth language extends this alternation in the change that adds its
+# catalogue.
 SHIPPED_FUSION = re.compile(
-    r"(?<![A-Za-z0-9])(?:de|el|en)[-_](?:[A-Za-z]{2}|[0-9]{3})(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])(?:de|el|en)[-_](?:[A-Za-z]{2}|[0-9]{3})(?![A-Za-z0-9])",
+    re.IGNORECASE,
 )
 
 # A format string that fuses a language-named placeholder and a place-named
