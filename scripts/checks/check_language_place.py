@@ -153,6 +153,14 @@ LANG_IDENT = re.compile(r"\w*lang\w*", re.IGNORECASE)
 PLACE_IDENT = re.compile(r"\w*(?:place|region|country|territory)\w*", re.IGNORECASE)
 
 
+class CheckError(Exception):
+    """The check could not reach a verdict: the tree it was pointed at is
+    missing, or holds nothing it reads. main() reports this and exits 2 --
+    the code scripts/checks/README.md reserves for an unreached verdict,
+    which fails the workflow exactly as a breach does but reads differently
+    in the log -- as the sibling checks exit for the same class."""
+
+
 def read_text(path):
     """The file's text, or None when it is not UTF-8; the caller reports.
 
@@ -243,8 +251,12 @@ def check_tree(root):
     """Every clause over the tree at `root`.
 
     Returns (problems, catalogue files read, message keys read, source files
-    read). An empty `problems` is a pass -- unless nothing at all was read,
-    which is reported, because a check over nothing is not a pass.
+    read). An empty `problems` is a pass -- unless no catalogue file and no
+    Rust source was read, which raises CheckError instead: a check over
+    nothing is not a pass, and it is not a breach of FR-035 either, so it
+    must not exit 1 as one. A root that is not a directory raises the same.
+    A breach found on the way (a fused value in a TOML file) is still
+    returned as a failure.
     """
     root = Path(root).resolve()
     problems = []
@@ -253,8 +265,7 @@ def check_tree(root):
     source_files = 0
 
     if not root.is_dir():
-        problems.append(f"{root}: not a directory this check can read")
-        return problems, 0, 0, 0
+        raise CheckError(f"{root}: not a directory this check can read")
 
     for directory in sorted(walk(root)):
         for path in sorted(directory.iterdir()):
@@ -292,8 +303,8 @@ def check_tree(root):
                             "value carries language and place separately"
                         )
 
-    if catalogue_files == 0 and source_files == 0:
-        problems.append(
+    if not problems and catalogue_files == 0 and source_files == 0:
+        raise CheckError(
             f"{root}: no catalogue file and no Rust source; a check over "
             "nothing is not a pass"
         )
@@ -326,7 +337,11 @@ def main():
     )
     args = parser.parse_args()
 
-    problems, catalogue_files, message_keys, source_files = check_tree(args.root)
+    try:
+        problems, catalogue_files, message_keys, source_files = check_tree(args.root)
+    except CheckError as error:
+        print(f"Language-place check could not run: {error}", file=sys.stderr)
+        return 2
 
     if problems:
         print("Language-place check FAILED:\n", file=sys.stderr)

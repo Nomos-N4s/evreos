@@ -285,11 +285,21 @@ problems, _, _, _ = tree(passing_tree({
 }))
 report("a catalogue that is not UTF-8 is reported", mentions(problems, "xx.messages", "not valid UTF-8"))
 
-problems, _, _, _ = tree({"docs/notes.md": "nothing the check reads\n"})
-report("a tree with nothing to read is not a pass", mentions(problems, "nothing is not a pass"))
+try:
+    tree({"docs/notes.md": "nothing the check reads\n"})
+except check.CheckError as error:
+    report("a tree with nothing to read is no verdict, not a pass",
+           "nothing is not a pass" in str(error))
+else:
+    report("a tree with nothing to read is no verdict, not a pass", False)
 
-problems, _, _, _ = check.check_tree(Path(tempfile.gettempdir()) / "no-such-tree-anywhere")
-report("a missing root is reported rather than raised", problems != [])
+try:
+    check.check_tree(Path(tempfile.gettempdir()) / "no-such-tree-anywhere")
+except check.CheckError as error:
+    report("a missing root is no verdict, not a breach",
+           "not a directory" in str(error))
+else:
+    report("a missing root is no verdict, not a breach", False)
 
 # --- the script's exit codes --------------------------------------------------
 
@@ -313,6 +323,22 @@ with tempfile.TemporaryDirectory() as tmp:
     )
     report("a breached tree exits 1", breached.returncode == 1)
     report("...naming the breach on stderr", "de-DE" in breached.stderr)
+
+    missing = subprocess.run(
+        [sys.executable, str(HERE / "check_language_place.py"),
+         "--root", str(root / "no-such-tree-anywhere")],
+        capture_output=True, text=True,
+    )
+    report("a missing root exits 2, the no-verdict code", missing.returncode == 2)
+    report("...saying the check could not run", "could not run" in missing.stderr)
+
+with tempfile.TemporaryDirectory() as tmp:
+    (Path(tmp) / "notes.md").write_text("nothing the check reads\n", encoding="utf-8")
+    unread = subprocess.run(
+        [sys.executable, str(HERE / "check_language_place.py"), "--root", tmp],
+        capture_output=True, text=True,
+    )
+    report("a tree with nothing to check exits 2", unread.returncode == 2)
 
 print(f"{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)
