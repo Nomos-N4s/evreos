@@ -83,6 +83,12 @@ own field.
 The fixture's values are its own and mean nothing. Hosts sit under the
 reserved `.invalid` top-level domain so they can never resolve; the names are
 invented words. Every set field must differ from every set field of
-`evreos.toml` — a shared value would let a hardcoded copy of it hide from
-`scripts/checks/check_brand.py` behind the wrong file — and the
-`the_two_brands_differ_in_every_set_field` unit test enforces that.
+`evreos.toml`, and the `the_two_brands_differ_in_every_set_field` unit test
+enforces that. The reason is not `scripts/checks/check_brand.py` — that check
+forbids the union of every brand file's values and reports a shared value
+with both origins named, its own suite proves it, so nothing hides behind the
+wrong file. The reason is what the fixture exists to prove: the fixture build
+demonstrates rebrandability only where the values differ, because a field
+shared with the real brand would look correct under either selection —
+hardcoded copies of it included — and the CI proof FR-042 names would prove
+nothing about that field.

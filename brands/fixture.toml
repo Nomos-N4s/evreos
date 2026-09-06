@@ -13,9 +13,14 @@
 # reserved `.invalid` top-level domain so none of them can ever resolve, and
 # the names are invented words no real product carries. Every set field MUST
 # differ from every set field in brands/evreos.toml -- the unit tests in
-# crates/evreos-shell/src/brand.rs hold that line, because a shared value
-# would let a hardcoded copy of it hide from scripts/checks/check_brand.py
-# behind the wrong file.
+# crates/evreos-shell/src/brand.rs hold that line. Not for the check's sake:
+# scripts/checks/check_brand.py forbids the union of every brand file's
+# values and reports a shared value with both origins named -- its own suite
+# proves that -- so nothing hides behind the wrong file. The reason is the
+# proof this file exists for: the fixture build demonstrates rebrandability
+# only where the values differ, because a field shared with the real brand
+# would look correct under either selection, hardcoded copies of it
+# included, and the CI proof FR-042 names would prove nothing about it.
 
 product_name = "Fixtureweave"
 money_service_name = "Fixturepurse"
