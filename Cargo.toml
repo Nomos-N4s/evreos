@@ -7,6 +7,7 @@ members = [
     "crates/evreos-engine",
     "crates/evreos-engine-headless",
     "crates/evreos-shell",
+    "tests/spikes/n6-chrome-accessibility",
 ]
 
 [workspace.package]
