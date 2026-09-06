@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Tests for the egress chokepoint check. The check is CI's authority to fail
 a build over a dependency edge, so its own behaviour is checked rather than
-assumed -- above all that the one exemption is exactly evreos-net and the
-paths through it, and nothing wider: a route around the chokepoint fails
-however many other routes pass through it.
+assumed -- above all that the one exemption is exactly the workspace's own
+evreos-net, by the package id workspace_members records rather than by name,
+and the paths through it, and nothing wider: a route around the chokepoint
+fails however many other routes pass through it.
 
 Run: python3 scripts/checks/test_check_egress_chokepoint.py
 """
@@ -164,6 +165,33 @@ problems = paths(MEMBERS, edges=[("evreos-shell", "evreos-net"),
                                  ("evreos-shell", "helper"), ("helper", "tokio")])
 check("a route around the chokepoint fails even when one through it exists",
       len(problems) == 1 and "evreos-shell -> helper -> tokio" in problems[0])
+
+# The exemption keys on the member's package id, never the name: Cargo permits
+# a second package called evreos-net from a registry source in the same graph,
+# and a route through such an impostor is a route around the chokepoint. The
+# fixture is built by hand because `metadata` cannot give one name two ids.
+REGISTRY = "registry+https://github.com/rust-lang/crates.io-index"
+impostor = metadata("/w", MEMBERS)
+impostor_id = f"{REGISTRY}#evreos-net@1.0.0"
+reqwest_id = f"{REGISTRY}#reqwest@1.0.0"
+impostor["packages"] += [
+    {"id": impostor_id, "name": "evreos-net", "manifest_path": "",
+     "dependencies": [], "targets": []},
+    {"id": reqwest_id, "name": "reqwest", "manifest_path": "",
+     "dependencies": [], "targets": []},
+]
+for node in impostor["resolve"]["nodes"]:
+    if node["id"].endswith("/evreos-shell#0.0.0"):
+        node["deps"].append({"name": "evreos-net", "pkg": impostor_id})
+impostor["resolve"]["nodes"] += [
+    {"id": impostor_id, "deps": [{"name": "reqwest", "pkg": reqwest_id}]},
+    {"id": reqwest_id, "deps": []},
+]
+problems, _ = egress.second_egress_paths(impostor, DENY)
+check("an external package named evreos-net exempts nothing",
+      len(problems) == 1 and "evreos-shell -> evreos-net -> reqwest" in problems[0])
+check("...and the impostor is called out as not the member",
+      problems and "not the workspace member" in problems[0])
 
 problems = paths(MEMBERS, edges=[("evreos-shell", "Tokio")])
 check("case does not hide a listed name", len(problems) == 1)

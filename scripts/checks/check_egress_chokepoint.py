@@ -16,14 +16,19 @@ fails on:
   REACH        a workspace crate other than evreos-net from which a crate
                named in scripts/checks/network-capable-crates.txt is
                reachable in the resolved graph BY ANY ROUTE THAT DOES NOT
-               PASS THROUGH evreos-net. The exemption is the crate and the
-               paths through it, and both halves are deliberate: the shell
-               depends on evreos-net, and evreos-net will one day hold the
-               one transport dependency, so every crate above it would reach
-               that transport transitively -- which is the chokepoint
-               working, not a second path. The walk therefore never expands
-               evreos-net's own edges; a listed crate found any other way
-               fails, with the chain named. The graph is read with every
+               PASS THROUGH evreos-net. The exemption is the workspace's own
+               evreos-net -- the package id workspace_members records for
+               the member of that name, because Cargo permits a second
+               package called evreos-net from a registry or git source in
+               the same graph, and a package that merely shares the name is
+               not this workspace's chokepoint -- and the paths through it.
+               Both halves are deliberate: the shell depends on evreos-net,
+               and evreos-net will one day hold the one transport
+               dependency, so every crate above it would reach that
+               transport transitively -- which is the chokepoint working,
+               not a second path. The walk therefore never expands the
+               chokepoint's own node, keyed by that id; a listed crate
+               found any other way fails, with the chain named. The graph is read with every
                feature enabled and every target's dependencies included, and
                --locked, so the verdict is about the committed Cargo.lock.
                Dev- and build-dependencies are in that graph and are not
@@ -48,10 +53,10 @@ states: it may not be empty, because a deny-list's empty state is its weakest
 and this one is seeded from the day it lands. The list's own header states the
 criterion for an entry and that it grows in review.
 
-WHERE evreos-net IS ABSENT from the workspace, nothing is exempt and every
-member is held to the rule -- the same rule with an empty exemption, which is
-the correct reading of a workspace that has no chokepoint yet: no crate may
-reach the network at all.
+WHERE evreos-net IS ABSENT from the workspace's members, nothing is exempt
+and every member is held to the rule -- the same rule with an empty
+exemption, which is the correct reading of a workspace that has no
+chokepoint yet: no crate may reach the network at all.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -65,9 +70,9 @@ around `request(Purpose, Endpoint)` is a misuse of the chokepoint's surface,
 which the chokepoint's own types and review carry, not this graph walk.
 
 No filesystem name is compared anywhere here -- the check reads `cargo
-metadata`'s package names and nothing on disk -- so scripts/checks/casefs.py
-has nothing to answer for it; crate names are folded the way crates.io folds
-them, in `normalise` below.
+metadata`'s package names and ids and nothing on disk -- so
+scripts/checks/casefs.py has nothing to answer for it; crate names are folded
+the way crates.io folds them, in `normalise` below.
 """
 import argparse
 import json
@@ -182,6 +187,21 @@ def member_packages(metadata):
     return members
 
 
+def chokepoint_ids(metadata):
+    """The package ids of workspace members named evreos-net.
+
+    The exemption keys on identity, not name: Cargo permits a second package
+    called evreos-net from a registry or git source in the same graph, and a
+    package that merely shares the name is not this workspace's chokepoint.
+    Only an id workspace_members records can be exempt.
+    """
+    return {
+        member["id"]
+        for member in member_packages(metadata)
+        if normalise(member["name"]) == CHOKEPOINT
+    }
+
+
 def second_egress_paths(metadata, denylist):
     """REACH and DECLARED: every way a non-exempt member gets to a listed crate.
 
@@ -189,9 +209,11 @@ def second_egress_paths(metadata, denylist):
     chokepoint, never expanding the chokepoint's own node -- a path through
     evreos-net is the chokepoint working -- and reports the first chain that
     reaches each listed crate. Then reads each such member's declared
-    dependencies, so a listed name the resolve did not reach fails too.
+    dependencies, so a listed name the resolve did not reach fails too. The
+    chokepoint is identified by package id throughout, per `chokepoint_ids`.
     """
     denied = set(denylist)
+    exempt = chokepoint_ids(metadata)
     by_id = {package["id"]: package for package in metadata.get("packages", [])}
     resolve = metadata.get("resolve") or {}
     nodes = resolve.get("nodes", [])
@@ -206,14 +228,14 @@ def second_egress_paths(metadata, denylist):
     problems = []
     checked = 0
     for member in member_packages(metadata):
-        if normalise(member["name"]) == CHOKEPOINT:
+        if member["id"] in exempt:
             continue
         checked += 1
         parent = {member["id"]: None}
         queue = deque([member["id"]])
         while queue:
             current = queue.popleft()
-            if normalise(name_of(current)) == CHOKEPOINT:
+            if current in exempt:
                 continue  # the chokepoint's own edges are its licence, not a path
             for dependency in edges.get(current, []):
                 if dependency in parent:
@@ -227,9 +249,18 @@ def second_egress_paths(metadata, denylist):
                         node = parent[node]
                     chain.reverse()
                     how = "directly" if len(chain) == 2 else "through " + " -> ".join(chain[1:-1])
+                    # An exempt node is never expanded, so a chain node named
+                    # evreos-net can only be a package that is not the member.
+                    impostor = ""
+                    if any(normalise(name) == CHOKEPOINT for name in chain[1:-1]):
+                        impostor = (
+                            " (a package named evreos-net that is not the workspace "
+                            "member is not the chokepoint)"
+                        )
                     problems.append(
                         f"{member['name']} reaches network-capable {name_of(dependency)} {how} "
                         "without passing through evreos-net: " + " -> ".join(chain)
+                        + impostor
                         + "; the chokepoint is the only permitted egress path"
                     )
                 queue.append(dependency)
@@ -263,7 +294,7 @@ def check_workspace(root, denylist_path, metadata=None):
         raise CheckError(
             "the metadata names no workspace member; a check over nothing is not a pass"
         )
-    exempt = sum(1 for member in members if normalise(member["name"]) == CHOKEPOINT)
+    exempt = len(chokepoint_ids(metadata))
 
     found, checked = second_egress_paths(metadata, denylist)
     problems += found
