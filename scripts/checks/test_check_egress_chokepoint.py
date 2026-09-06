@@ -220,14 +220,37 @@ check("a route through a name-adjacent crate still fails",
 problems = paths(["evreos-shell"], edges=[("evreos-shell", "reqwest")])
 check("with no evreos-net member the rule binds every crate", len(problems) == 1)
 
+# The older resolve shape -- flat `dependencies` id lists instead of `deps`
+# records -- is read per node: a breach recorded that way is still a breach.
+older = metadata("/w", MEMBERS, edges=[("evreos-shell", "reqwest")])
+for node in older["resolve"]["nodes"]:
+    node["dependencies"] = [dep["pkg"] for dep in node.pop("deps")]
+problems, _ = egress.second_egress_paths(older, DENY)
+check("a dependencies-shaped resolve is read and its breach reported",
+      len(problems) == 1
+      and "evreos-shell reaches network-capable reqwest directly" in problems[0])
+
+# A graph with no dependency edge at all while members exist is what a gutted
+# or unread resolve looks like -- no verdict, not a pass.
+try:
+    egress.second_egress_paths(metadata("/w", MEMBERS), DENY)
+    check("an edgeless graph with members is a CheckError", False)
+except egress.CheckError as error:
+    check("an edgeless graph with members is a CheckError",
+          "not a pass" in str(error))
+
 # --- DECLARED -----------------------------------------------------------------
 
-problems = paths(MEMBERS, declared=[("evreos-shell", "tokio")])
+# Each fixture carries one harmless resolved edge so the graph is readable;
+# the verdict under test is about the DECLARED name the resolve did not reach.
+problems = paths(MEMBERS, edges=[("evreos-shell", "evreos-engine")],
+                 declared=[("evreos-shell", "tokio")])
 check("a declared dependency the resolve did not reach fails on its name",
       len(problems) == 1 and "did not reach" in problems[0])
 
 check("the chokepoint's own declared dependencies are exempt",
-      paths(MEMBERS, declared=[("evreos-net", "reqwest")]) == [])
+      paths(MEMBERS, edges=[("evreos-shell", "evreos-engine")],
+            declared=[("evreos-net", "reqwest")]) == [])
 
 # A registry package's declared-but-unresolved dependency is code Cargo will
 # never build for this workspace; judging it would fail the tree over nothing.
@@ -288,7 +311,10 @@ with tempfile.TemporaryDirectory() as tmp:
     except egress.CheckError:
         check("a root with no Cargo.toml is a CheckError", True)
 
-    problems, summary = egress.check_workspace(root, deny, metadata=metadata("/w", MEMBERS))
+    problems, summary = egress.check_workspace(
+        root, deny, metadata=metadata("/w", MEMBERS,
+                                      edges=[("evreos-shell", "evreos-engine")])
+    )
     check("a clean workspace passes end to end", problems == [])
     check("...and the summary counts the exemption",
           "1 exempt" in summary and "2 crates held" in summary)
@@ -323,6 +349,15 @@ with tempfile.TemporaryDirectory() as tmp:
         metadata(str(root), MEMBERS, edges=[("evreos-net", "reqwest")])))
     result = run_check("--root", str(root), "--denylist", str(deny), "--metadata", str(clean))
     check("a clean synthetic workspace exits 0", result.returncode == 0)
+
+    # `resolve: null` is what `cargo metadata --no-deps` returns: a graph this
+    # check cannot walk, so no verdict rather than a pass.
+    gutted_meta = metadata(str(root), MEMBERS)
+    gutted_meta["resolve"] = None
+    gutted = write(root, "gutted.json", json.dumps(gutted_meta))
+    result = run_check("--root", str(root), "--denylist", str(deny), "--metadata", str(gutted))
+    check("a resolve-less metadata exits 2, not 0", result.returncode == 2)
+    check("...saying the graph went unread", "no dependency edge" in result.stderr)
 
     result = run_check("--root", str(root), "--denylist", str(root / "absent.txt"),
                        "--metadata", str(clean))

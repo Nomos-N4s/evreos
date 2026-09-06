@@ -49,6 +49,13 @@ fails on:
                will never build for this workspace, and judging them would
                fail the tree over code that cannot ship.
 
+A RESOLVE THAT YIELDS NO EDGE AT ALL while the workspace has members is no
+verdict (exit 2), not a pass: it is the shape a gutted read produces --
+`--no-deps` returns `resolve: null`, and a node form this check cannot read
+reads as edgeless -- and an unrun check is not a pass. Both resolve node
+shapes are read, per node: the current `deps` records, else the older flat
+`dependencies` id list.
+
 THE DENY-LIST is the plain-text form scripts/checks/README.md fixes for a
 committed list -- one entry per line, `#` starting a comment, blank lines
 ignored -- with the same deliberate narrowing the engine prohibition's list
@@ -214,23 +221,40 @@ def second_egress_paths(metadata, denylist):
     reaches each listed crate. Then reads each such member's declared
     dependencies, so a listed name the resolve did not reach fails too. The
     chokepoint is identified by package id throughout, per `chokepoint_ids`.
+
+    Raises CheckError when the graph yields no dependency edge at all while
+    members exist: that is what a gutted or unread resolve looks like, and an
+    unrun check is not a pass.
     """
     denied = set(denylist)
     exempt = chokepoint_ids(metadata)
     by_id = {package["id"]: package for package in metadata.get("packages", [])}
     resolve = metadata.get("resolve") or {}
     nodes = resolve.get("nodes", [])
-    edges = {node["id"]: [dep["pkg"] for dep in node.get("deps", [])] for node in nodes}
-    if not edges:
-        # Older shapes carry `dependencies` instead of `deps`; read either.
-        edges = {node["id"]: list(node.get("dependencies", [])) for node in nodes}
+
+    def node_edges(node):
+        # Either resolve shape, read PER NODE: the current `deps` records,
+        # else the older flat `dependencies` id list.
+        if "deps" in node:
+            return [dep["pkg"] for dep in node["deps"]]
+        return list(node.get("dependencies", []))
+
+    edges = {node["id"]: node_edges(node) for node in nodes}
+    members = member_packages(metadata)
+    if members and not any(edges.values()):
+        raise CheckError(
+            "the resolved graph has no dependency edge while the workspace has "
+            "members; that is the shape a gutted or unread resolve produces "
+            "(--no-deps, resolve: null, a node form this check cannot read), and "
+            "an unrun check is not a pass"
+        )
 
     def name_of(identifier):
         return by_id.get(identifier, {}).get("name", identifier)
 
     problems = []
     checked = 0
-    for member in member_packages(metadata):
+    for member in members:
         if member["id"] in exempt:
             continue
         checked += 1
