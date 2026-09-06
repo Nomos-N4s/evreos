@@ -235,6 +235,37 @@ check("a registry package's unresolved declaration is not judged",
       paths(MEMBERS, edges=[("evreos-shell", "serde")],
             declared=[("serde", "tokio")]) == [])
 
+# --- the cargo invocation -----------------------------------------------------
+
+# The docstring stakes the verdict on this invocation's flags: --all-features,
+# so a network stack behind an optional feature is seen, and --locked, so the
+# verdict is about the committed Cargo.lock. The command actually handed to
+# subprocess.run is captured and read, so dropping either flag fails here.
+captured = {}
+
+
+def capture_run(command, **kwargs):
+    captured["command"] = list(command)
+    raise FileNotFoundError("captured before running")
+
+
+original_run = egress.subprocess.run
+egress.subprocess.run = capture_run
+try:
+    try:
+        egress.cargo_metadata(REPO)
+        check("an unrunnable cargo is a CheckError", False)
+    except egress.CheckError:
+        check("an unrunnable cargo is a CheckError", True)
+finally:
+    egress.subprocess.run = original_run
+
+invocation = captured.get("command", [])
+check("the metadata command is `cargo metadata --format-version 1`",
+      invocation[:4] == ["cargo", "metadata", "--format-version", "1"])
+check("the metadata command enables every feature", "--all-features" in invocation)
+check("the metadata command reads the committed lockfile", "--locked" in invocation)
+
 # --- the whole check ----------------------------------------------------------
 
 with tempfile.TemporaryDirectory() as tmp:
