@@ -135,9 +135,11 @@ precondition for an assertion about that boundary, not the assertion;
 - a committed page is visible through `current()` before its events are drained
 — the contract's emission-time clause, pinned so the update cannot silently
 move to drain time;
-- the engine-generic entry points carry no `Send` bound, proved by an engine
-holding an `Rc` driven through them, which is the consumer-side half of the
-guard the engine crate's own test module carries for the trait itself.
+- the test file's own generic helper carries no `Send` bound, proved by an
+engine holding an `Rc` driven through it — the consumer-side half of the guard
+the engine crate's own test module carries for the trait itself. `navigate()`'s
+equivalent guard is the unit test inside the shell binary, not one of these
+eight.
 
 What they do **not** establish: anything about a real platform, and nothing
 about the shell's own code. The file sits under `crates/evreos-shell/tests/`,
@@ -575,8 +577,10 @@ it establishes that the four causes are four distinct values whose four distinct
 messages name the address, and nothing more. `LoadError`'s `Display` strings
 offer no next step, and `crates/evreos-engine/src/lib.rs` documents them as
 "deliberately not the member-facing copy, which is localised" under FR-035. The
-next step and the language are the shell's, and A2 records that the shell's own
-handling has no test at all.
+next step and the language are the shell's, whose handling is exercised today by
+the unit test inside the shell binary and A3's `cargo run` — and A2 records that
+giving it integration tests means moving its machinery into a library target, a
+change the plan owes.
 
 Per cause, with what actually produces it on each tier:
 

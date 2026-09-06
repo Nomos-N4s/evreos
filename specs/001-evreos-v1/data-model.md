@@ -330,8 +330,8 @@ causes. This model keeps it unchanged and wraps it.
 | --- | --- | --- |
 | `navigation_id` | id | Correlates a request with its outcome, so an outcome for a navigation the member abandoned is distinguishable from the current one. **[design]** — `research.md` §1.2 established that the merged synchronous `load` (`fn load(&mut self, request: &Request) -> Result<Page, LoadError>`) carried no request-to-outcome correlation; the reshaping was the plan's and has since landed as the event contract, whose `NavigationId` is this id. |
 | `requested` | address | What the shell asked for. |
-| `outcome` | `Succeeded \| Failed(LoadError) \| NavigatedAway` | As landed, an outcome carries no address and no title: the committed address arrives on its own event before the outcome, and the title on `TitleChanged`, never inside an outcome. |
-| `LoadError` | `Unresolvable \| Certificate { detail } \| Intercepted \| AuthenticationRequired` | The four causes **FR-015** names, exercised on every supported platform by **SC-009**. |
+| `outcome` | `Succeeded \| Failed(LoadError) \| NavigatedAway` | As landed, no outcome carries a title — the title arrives only on `TitleChanged`. The address depends on the variant: `Succeeded` carries none, because the committed address arrived on its own event before it; `Failed` carries the address inside every `LoadError` variant, and no committed address precedes it — `Failed` and `Committed` are mutually exclusive for one id; `NavigatedAway` carries none and guarantees no prior commit. |
+| `LoadError` | `Unresolvable { address } \| Certificate { address, detail } \| Intercepted { address } \| AuthenticationRequired { address }` | The four causes **FR-015** names, exercised on every supported platform by **SC-009**. Every landed variant carries the address it concerns, exposed via `address()` — the error state must name it, and for a failed navigation no other event delivers it. |
 
 **Validation**
 
