@@ -240,7 +240,9 @@ check("a registry package's unresolved declaration is not judged",
 # The docstring stakes the verdict on this invocation's flags: --all-features,
 # so a network stack behind an optional feature is seen, and --locked, so the
 # verdict is about the committed Cargo.lock. The command actually handed to
-# subprocess.run is captured and read, so dropping either flag fails here.
+# subprocess.run is captured and compared whole -- exact argv, not flag
+# presence -- so an added word fails here too: --no-deps, above all, would
+# return `resolve: null` and gut the reach walk while every flag stayed put.
 captured = {}
 
 
@@ -261,10 +263,9 @@ finally:
     egress.subprocess.run = original_run
 
 invocation = captured.get("command", [])
-check("the metadata command is `cargo metadata --format-version 1`",
-      invocation[:4] == ["cargo", "metadata", "--format-version", "1"])
-check("the metadata command enables every feature", "--all-features" in invocation)
-check("the metadata command reads the committed lockfile", "--locked" in invocation)
+check("the metadata command is exactly the promised argv, no more and no less",
+      invocation == ["cargo", "metadata", "--format-version", "1",
+                     "--all-features", "--locked"])
 
 # --- the whole check ----------------------------------------------------------
 
