@@ -202,6 +202,19 @@ check("underscores do not hide a listed name", len(problems) == 1)
 check("a name that merely contains a listed one is not listed",
       paths(MEMBERS, edges=[("evreos-shell", "tokio-util")]) == [])
 
+# The exempt side has the same boundary as the deny side: a crate whose name
+# merely contains the chokepoint's is not the chokepoint, as a member...
+problems = paths(MEMBERS + ["evreos-net-testkit"],
+                 edges=[("evreos-net-testkit", "reqwest")])
+check("a member whose name merely contains the chokepoint's is not exempt",
+      len(problems) == 1 and "evreos-net-testkit -> reqwest" in problems[0])
+# ...and as a step on a route, which stays a route around the chokepoint.
+problems = paths(MEMBERS, edges=[("evreos-shell", "evreos-net-transport"),
+                                 ("evreos-net-transport", "tokio")])
+check("a route through a name-adjacent crate still fails",
+      len(problems) == 1
+      and "evreos-shell -> evreos-net-transport -> tokio" in problems[0])
+
 # Without the chokepoint in the workspace nothing is exempt: the same rule
 # with an empty exemption, which is what a workspace with no evreos-net means.
 problems = paths(["evreos-shell"], edges=[("evreos-shell", "reqwest")])
