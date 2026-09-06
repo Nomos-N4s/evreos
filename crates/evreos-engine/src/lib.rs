@@ -17,8 +17,8 @@
 //! a failed load from a successful one and to name the cause, and records that
 //! "treating a failed load as a successful empty page is a defect, as is a
 //! loading indicator that never resolves". A trait that can only succeed or
-//! panic cannot carry that requirement, so [`Engine::load`] returns a result
-//! and [`LoadError`] enumerates the causes FR-015 names.
+//! panic cannot carry that requirement, so a navigation's outcome arrives as
+//! [`NavigationEvent`]s and [`LoadError`] enumerates the causes FR-015 names.
 
 #![forbid(unsafe_code)]
 
@@ -136,23 +136,270 @@ impl Page {
     }
 }
 
+/// Identifies one navigation for the lifetime of one engine instance.
+///
+/// Minted by the engine and opaque to the shell, which only ever stores,
+/// compares and hashes it. There is no public constructor from an integer,
+/// so no integer semantics enter the seam — the id is a correlation token,
+/// not a capability, and [`NavigationId::FIRST`] with [`NavigationId::next`]
+/// makes the minting sequence public rather than secret. An engine with
+/// platform navigation identifiers of its own maps them to these rather than
+/// exposing them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct NavigationId(u64);
+
+impl NavigationId {
+    /// The first id an engine mints.
+    pub const FIRST: NavigationId = NavigationId(0);
+
+    /// The id minted after this one. An engine mints sequentially from
+    /// [`NavigationId::FIRST`], one sequence per engine instance, covering
+    /// shell-initiated and engine-initiated navigations alike — which is what
+    /// makes every id unique within an instance.
+    #[must_use]
+    pub fn next(self) -> NavigationId {
+        NavigationId(self.0 + 1)
+    }
+}
+
+/// One observation about one navigation.
+///
+/// Every variant carries the [`NavigationId`] it belongs to. The title travels
+/// on its own event and never inside an outcome, because a title is a property
+/// of a document that can change long after the load finished, not a property
+/// of the load.
+///
+/// # Ordering, per navigation
+///
+/// - `Started` is the first event for any id that produces events. For a
+///   navigation the shell began, the id is the one [`Engine::start_navigation`]
+///   returned. For a navigation the page content began — a link, a script, a
+///   form, a refresh — `Started` is the first the shell hears of it, carrying
+///   a fresh id no `start_navigation` call returned.
+/// - `Redirected` appears zero or more times, strictly between `Started` and
+///   `Committed`.
+/// - `Committed` appears at most once. It is the moment the engine is rendering
+///   the response and the moment [`Engine::current`] changes: from this event's
+///   emission, `current()` returns this page — at the committed address, with
+///   an empty title until the first `TitleChanged` — until a newer navigation
+///   commits. A shell draining behind the engine reads about the change after
+///   it happened; `current()` never waits for the drain. The address the event
+///   carries is the one that actually loaded — after redirects, the final one —
+///   and is what the shell displays.
+/// - Each navigation ends with at most one of `Succeeded`, `Failed` or
+///   `NavigatedAway` — or never ends, which is the load that never resolves.
+///   The bound on how long the shell waits is the shell's policy under SC-009,
+///   deliberately not an engine invariant, so no engine event expresses it.
+/// - `Succeeded` only ever follows `Committed`. It carries no page and no
+///   title: the committed page is read from `current()`, which still returns it
+///   unless a newer navigation has since committed, and the title arrives on
+///   `TitleChanged` — before or after `Succeeded`, with no ordering promised
+///   between them.
+/// - `Failed` and `Committed` are mutually exclusive for one id. Each of the
+///   four causes [`LoadError`] enumerates is a condition established before
+///   anything replaces the page being viewed, which is what makes "a failure
+///   never replaces the current page" a mechanical property rather than an
+///   aspiration. A failure after commit — a connection lost mid-render — has
+///   no variant here; adding that cause is a change to [`LoadError`], made
+///   under the rule that enum states.
+/// - `TitleChanged` appears only after `Committed` for the same id, any number
+///   of times, including after `Succeeded` — script retitles pages long after
+///   they load. When the id is the navigation whose page `current()` returns,
+///   the engine updates that page's title at the event's emission — `current()`
+///   reflects it whether or not the event has been drained. A `TitleChanged`
+///   for a superseded navigation never alters the current page.
+/// - `NavigatedAway` means the engine abandoned the navigation without an
+///   outcome — a newer navigation superseded it, or it was stopped. No further
+///   events for that id ever follow.
+///
+/// Across navigations, events drain in emission order and events for different
+/// ids may interleave; per-id ordering and FIFO drain are the only guarantees.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NavigationEvent {
+    /// The engine began a navigation.
+    Started { id: NavigationId, address: String },
+    /// Before commit, the navigation was redirected to `address`.
+    Redirected { id: NavigationId, address: String },
+    /// The engine is now rendering the response from `address`.
+    Committed { id: NavigationId, address: String },
+    /// The committed navigation finished loading.
+    Succeeded { id: NavigationId },
+    /// The navigation did not commit, for the cause carried.
+    Failed { id: NavigationId, error: LoadError },
+    /// The document of navigation `id` has this title.
+    TitleChanged { id: NavigationId, title: String },
+    /// The engine abandoned the navigation without an outcome.
+    NavigatedAway { id: NavigationId },
+}
+
+impl NavigationEvent {
+    /// The navigation this event belongs to.
+    pub fn id(&self) -> NavigationId {
+        match self {
+            Self::Started { id, .. }
+            | Self::Redirected { id, .. }
+            | Self::Committed { id, .. }
+            | Self::Succeeded { id }
+            | Self::Failed { id, .. }
+            | Self::TitleChanged { id, .. }
+            | Self::NavigatedAway { id } => *id,
+        }
+    }
+}
+
 /// What the shell requires of anything that renders web content.
 ///
 /// Implemented by the system-webview backend on each supported platform and by
 /// [`evreos-engine-headless`] for tests. FR-044 requires both to exist and the
 /// second to be kept working from milestone M0.
+///
+/// # Why there is no synchronous load
+///
+/// The system web runtime on either supported tier is affine to the thread
+/// that runs the interface loop, and it delivers navigation outcomes through
+/// callbacks on that same thread — so there is no second thread for a
+/// synchronous call to block on. The only synchronous route is a nested
+/// message pump on the interface thread, which dispatches input and paint
+/// re-entrantly for the length of a page load; SC-006 admits no trial over
+/// 16 ms, so that route breaches it by construction rather than by bad luck.
+/// The evidence sits with the research behind the seam
+/// (`specs/001-evreos-v1/research.md` §1), which also records what a
+/// synchronous result could never express: a navigation the page content
+/// started with no call from the shell, a load still in flight — SC-009's
+/// indicator that must resolve — and a title arriving on its own event.
+///
+/// There is deliberately no `Send` bound anywhere on this path. Both shipping
+/// backends are affine to the interface thread; a bound that let an engine
+/// cross threads would promise what no implementation can keep.
 pub trait Engine {
     /// A short, stable name for this implementation, used in diagnostics and in
     /// the benchmark records SC-013 requires to be reproducible.
     fn name(&self) -> &'static str;
 
-    /// Load `request`, or report why it could not be loaded.
+    /// Begin navigating to `request`.
     ///
-    /// An implementation MUST NOT report success for a load that did not
-    /// produce a page. FR-015 names that specific defect, and it is the reason
-    /// this returns a `Result` rather than a `Page` with an empty body.
-    fn load(&mut self, request: &Request) -> Result<Page, LoadError>;
+    /// Returns immediately with the id the engine minted for this navigation;
+    /// the outcome arrives as [`NavigationEvent`]s carrying that id. Starting
+    /// a navigation never blocks on the network and never reports an outcome
+    /// itself — an implementation that could fail here would be deciding
+    /// synchronously what FR-015 requires to be reported as a named state.
+    fn start_navigation(&mut self, request: &Request) -> NavigationId;
 
-    /// The page currently loaded, if any.
+    /// The next pending event, oldest first, or `None` when no event is
+    /// pending right now.
+    ///
+    /// MUST NOT block. `None` means the queue is empty at this call, never
+    /// that no event will come: a load that never resolves and a load whose
+    /// outcome has not arrived yet look identical here, and telling them
+    /// apart is the shell's policy under SC-009, on the shell's clock.
+    fn poll_event(&mut self) -> Option<NavigationEvent>;
+
+    /// The page currently displayed, if any.
+    ///
+    /// Reflects every event the engine has emitted, drained or not: the page
+    /// changes when a navigation commits, not when the shell reads about it.
     fn current(&self) -> Option<&Page>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::rc::Rc;
+
+    #[test]
+    fn ids_mint_sequentially_and_distinctly() {
+        let first = NavigationId::FIRST;
+        let second = first.next();
+        let third = second.next();
+        assert_ne!(first, second);
+        assert_ne!(second, third);
+        assert_ne!(first, third);
+    }
+
+    #[test]
+    fn every_event_variant_names_its_navigation() {
+        let id = NavigationId::FIRST.next();
+        let events = [
+            NavigationEvent::Started {
+                id,
+                address: "a".into(),
+            },
+            NavigationEvent::Redirected {
+                id,
+                address: "b".into(),
+            },
+            NavigationEvent::Committed {
+                id,
+                address: "b".into(),
+            },
+            NavigationEvent::Succeeded { id },
+            NavigationEvent::Failed {
+                id,
+                error: LoadError::Unresolvable {
+                    address: "a".into(),
+                },
+            },
+            NavigationEvent::TitleChanged {
+                id,
+                title: "t".into(),
+            },
+            NavigationEvent::NavigatedAway { id },
+        ];
+        for event in events {
+            assert_eq!(event.id(), id, "{event:?} lost its id");
+        }
+    }
+
+    /// An engine that cannot cross threads, because it holds an `Rc`. If a
+    /// `Send` bound ever lands on this trait — a supertrait or a method-level
+    /// bound — this implementation stops compiling, and the bound is caught
+    /// here rather than by the first platform backend that cannot satisfy it.
+    /// This guards the trait alone: a bound added to a consumer's generic
+    /// entry point is invisible to this crate, so each such entry point in
+    /// the shell carries its own non-`Send` engine where it lives.
+    struct ThreadAffine {
+        _pinned: Rc<()>,
+        queue: Vec<NavigationEvent>,
+        next: NavigationId,
+    }
+
+    impl Engine for ThreadAffine {
+        fn name(&self) -> &'static str {
+            "thread-affine"
+        }
+
+        fn start_navigation(&mut self, request: &Request) -> NavigationId {
+            let id = self.next;
+            self.next = id.next();
+            self.queue.push(NavigationEvent::Started {
+                id,
+                address: request.address().to_owned(),
+            });
+            id
+        }
+
+        fn poll_event(&mut self) -> Option<NavigationEvent> {
+            if self.queue.is_empty() {
+                None
+            } else {
+                Some(self.queue.remove(0))
+            }
+        }
+
+        fn current(&self) -> Option<&Page> {
+            None
+        }
+    }
+
+    #[test]
+    fn the_engine_path_carries_no_send_bound() {
+        let mut engine = ThreadAffine {
+            _pinned: Rc::new(()),
+            queue: Vec::new(),
+            next: NavigationId::FIRST,
+        };
+        let id = engine.start_navigation(&Request::new("https://a.invalid/"));
+        assert_eq!(engine.poll_event().map(|event| event.id()), Some(id));
+        assert_eq!(engine.poll_event(), None);
+    }
 }
