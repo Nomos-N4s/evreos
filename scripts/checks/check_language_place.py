@@ -97,7 +97,11 @@ region. The numeric-region arm was withdrawn from the canonical pattern
 deliberately: over every 2-3-letter word it read `sha-256`, `aes-256` and
 `top-100` as fused tags, and a check that fails honest literals teaches
 the tree to route around it, so numeric regions are caught for the
-shipped languages only. Files other than Rust
+shipped languages only. A script-interposed tag, `de-Latn-DE`, escapes
+both fusion patterns in Rust and TOML values -- the script subtag parts
+the language from the region, so neither pattern sees a joined pair --
+and rests on review beside the cross-line class; as a catalogue filename
+its shape is refused like any other. Files other than Rust
 source, TOML and catalogue directories are not read: workflows build no
 Apivo requests, and markdown is where the forbidden examples are quoted.
 
