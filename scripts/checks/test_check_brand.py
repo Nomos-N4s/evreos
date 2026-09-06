@@ -148,6 +148,17 @@ result = scenario(
 )
 check("a sibling of the seam module is NOT permitted", result[0] != [])
 
+result = scenario(
+    {
+        "brands/one.toml": BRAND,
+        "crates/other/src/brand.rs": 'const N: &str = "Wovenlark";\n',
+    }
+)
+check(
+    "a file named brand.rs in another crate is NOT permitted",
+    mentions(result[0], "crates/other/src/brand.rs", "Wovenlark"),
+)
+
 # --- what is never forbidden -------------------------------------------------
 
 result = scenario(
