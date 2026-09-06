@@ -135,11 +135,19 @@ problems, _ = run(spec=spec_text(BULLETS + ["Sync push"]))
 check("a spec-side addition the enum lacks fails", problems != [])
 check("...naming the missing variant", mentions(problems, "'Sync push'", "no SyncPush"))
 
-# An eleventh non-history purpose is an ordinary reviewable diff, not a breach:
-# FR-007a's closure governs the history-bearing set, and the docstring states
-# this non-catch.
+# An eleventh non-history purpose bearing none of FR-007a's four names is an
+# ordinary reviewable diff, not a breach: FR-007a's closure governs the
+# history-bearing set, and the docstring states this non-catch.
 problems, _ = run(source=purpose_source(non_history=NON_HISTORY + ["TokenRenewal"]))
 check("a new non-history purpose beyond the known ten passes", problems == [])
+
+# The mirror of MISFILED: a history-bearing name duplicated into the
+# non-history set while the history copy remains would make
+# Purpose::NonHistory(NonHistory::SubmittedSearch) constructible -- a
+# submitted-search transmission typed as carrying no history.
+problems, _ = run(source=purpose_source(non_history=NON_HISTORY + ["SubmittedSearch"]))
+check("a history-bearing name duplicated into the non-history set fails",
+      mentions(problems, "SubmittedSearch", "non-history set"))
 
 # SHAPE: the wrapper must be exactly the two sets, in the structural form the
 # reachability argument rests on -- payload types included, not just names.

@@ -28,13 +28,19 @@ fails until the enum catches up. It reads the tree and fails on:
                is what would let its request path carry an address, a term
                typed into the FR-003 field, or page content.
 
-  MISFILED     a known non-history purpose absent from the `NonHistory` enum.
-               Together with ADDED this closes the move in both directions: a
-               purpose relocated from one set to the other fails as an
-               unenumerated history-bearing variant AND as a hole in the
-               non-history set, and a purpose deleted outright still fails
-               here, because the transmissions it named do not stop existing
-               when their type does.
+  MISFILED     a known non-history purpose absent from the `NonHistory` enum,
+               and its mirror: a variant of the `NonHistory` enum bearing one
+               of FR-007a's four names. Together with ADDED this closes the
+               move -- and the copy -- in both directions: a purpose
+               relocated from one set to the other fails as an unenumerated
+               history-bearing variant AND as a hole in the non-history set;
+               a purpose deleted outright still fails here, because the
+               transmissions it named do not stop existing when their type
+               does; and a history-bearing name duplicated into the
+               non-history set fails even while the history copy remains,
+               because `Purpose::NonHistory(NonHistory::SubmittedSearch)`
+               would be a submitted-search transmission typed as carrying no
+               history.
 
   SHAPE        a `Purpose` enum whose variants are not exactly
                `HistoryBearing(HistoryBearing)` and `NonHistory(NonHistory)`
@@ -83,10 +89,11 @@ T035 fixed, and growing it is a visible diff to this file reviewed against
 that task.
 
 WHAT THIS DOES NOT CATCH: an eleventh NonHistory variant beyond the known
-ten. FR-007a's closure governs the history-bearing set; a new non-history
-purpose is an ordinary reviewable diff to purpose.rs, and refusing it here
-would make this check the specification. What the new purpose may carry is
-bound by the `NonHistory` definition and reviewed there.
+ten, provided it bears none of FR-007a's four names -- one that does is
+MISFILED's mirror and fails. FR-007a's closure governs the history-bearing
+set; a new non-history purpose is an ordinary reviewable diff to purpose.rs,
+and refusing it here would make this check the specification. What the new
+purpose may carry is bound by the `NonHistory` definition and reviewed there.
 """
 import argparse
 import re
@@ -329,6 +336,17 @@ def compare(spec, sets, purpose_name):
                 f"{purpose_name}: the non-history set has no {variant} variant; a "
                 "known non-history purpose that leaves the enum does not stop being "
                 "a transmission, it stops being a typed one"
+            )
+    # The mirror: one of FR-007a's four names declared in the non-history set
+    # -- a copy, with or without the history original -- would let that
+    # transmission be built as one that carries no history.
+    for variant in non_history:
+        if variant in spec_variants:
+            problems.append(
+                f"{purpose_name}: history-bearing transmission {variant} is declared "
+                "in the non-history set; FR-007a enumerates it as a carrier of "
+                "browsing history, and a copy typed as non-history would let its "
+                "transmission be built as one that carries none"
             )
     return problems
 
