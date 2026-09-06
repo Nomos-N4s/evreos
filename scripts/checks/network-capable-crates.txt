@@ -1,0 +1,63 @@
+# Crates able to move bytes off the machine, which only evreos-net may reach.
+#
+# crates/evreos-net is the sole egress chokepoint: FR-007a's closed
+# enumeration and SC-014's traffic capture both depend on every transmission
+# originating in one audited place, so a network-capable dependency anywhere
+# else is a second egress path. scripts/checks/check_egress_chokepoint.py
+# fails the build when any workspace crate other than evreos-net reaches a
+# crate named here -- directly or transitively, by any route that does not
+# pass through evreos-net -- in the graph `cargo metadata` resolves. One
+# crate name per line; `#` starts a comment; case and the hyphen/underscore
+# distinction are ignored, as crates.io ignores them.
+#
+# THE CRITERION for an entry: the crate can, by itself, open a connection or
+# resolve a name -- an HTTP or WebSocket client, a QUIC or HTTP/2 protocol
+# implementation, a DNS resolver, or the socket and event layer everything
+# above is built on. A crate is listed for what it CAN do, not for what a
+# feature selection asks of it, because the check reads the graph with every
+# feature enabled and a capability behind a feature flag is one diff away.
+# The list grows in review: a new HTTP client or socket layer appearing on
+# crates.io is added here in the pull request that first considers it, and
+# the seed below is the obvious surface today, not a claim of completeness.
+#
+# This list is never empty. The convention in scripts/checks/README.md lets a
+# committed list be empty so its first entry lands as a diff to the list;
+# that is the right rule for an allowlist, whose empty state is its
+# strictest. A deny-list's empty state is its weakest -- a check over nothing
+# -- and this one is seeded from the day it lands, so the check fails on an
+# empty file rather than passing over it.
+
+# HTTP clients.
+reqwest
+ureq
+curl
+curl-sys
+isahc
+attohttpc
+surf
+minreq
+
+# HTTP protocol implementations and their utility layers.
+hyper
+hyper-util
+h2
+h3
+
+# WebSockets.
+tungstenite
+tokio-tungstenite
+
+# QUIC.
+quinn
+
+# DNS resolution.
+trust-dns-resolver
+hickory-resolver
+
+# The socket and event layer everything above is built on. tokio is listed
+# because its `net` feature is an egress surface -- a TcpStream is a
+# transmission with no protocol name at all -- and the check reads the graph
+# with every feature enabled, so the capability is what is judged.
+socket2
+mio
+tokio
