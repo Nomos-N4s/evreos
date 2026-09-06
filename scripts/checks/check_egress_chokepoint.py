@@ -28,15 +28,16 @@ fails on:
                reach that transport transitively -- which will be the
                chokepoint working, not a second path. Neither edge exists
                at this head; the exemption is stated now so the diff that
-               adds them is not the diff that fails. The walk therefore never expands the
-               chokepoint's own node, keyed by that id; a listed crate
-               found any other way fails, with the chain named. The graph is read with every
-               feature enabled and every target's dependencies included, and
-               --locked, so the verdict is about the committed Cargo.lock.
-               Dev- and build-dependencies are in that graph and are not
-               excused: a test that opens a socket is a transmission SC-014's
-               capture would have to explain, and an entry excusing one is
-               exactly the diff a review has to see.
+               adds them is not the diff that fails. The walk therefore
+               never expands the chokepoint's own node, keyed by that id; a
+               listed crate found any other way fails, with the chain
+               named. The graph is read with every feature enabled and
+               every target's dependencies included, and --locked, so the
+               verdict is about the committed Cargo.lock. Dev- and
+               build-dependencies are in that graph and are not excused: a
+               test that opens a socket is a transmission SC-014's capture
+               would have to explain, and an entry excusing one is exactly
+               the diff a review has to see.
 
   DECLARED     a dependency a non-exempt workspace member's own manifest
                declares on a listed crate that the resolved graph does not
