@@ -1,0 +1,22 @@
+# T015's spike host. A test-tree workspace member: nothing on the release path
+# depends on it, and it ships in no artefact. The platform dependencies sit
+# behind the tier gate so the Linux CI runner, which carries no system webview
+# development packages, builds the stub in src/main.rs and none of these.
+# Versions are pinned exactly: the spike exists to measure, and a measurement
+# against a drifting dependency set is a measurement of nothing.
+[package]
+name = "n6-chrome-accessibility"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[target.'cfg(any(windows, target_os = "macos"))'.dependencies]
+winit = "=0.30.13"
+wry = "=0.53.5"
+accesskit = "=0.25.0"
+accesskit_winit = "=0.34.0"
+
+[lints]
+workspace = true
