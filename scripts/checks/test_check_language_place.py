@@ -200,6 +200,12 @@ report("uppercase-language spellings of the fusion fail",
        and mentions(problems, "El-GR"))
 
 problems, _, _, _ = tree(passing_tree({
+    "crates/x/src/state.rs": 'pub const DEFAULT: &str = "de-De";\n',
+}))
+report("a mixed-case region is the same fused tag and fails",
+       mentions(problems, "de-De"))
+
+problems, _, _, _ = tree(passing_tree({
     "crates/x/src/lib.rs":
         "#![forbid(unsafe_code)]\n"
         "// never de-DE: the region belongs in Place\n"
