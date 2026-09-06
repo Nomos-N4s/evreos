@@ -36,12 +36,13 @@ the tree and fails on:
                   request builder's query string, `en_us` in a manifest or a
                   configuration value. Two patterns, matched everywhere:
                   any 2-3-letter lowercase subtag joined by `-` or `_` to a
-                  canonically-spelled region -- two uppercase letters or
-                  three digits -- and, because BCP-47 folds case over the
-                  WHOLE tag, the three shipped languages `de`, `el` and `en`
-                  with both halves in ANY case: `DE-DE`, `De-DE` and `de-de`
-                  are all `de-DE` in other spellings, and so is
-                  `wallet.EN-us.title` a fused key in another spelling.
+                  canonically-cased letter region -- two uppercase letters
+                  -- and, because BCP-47 folds case over the WHOLE tag, the
+                  three shipped languages `de`, `el` and `en` joined to a
+                  region in ANY spelling: two letters however cased, or
+                  three digits. `DE-DE`, `De-DE` and `de-de` are all `de-DE`
+                  in other spellings, and so is `wallet.EN-us.title` a fused
+                  key in another spelling.
                   Rust source is read with comments stripped and
                   literals kept, through the one shared scanner, so a doc
                   comment naming `de-DE` as the forbidden example is not a
@@ -76,7 +77,14 @@ prose, not a key, and is not read -- the member-facing text may legitimately
 never need to name one, but that is the translator's judgement, not this
 check's. Fourth-language fusions spelled entirely in lowercase (`fr-fr`)
 pass the literal clauses until that language ships and joins the shipped
-list here, in the same change that adds its catalogue. Files other than Rust
+list here, in the same change that adds its catalogue -- and so, for the
+same span, does a non-shipped fusion in any other non-canonical spelling:
+`FR-FR` with its language half off canon, and `es-419` with a numeric
+region. The numeric-region arm was withdrawn from the canonical pattern
+deliberately: over every 2-3-letter word it read `sha-256`, `aes-256` and
+`top-100` as fused tags, and a check that fails honest literals teaches
+the tree to route around it, so numeric regions are caught for the
+shipped languages only. Files other than Rust
 source, TOML and catalogue directories are not read: workflows build no
 Apivo requests, and markdown is where the forbidden examples are quoted.
 
@@ -105,10 +113,13 @@ CATALOGUE_DIR = "catalogues"
 SUBTAG = re.compile(r"^[a-z]{2,3}$")
 
 # A fused language-place value in its canonical spelling: a primary subtag
-# joined to a region subtag as BCP-47 canonically cases one -- two uppercase
-# letters or three digits. `de-DE`, `de_AT`, `es-419`, `locale=de-DE`.
+# joined to a letter region subtag as BCP-47 canonically cases one -- two
+# uppercase letters. `de-DE`, `de_AT`, `locale=de-DE`. Deliberately NO
+# numeric-region arm: one would read `sha-256`, `aes-256` and `top-100` as
+# fused tags, so numeric regions are caught by the shipped pattern below
+# and `es-419` is a stated miss until `es` ships.
 CANONICAL_FUSION = re.compile(
-    r"(?<![A-Za-z0-9])[a-z]{2,3}[-_](?:[A-Z]{2}|[0-9]{3})(?![A-Za-z0-9])"
+    r"(?<![A-Za-z0-9])[a-z]{2,3}[-_][A-Z]{2}(?![A-Za-z0-9])"
 )
 
 # The same fusion for the three shipped languages with the WHOLE tag in any

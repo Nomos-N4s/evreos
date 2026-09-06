@@ -140,9 +140,10 @@ report("an uppercase-language key fails, its region canonically cased",
        mentions(problems, "DE-AT"))
 
 problems, _, _, _ = tree(passing_tree({
-    "crates/x/catalogues/es.messages": "wallet.es-419.title = Cuenta\n",
+    "crates/x/catalogues/el.messages": CLEAN_CATALOGUE + "wallet.el-419.title = Cuenta\n",
 }))
-report("a numeric region subtag in a key fails", mentions(problems, "es-419"))
+report("a numeric region subtag in a key fails for a shipped language",
+       mentions(problems, "el-419"))
 
 problems, _, _, _ = tree(passing_tree({
     "crates/x/catalogues/de.messages":
@@ -190,6 +191,23 @@ problems, _, _, _ = tree(passing_tree({
         'pub const WORDS: &str = "opt-in check-in en-route to-do";\n',
 }))
 report("ordinary hyphenated words are not read as tags", problems == [])
+
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/src/hash.rs":
+        "#![forbid(unsafe_code)]\n"
+        'pub const NAMES: &str = "sha-256 aes-256 top-100";\n',
+}))
+report("algorithm and ordinal names are not read as tags", problems == [])
+
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/src/state.rs": 'pub const MISS: &str = "es-419";\n',
+}))
+report("a non-shipped numeric fusion is the stated miss", problems == [])
+
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/src/state.rs": 'pub const CAUGHT: &str = "en_419";\n',
+}))
+report("a shipped numeric fusion still fails", mentions(problems, "en_419"))
 
 # --- FUSED FIELD --------------------------------------------------------------
 
