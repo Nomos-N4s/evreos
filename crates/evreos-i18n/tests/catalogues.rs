@@ -126,6 +126,39 @@ fn the_four_error_causes_each_carry_a_cause_and_a_next_step() {
 }
 
 #[test]
+fn each_catalogue_resolves_its_own_language_text() {
+    // The closure tests above are language-blind on purpose — the three
+    // catalogues share one key set — so none of them can notice the De
+    // wiring handing out Greek text. This binds each Language to a string
+    // only its own catalogue holds, taken from the shipped files, so
+    // swapping two catalogue wirings fails here by content rather than
+    // passing by structure.
+    for (language, expected) in [
+        (
+            Language::De,
+            "Prüfen Sie die Schreibweise der Adresse und versuchen Sie es erneut.",
+        ),
+        (
+            Language::El,
+            "Ελέγξτε τη γραφή της διεύθυνσης και δοκιμάστε ξανά.",
+        ),
+        (
+            Language::En,
+            "Check the spelling of the address and try again.",
+        ),
+    ] {
+        assert_eq!(
+            catalogue(language)
+                .resolve("error.unresolvable.next_step", &[])
+                .as_deref(),
+            Ok(expected),
+            "the {} catalogue does not resolve its own language's text",
+            language.subtag()
+        );
+    }
+}
+
+#[test]
 fn no_catalogue_filename_carries_a_region_subtag() {
     // The files are read from the source tree rather than through the crate,
     // because the crate cannot see its own filenames after include_str! — and
