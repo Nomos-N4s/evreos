@@ -37,8 +37,8 @@ derived forms, nothing looser.
 Then every Rust source file in the tree is scanned for those literals, except
 the two permitted homes: anything under brands/ and the seam module itself.
 
-Two scanning decisions are deliberate and are the opposite of what the other
-Rust-reading checks do:
+The scanning decisions here are deliberate. The first two are the opposite of
+what the other Rust-reading checks do:
 
   - RAW text, not `rustlex.strip_non_code`. A hardcoded brand value lives in
     a string literal -- that is the defect's natural habitat -- so blanking
@@ -49,6 +49,14 @@ Rust-reading checks do:
     and users do in text; a re-spelled copy of a brand value is still a copy
     of it, and the check that matched exactly would be dodged by one shifted
     letter.
+  - Rust source only. T034's "workspace source" is the Cargo workspace's
+    source, and that is Rust -- build scripts included, which the suite holds
+    a case for. The tree's non-Rust files are tooling and prose: checks,
+    workflows, specs and records, whose own fixtures and records must be able
+    to name a brand value to state the rule it is behind -- Q-E2 names the
+    search provider in the spec, and this check's own tests write brand files.
+    Scanning them would forbid writing the rule's own record, so the scan is
+    not widened past what ships.
 
 Directory walking is case-folded through casefs for the same reason every
 check folds: the release installers are built on case-insensitive
