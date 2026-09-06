@@ -131,6 +131,26 @@ mod tests {
     }
 
     #[test]
+    fn the_feature_selects_the_fixture_and_the_default_selects_the_real_brand() {
+        // The selection half of the seam, pinned: `brand()` reads the file
+        // this configuration names, field for field. Swapping the two
+        // include_str! arms of SELECTED embeds the other file, and the two
+        // committed brands differ in every set field and in the sentinel, so
+        // the swap is red here in both feature configurations.
+        #[cfg(feature = "fixture-brand")]
+        let expected = parse(FIXTURE).expect("brands/fixture.toml parses");
+        #[cfg(not(feature = "fixture-brand"))]
+        let expected = parse(EVREOS).expect("brands/evreos.toml parses");
+        for (name, get) in &FIELDS {
+            assert_eq!(
+                get(brand()),
+                get(&expected),
+                "field `{name}` is not the selected brand file's value"
+            );
+        }
+    }
+
+    #[test]
     fn the_fixture_brand_has_every_field_set() {
         // This test is what holds the fixture complete on every runner:
         // T034's ubuntu step builds the fixture in the release profile, but
