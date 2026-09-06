@@ -112,6 +112,10 @@ report("an underscore spelling of the same fusion fails", mentions(problems, "de
 problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de-de.messages": CLEAN_CATALOGUE}))
 report("a lowercase region is the same fused tag and fails", problems != [])
 
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.de-DE.messages": CLEAN_CATALOGUE}))
+report("a region subtag after the first dot in a filename fails",
+       mentions(problems, "de-DE", "filename"))
+
 problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/README.md": "# notes\n"}))
 report("a stray file in a catalogue directory fails as unnameable",
        mentions(problems, "README.md", "subtag"))
