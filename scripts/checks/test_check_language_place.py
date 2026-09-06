@@ -116,6 +116,18 @@ problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/README.md": "# notes
 report("a stray file in a catalogue directory fails as unnameable",
        mentions(problems, "README.md", "subtag"))
 
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/catalogues/regional/de-DE.messages": CLEAN_CATALOGUE,
+}))
+report("a subdirectory nesting a catalogue fails rather than passing unread",
+       mentions(problems, "catalogues/regional", "directory"))
+
+problems, _, _, _ = tree(passing_tree({
+    "crates/x/catalogues/de-DE/app.ftl": "key = value\n",
+}))
+report("a fused-named subdirectory in a catalogue directory fails",
+       mentions(problems, "de-DE", "directory"))
+
 problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/deu.messages": CLEAN_CATALOGUE}))
 report("a three-letter primary subtag alone is a legal name", problems == [])
 

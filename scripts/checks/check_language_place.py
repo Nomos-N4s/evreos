@@ -22,7 +22,11 @@ the tree and fails on:
                   are the same fused tag in two spellings, and enumerating
                   spellings is how one is missed. A catalogue directory holds
                   catalogues named by subtag and nothing else; a stray file
-                  there fails as unnameable rather than passing as clutter.
+                  there fails as unnameable rather than passing as clutter,
+                  and a DIRECTORY there fails the same way, whatever its
+                  name -- a nested layout's files are catalogue files to no
+                  clause here, so the layout itself is refused rather than
+                  passing with its contents unread.
 
   CATALOGUE KEY   a message key carrying a fused language-place value, read
                   from every line of every file in a `catalogues/` directory
@@ -91,7 +95,9 @@ Apivo requests, and markdown is where the forbidden examples are quoted.
 Rust source is read with comments stripped through rustlex, the one Rust
 scanner; directories are matched with case folded where they must be, the
 release platforms' filesystems folding case. Dot-directories and `target/`
-are not read: nothing under either ships.
+are not read: nothing under either ships. A directory inside a `catalogues/`
+directory is still refused by its presence -- refusing a name is not
+reading the tree beneath it.
 """
 import argparse
 import re
@@ -268,11 +274,27 @@ def check_tree(root):
         raise CheckError(f"{root}: not a directory this check can read")
 
     for directory in sorted(walk(root)):
+        in_catalogues = folded_in(directory.name, [CATALOGUE_DIR])
         for path in sorted(directory.iterdir()):
-            if not path.is_file():
-                continue
             where = path.relative_to(root).as_posix()
-            in_catalogues = folded_in(directory.name, [CATALOGUE_DIR])
+            if not path.is_file():
+                if in_catalogues and path.is_dir():
+                    fused = fused_values(path.name)
+                    if fused:
+                        problems.append(
+                            f"{where}: directory in a catalogue directory "
+                            f"carries the fused value {fused[0]!r}; a "
+                            "catalogue directory holds catalogues named by "
+                            "subtag and nothing else"
+                        )
+                    else:
+                        problems.append(
+                            f"{where}: a directory inside a catalogue "
+                            "directory; a catalogue directory holds one file "
+                            "per language and nothing else, and a nested "
+                            "layout would pass with its contents unread"
+                        )
+                continue
             if in_catalogues:
                 catalogue_files += 1
                 message_keys += check_catalogue_file(
