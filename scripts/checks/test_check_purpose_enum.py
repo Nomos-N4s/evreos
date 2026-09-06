@@ -135,6 +135,21 @@ problems, _ = run(spec=spec_text(BULLETS + ["Sync push"]))
 check("a spec-side addition the enum lacks fails", problems != [])
 check("...naming the missing variant", mentions(problems, "'Sync push'", "no SyncPush"))
 
+# The enumeration anchor is located AFTER the **FR-007a** marker: an earlier
+# requirement wording its own closed list the same way, bullets and closing
+# sentence included, must not redirect the comparison to the wrong list.
+early_anchor = (
+    "- **FR-000**: The permitted widgets are exactly the one below,\n"
+    "  and the list is exhaustive:\n"
+    "  - **Decoy entry**: not the FR-007a list.\n"
+    "\n"
+    "  Anything not on that list is forbidden, for widgets.\n"
+    "\n"
+) + spec_text()
+problems, _ = run(spec=early_anchor)
+check("a same-worded anchor before the marker does not redirect the comparison",
+      problems == [])
+
 # An eleventh non-history purpose bearing none of FR-007a's four names is an
 # ordinary reviewable diff, not a breach: FR-007a's closure governs the
 # history-bearing set, and the docstring states this non-catch.
