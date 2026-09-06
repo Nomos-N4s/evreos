@@ -189,10 +189,30 @@ problems, _ = run(source=commented)
 check("a variant named in a comment is not a variant",
       mentions(problems, "no HandOff variant"))
 
-# A decoy enum inside a string literal does not shadow the real one.
+# A decoy enum inside a string literal does not shadow the real one -- and,
+# blanked away, it does not count as a second declaration either.
 decoy = 'const DOC: &str = "enum HistoryBearing { Decoy }";\n' + purpose_source()
 problems, _ = run(source=decoy)
 check("an enum spelled inside a string is not read", problems == [])
+
+# A same-named decoy enum in an earlier nested scope IS a real declaration,
+# and two declarations of one name are no verdict: the check refuses to
+# choose rather than reading whichever comes first textually.
+scoped_decoy = (
+    "mod decoys {\n"
+    "    pub enum HistoryBearing {\n"
+    "        PageLoad,\n"
+    "        CertificateStatus,\n"
+    "        SubmittedSearch,\n"
+    "    }\n"
+    "}\n\n"
+) + purpose_source()
+try:
+    run(source=scoped_decoy)
+    check("a same-named enum in a nested scope is a CheckError", False)
+except agreement.CheckError as error:
+    check("a same-named enum in a nested scope is a CheckError",
+          "enum HistoryBearing" in str(error) and "2 times" in str(error))
 
 # An attribute on a variant is not its name.
 problems, _ = run(source=purpose_source(
@@ -266,6 +286,15 @@ with tempfile.TemporaryDirectory() as tmp:
 
     result = run_check("--spec", str(Path(tmp) / "absent.md"), "--purpose", str(purpose_path))
     check("a missing spec exits 2, not 0", result.returncode == 2)
+
+    scoped = Path(tmp) / "scoped.rs"
+    scoped.write_text(
+        "mod decoys {\n    pub enum HistoryBearing { PageLoad }\n}\n" + purpose_source(),
+        encoding="utf-8",
+    )
+    result = run_check("--spec", str(spec_path), "--purpose", str(scoped))
+    check("a duplicated enum name exits 2, not 0", result.returncode == 2)
+    check("...naming the duplication", "2 times" in result.stderr)
 
 print(f"\n{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)

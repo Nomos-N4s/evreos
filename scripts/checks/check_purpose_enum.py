@@ -74,9 +74,13 @@ has compared.
 THE ENUM SIDE is read from crates/evreos-net/src/purpose.rs with comments and
 string literals blanked first by scripts/checks/rustlex.py -- the one Rust
 scanner, shared because a second weaker copy was a defect twice -- so a
-variant name written in a doc comment is prose, not a variant. The variant
-names are then read from each set enum's brace-balanced body, and the
-wrapper's variants are read whole -- name and payload -- for SHAPE.
+variant name written in a doc comment is prose, not a variant. Each of the
+three names must be declared exactly once in the blanked source: a second
+same-named declaration anywhere -- a decoy enum in a nested mod or fn body --
+is no verdict (exit 2), because the check cannot know which body the
+workspace uses. The variant names are then read from each set enum's
+brace-balanced body, and the wrapper's variants are read whole -- name and
+payload -- for SHAPE.
 
 THE KNOWN NON-HISTORY PURPOSES are a committed constant below rather than
 parsed from anywhere: the four infrastructure purposes carry their requirement
@@ -195,14 +199,24 @@ def spec_transmissions(spec_path):
 
 
 def enum_body(source, enum_name):
-    """The brace-balanced body of `enum <enum_name> { ... }`, or None.
+    """The brace-balanced body of the ONE `enum <enum_name> { ... }`, or None.
 
     `source` must already have comments and strings blanked, so the braces
-    counted are the ones rustc reads.
+    counted are the ones rustc reads and a name spelled in prose is not a
+    declaration. Raises CheckError when the name is declared more than once
+    -- a same-named decoy in a nested scope, say -- because this check cannot
+    know which body is the one the workspace uses, and a comparison against
+    the wrong one is a comparison against nothing.
     """
-    match = re.search(rf"\benum\s+{re.escape(enum_name)}\b[^{{]*\{{", source)
-    if match is None:
+    matches = list(re.finditer(rf"\benum\s+{re.escape(enum_name)}\b[^{{]*\{{", source))
+    if not matches:
         return None
+    if len(matches) > 1:
+        raise CheckError(
+            f"`enum {enum_name}` is declared {len(matches)} times; this check reads "
+            "one declaration per name and refuses to choose between them"
+        )
+    match = matches[0]
     depth, i = 1, match.end()
     while i < len(source) and depth:
         if source[i] == "{":
@@ -265,7 +279,10 @@ def enum_sets(purpose_path):
     source = strip_non_code(purpose_path.read_text(encoding="utf-8").lstrip("\ufeff"))
     sets = {}
     for name in (WRAPPER_ENUM, HISTORY_ENUM, NON_HISTORY_ENUM):
-        body = enum_body(source, name)
+        try:
+            body = enum_body(source, name)
+        except CheckError as error:
+            raise CheckError(f"{purpose_path.name}: {error}") from None
         if body is None:
             raise CheckError(
                 f"{purpose_path.name}: no `enum {name}`; the structural convention "
