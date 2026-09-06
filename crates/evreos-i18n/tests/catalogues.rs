@@ -288,6 +288,15 @@ fn the_parser_refuses_what_a_catalogue_must_not_hold() {
         empty_name,
         Err(CatalogueError::InvalidPlaceholder { line: 1, .. })
     ));
+
+    // The invalid-character limb: an argument name outside lowercase ASCII
+    // and `_` must be refused, or a translator's `{Host}` resolves in tests
+    // and fails only at real call sites supplying `host`.
+    let miscased = Catalogue::parse(Language::En, "menu.a = hello {Host}");
+    assert!(matches!(
+        miscased,
+        Err(CatalogueError::InvalidPlaceholder { line: 1, .. })
+    ));
 }
 
 #[test]
