@@ -2049,11 +2049,12 @@ SC-005's window, SC-006's trials, S4's pinned-runner confirmation (the decision
 itself now runs first on the interim instrument, decisions/0004) and every
 tier-specific measurement above — which the specification already states
 (Q-E9a: "procurement is a release prerequisite and is the only thing standing
-between those gates and blocking"). `Nomos-N4s/evreos` is public, and GitHub's own guidance is that
-self-hosted runners should not be used with public repositories, because anyone
-who can fork and open a pull request can execute code on the runner — and a
-compromised benchmark runner is also the machine holding the project's baseline
-series. The spare matters because the budget file records "a durable machine
+between those gates and blocking"). `Nomos-N4s/evreos` is public, and GitHub's
+own guidance is that self-hosted runners should not be used with public
+repositories, because anyone who can fork and open a pull request can execute
+code on the runner — and a compromised benchmark runner is also the machine
+holding the project's baseline series.
+The spare matters because the budget file records "a durable machine
 identifier": swapping in a different machine changes that identifier and,
 honestly applied, restarts every baseline series on that tier, so the swap
 procedure has to be written down rather than improvised the week a laptop dies.
