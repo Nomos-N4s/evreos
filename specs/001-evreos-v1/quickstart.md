@@ -680,9 +680,10 @@ AA is claimed anywhere but on tier-1 page content.
 > **Open**: does an accessibility tree published by the chrome compose coherently
 > with an embedded WebView2 or WKWebView's own tree — one reading order, one
 > focus order, no orphaned subtree? **Settled by**: a spike building a minimal
-> chrome with one embedded webview on each tier's runner, driven by each
-> platform's assistive technology, with the resulting tree captured and
-> committed. Nothing located answers it, and if the answer is bad on the drawn
+> chrome with one embedded webview on each tier's runner — first on the interim
+> instrument decisions/0004 names for tier 1, with each tier's pinned-runner run
+> owed and tier 2 open until measured there — driven by each platform's
+> assistive technology, with the resulting tree captured and committed. Nothing located answers it, and if the answer is bad on the drawn
 > chrome candidate, chrome accessibility becomes this project's own engineering
 > problem against a release-blocking principle.
 
@@ -789,8 +790,11 @@ requirement names the ten pages; see *Gaps*.
 
 ## B9. SC-006 — chrome input latency
 
-**Requirement**: SC-006, ratified. Also the gate that disqualifies chrome
-renderer candidates before B6.
+**Requirement**: SC-006, ratified. Under decisions/0004 the candidate
+comparison this harness once gated runs first on the interim instrument; what
+this scenario measures is the built chrome of the candidate already selected,
+and a selected candidate that misses here reopens ADR-0002 rather than being
+grandfathered.
 
 **Platform**: [tier 1 runner], [tier 2 runner], on a display driven at 60 Hz.
 

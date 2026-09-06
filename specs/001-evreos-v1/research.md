@@ -2045,8 +2045,10 @@ measuring gates need self-hosted machines that do not exist yet, and the
 budget-file gate is presently suppressed for exactly this by
 `--allow-unpinned-runners` in the build workflow; procurement is therefore the
 longest-lead item in this strand and gates SC-002's spike, SC-004's soak,
-SC-005's window, SC-006's trials, S4's decision and every tier-specific
-measurement above — which the specification already states (Q-E9a: "procurement
+SC-005's window, SC-006's trials, S4's pinned-runner confirmation (the decision
+itself now runs first on the interim instrument, decisions/0004) and every
+tier-specific measurement above — which the specification already states
+(Q-E9a: "procurement
 is a release prerequisite and is the only thing standing between those gates and
 blocking"). `Nomos-N4s/evreos` is public, and GitHub's own guidance is that
 self-hosted runners should not be used with public repositories, because anyone
@@ -2549,8 +2551,9 @@ Q-E12's whole tier-2 route rides in the crate T4 created.
 
 **Three things run in parallel from Phase 1, because they are longer-lead than
 any code.** Runner procurement (§9.12), which gates SC-002's spike, SC-004's
-soak, SC-005's window, SC-006's trials, S4's decision and every tier-specific
-measurement above. The OHTTP relay contract and the DPIA (§8.8) — no operator,
+soak, SC-005's window, SC-006's trials, S4's pinned-runner confirmation (the
+decision itself now runs first on the interim instrument, decisions/0004) and
+every tier-specific measurement above. The OHTTP relay contract and the DPIA (§8.8) — no operator,
 no signal, and the milestone that ships diagnostics must be able to ship with
 the feature dark and unofferable. And two cheap bring-up measurements taken
 before harness architecture is fixed, because a bad result from either is a
