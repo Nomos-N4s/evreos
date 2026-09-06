@@ -230,6 +230,22 @@ fn the_parser_refuses_a_key_with_a_region_subtag() {
 }
 
 #[test]
+fn the_parser_refuses_a_digit_in_a_key() {
+    // `_` is already legal in a key, so the underscore spelling of a numeric
+    // region — `wallet.es_419.title`, assembled here for the reason the
+    // region test assembles its key — is one digit-admission away from
+    // parsing. The digit limb of the charset is what keeps it out, and it is
+    // pinned separately from the uppercase and hyphen limbs the other tests
+    // cover.
+    let fused = ["wallet.es", "419.title"].join("_");
+    let refused = Catalogue::parse(Language::En, &format!("{fused} = something"));
+    assert!(
+        matches!(refused, Err(CatalogueError::InvalidKey { line: 1, .. })),
+        "a digit in a key must be refused at parse: {refused:?}"
+    );
+}
+
+#[test]
 fn the_parser_refuses_what_a_catalogue_must_not_hold() {
     let uppercase = Catalogue::parse(Language::En, "Menu.title = x");
     assert!(matches!(
