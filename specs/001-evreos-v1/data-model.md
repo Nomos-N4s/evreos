@@ -232,7 +232,7 @@ raises.
 | `kind` | `Normal \| Private` | **FR-007**. |
 | `tabs` | ordered list of `Tab` | Order is the member's, and is restorable (**FR-001**). |
 | `active_tab` | `Tab` reference | Exactly one when the window has tabs. |
-| `data_store` | `DataStoreSelector` | `Persistent` for `Normal`, a distinct `NonPersistent` store for `Private`. **[design]**: FR-007 requires the outcome ("no browsing trace"); the mechanism is the engine seam's, and `research.md` §1.5 (addressable rendering-surface handle plus a data-store selector) records that the merged `Engine` trait carries no selector for it — the trait in `crates/evreos-engine/src/lib.rs` declares `name`, `load` and `current` and nothing else. |
+| `data_store` | `DataStoreSelector` | `Persistent` for `Normal`, a distinct `NonPersistent` store for `Private`. **[design]**: FR-007 requires the outcome ("no browsing trace"); the mechanism is the engine seam's, and `research.md` §1.5 (addressable rendering-surface handle plus a data-store selector) records that the `Engine` trait carries no selector for it — as landed, the trait in `crates/evreos-engine/src/lib.rs` declares `name`, `start_navigation`, `poll_event` and `current` and nothing else, none of which selects a data store. |
 
 **Validation**
 
@@ -330,8 +330,8 @@ causes. This model keeps it unchanged and wraps it.
 | --- | --- | --- |
 | `navigation_id` | id | Correlates a request with its outcome, so an outcome for a navigation the member abandoned is distinguishable from the current one. **[design]** — `research.md` §1.2 established that the merged synchronous `load` (`fn load(&mut self, request: &Request) -> Result<Page, LoadError>`) carried no request-to-outcome correlation; the reshaping was the plan's and has since landed as the event contract, whose `NavigationId` is this id. |
 | `requested` | address | What the shell asked for. |
-| `outcome` | `Succeeded \| Failed(LoadError) \| NavigatedAway` | As landed, no outcome carries a title — the title arrives only on `TitleChanged`. The address depends on the variant: `Succeeded` carries none, because the committed address arrived on its own event before it; `Failed` carries the address inside every `LoadError` variant, and no committed address precedes it — `Failed` and `Committed` are mutually exclusive for one id; `NavigatedAway` carries none and guarantees no prior commit. |
-| `LoadError` | `Unresolvable { address } \| Certificate { address, detail } \| Intercepted { address } \| AuthenticationRequired { address }` | The four causes **FR-015** names, exercised on every supported platform by **SC-009**. Every landed variant carries the address it concerns, exposed via `address()` — the error state must name it, and for a failed navigation no other event delivers it. |
+| `outcome` | `Succeeded \| Failed(LoadError) \| NavigatedAway` | As landed, no outcome carries a title — the title arrives only on `TitleChanged`. The address depends on the variant: `Succeeded` carries none, because the committed address arrived on its own event before it; `Failed` carries the address inside every `LoadError` variant, and no committed address precedes it — `Failed` and `Committed` are mutually exclusive for one id; `NavigatedAway` carries none and may follow a commit — a navigation that committed and was then stopped or superseded before finishing terminates as `NavigatedAway`; the contract's only commit exclusion is `Failed`'s. |
+| `LoadError` | `Unresolvable { address } \| Certificate { address, detail } \| Intercepted { address } \| AuthenticationRequired { address }` | The four causes **FR-015** names, exercised on every supported platform by **SC-009**. Every landed variant carries the address it concerns, exposed via `address()` — the error state must name it, no committed address ever arrives for a failed navigation, and `Started` carries the requested address, which need not be the one the failure concerns. |
 
 **Validation**
 
