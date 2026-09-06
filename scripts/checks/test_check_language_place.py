@@ -163,9 +163,10 @@ report("a numeric region subtag in a key fails for a shipped language",
 
 problems, _, _, _ = tree(passing_tree({
     "crates/x/catalogues/de.messages":
-        "# de-DE is quoted in this comment and quoted only\n" + CLEAN_CATALOGUE,
+        "# old: wallet.de-AT.title = Konto\n" + CLEAN_CATALOGUE,
 }))
-report("a catalogue comment quoting the forbidden example passes", problems == [])
+report("a commented-out key line carrying the forbidden example passes",
+       problems == [])
 
 # --- FUSED VALUE in Rust source -----------------------------------------------
 
