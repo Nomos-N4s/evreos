@@ -75,7 +75,8 @@ THE ENUM SIDE is read from crates/evreos-net/src/purpose.rs with comments and
 string literals blanked first by scripts/checks/rustlex.py -- the one Rust
 scanner, shared because a second weaker copy was a defect twice -- so a
 variant name written in a doc comment is prose, not a variant. The variant
-names are then read from each enum's brace-balanced body.
+names are then read from each set enum's brace-balanced body, and the
+wrapper's variants are read whole -- name and payload -- for SHAPE.
 
 THE KNOWN NON-HISTORY PURPOSES are a committed constant below rather than
 parsed from anywhere: the four infrastructure purposes carry their requirement
