@@ -101,7 +101,15 @@ shipped languages only. A script-interposed tag, `de-Latn-DE`, escapes
 both fusion patterns in Rust and TOML values -- the script subtag parts
 the language from the region, so neither pattern sees a joined pair --
 and rests on review beside the cross-line class; as a catalogue filename
-its shape is refused like any other. Files other than Rust
+its shape is refused like any other. The whole-tag fold has a cost in
+the other direction, recorded here beside the numeric arm's: an honest
+uppercase literal that spells a shipped subtag before a two-letter or
+three-digit tail -- `DE-BY` and `DE-NW`, ISO 3166-2 codes for German
+subdivisions, `EL-AL`, `EN-301` in an ETSI norm's name -- is flagged as
+a fused tag. Each is byte-identical to the uppercase spelling of one,
+so no lexical rule can part them; the collision is unavoidable and the
+trade is deliberate, a loud false positive on a rare literal over a
+silent pass of a real fusion. Files other than Rust
 source, TOML and catalogue directories are not read: workflows build no
 Apivo requests, and markdown is where the forbidden examples are quoted.
 
