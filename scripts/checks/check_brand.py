@@ -23,6 +23,17 @@ the schema itself declares meaningless:
   - the empty string, which the Rust schema refuses anyway and which would
     match every line of every file.
 
+A value with a scheme -- a URL-shaped endpoint -- forbids three derived forms
+besides itself: the value without its scheme, the value without its trailing
+slash, and the bare host. Each is a natural partial copy of an endpoint -- a
+request builder that hardcodes the host is exactly the drift the seam exists
+to prevent -- and each is one dropped character or segment away from a
+whole-value match. The limit that remains, stated so it stays honest: any
+OTHER substring of a value passes -- a truncated host, a path segment, a
+colour missing its hash -- because forbidding arbitrary substrings would
+forbid fragments too short to mean anything. Whole values and those three
+derived forms, nothing looser.
+
 Then every Rust source file in the tree is scanned for those literals, except
 the two permitted homes: anything under brands/ and the seam module itself.
 
@@ -145,6 +156,24 @@ def read_brand_values(root):
     return values
 
 
+def url_forms(value):
+    """The derived forms of a URL-shaped value; empty for any other value.
+
+    Where `value` is `scheme://rest`, the forms are the scheme-less `rest`,
+    the value minus its trailing slash, and the bare host -- minus any that
+    equals the value itself or repeats another. See the docstring for why
+    exactly these three and for what still passes.
+    """
+    scheme, separator, rest = value.partition("://")
+    if not separator or not scheme or not rest:
+        return []
+    forms = []
+    for form in (rest, value.rstrip("/"), rest.split("/", 1)[0]):
+        if form and form != value and form not in forms:
+            forms.append(form)
+    return forms
+
+
 def permitted_files(root):
     """The seam module's path(s), resolved with case folded.
 
@@ -189,7 +218,11 @@ def check_tree(root):
     """
     root = Path(root).resolve()
     values = read_brand_values(root)
-    lowered = [(value.lower(), value, origin) for value, origin in sorted(values.items())]
+    needles = []
+    for value, origin in sorted(values.items()):
+        forms = [(value.lower(), value)]
+        forms += [(form.lower(), form) for form in url_forms(value)]
+        needles.append((forms, value, origin))
     permitted = permitted_files(root)
     skipped = {directory.resolve() for directory in resolve_dirs(root, "brands")}
 
@@ -210,13 +243,27 @@ def check_tree(root):
             continue
         for number, line in enumerate(text.splitlines(), 1):
             low = line.lower()
-            for needle, value, origin in lowered:
-                if needle in low:
-                    problems.append(
-                        f"{where}:{number}: carries the brand value {value!r} ({origin}); "
-                        "FR-042 permits it only in brands/ and "
-                        "crates/evreos-shell/src/brand.rs"
-                    )
+            for forms, value, origin in needles:
+                # One report per brand value per line, naming the longest
+                # matching form: where the whole value is present, its
+                # derived forms are substrings of it and are not the news.
+                matched = max(
+                    (display for needle, display in forms if needle in low),
+                    key=len,
+                    default=None,
+                )
+                if matched is None:
+                    continue
+                copy = (
+                    f"the brand value {value!r}"
+                    if matched == value
+                    else f"{matched!r}, a partial copy of the brand value {value!r}"
+                )
+                problems.append(
+                    f"{where}:{number}: carries {copy} ({origin}); "
+                    "FR-042 permits it only in brands/ and "
+                    "crates/evreos-shell/src/brand.rs"
+                )
     return problems, len(values), scanned
 
 

@@ -134,6 +134,63 @@ check(
     mentions(result[0], "build.rs:1") and mentions(result[0], "xtask/src/main.rs"),
 )
 
+# --- partial copies of URL-shaped values -------------------------------------
+
+# An endpoint whose host embeds no other brand value, so these scenarios can
+# only fail through the derived URL forms rather than riding on a name match.
+URL_ONLY = 'endpoint = "https://beacon.fixture-url.invalid/"\n'
+
+result = scenario(
+    {
+        "brands/one.toml": URL_ONLY,
+        "crates/a/src/lib.rs": 'const H: &str = "beacon.fixture-url.invalid";\n',
+    }
+)
+check(
+    "a host-only copy of an endpoint fails, naming the form and the value",
+    mentions(
+        result[0], "beacon.fixture-url.invalid", "https://beacon.fixture-url.invalid/"
+    ),
+)
+
+result = scenario(
+    {
+        "brands/one.toml": URL_ONLY,
+        "crates/a/src/lib.rs": 'const E: &str = "https://beacon.fixture-url.invalid";\n',
+    }
+)
+check("a slash-trimmed copy of an endpoint fails", result[0] != [])
+
+result = scenario(
+    {
+        "brands/one.toml": URL_ONLY,
+        "crates/a/src/lib.rs": 'const E: &str = "beacon.fixture-url.invalid/";\n',
+    }
+)
+check("a scheme-less copy of an endpoint fails", result[0] != [])
+
+result = scenario(
+    {
+        "brands/one.toml": BRAND,
+        "crates/a/src/lib.rs": 'const E: &str = "https://wovenlark.invalid/";\n',
+    }
+)
+# The line also carries the fixture's name (its own host embeds it), so the
+# endpoint's report is picked out rather than counted alone.
+check(
+    "a whole-value copy is reported once per value, as the value itself",
+    sum("https://wovenlark.invalid/" in problem for problem in result[0]) == 1
+    and not any("partial copy" in problem for problem in result[0]),
+)
+
+result = scenario(
+    {
+        "brands/one.toml": BRAND,
+        "crates/a/src/lib.rs": 'const F: &str = "12ab34";\n',
+    }
+)
+check("an arbitrary substring of a value still passes, deliberately", result[0] == [])
+
 # --- the two permitted homes -------------------------------------------------
 
 result = scenario(
