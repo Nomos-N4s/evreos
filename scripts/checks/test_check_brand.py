@@ -152,10 +152,15 @@ result = scenario(
         "crates/a/src/lib.rs": 'const H: &str = "beacon.fixture-url.invalid";\n',
     }
 )
+# The full phrasing is asserted, not just the two fragments: the host is a
+# substring of the full URL, so a report that used the whole-value wording for
+# a partial match would still carry both fragments and pass a looser check.
 check(
-    "a host-only copy of an endpoint fails, naming the form and the value",
+    "a host-only copy of an endpoint is reported as a partial copy of the value",
     mentions(
-        result[0], "beacon.fixture-url.invalid", "https://beacon.fixture-url.invalid/"
+        result[0],
+        "'beacon.fixture-url.invalid', a partial copy of the brand value "
+        "'https://beacon.fixture-url.invalid/'",
     ),
 )
 
