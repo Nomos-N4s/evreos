@@ -122,6 +122,18 @@ result = scenario(
 )
 check("a build script is workspace source too", result[0] != [])
 
+result = scenario(
+    {
+        "brands/one.toml": BRAND,
+        "build.rs": 'const E: &str = "https://wovenlark.invalid/";\n',
+        "xtask/src/main.rs": 'const N: &str = "Wovenlark";\n',
+    }
+)
+check(
+    "Rust source outside crates/ is scanned too",
+    mentions(result[0], "build.rs:1") and mentions(result[0], "xtask/src/main.rs"),
+)
+
 # --- the two permitted homes -------------------------------------------------
 
 result = scenario(
