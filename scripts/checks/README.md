@@ -137,8 +137,9 @@ Steps 3 and 4 run every file even after one fails and fail the step at the
 end, so one red file does not hide another. Step 4 is not reached if step 3
 failed: a check whose tests fail has no verdict worth reading. An empty
 directory passes: steps 2 to 4 print there is nothing to run, which is what let
-harness land before its first check. Two have since landed beside it, the crate
-policy and the engine prohibition, so those steps now run them.
+harness land before its first check. Checks have since landed beside it and
+more do as the tasks that own them land; the directory's contents are the
+authoritative list, and those steps run whatever is there.
 
 The job name is load-bearing. A required-status-check setting on `main`
 refers to a job by name, so renaming it would un-require every check here at
