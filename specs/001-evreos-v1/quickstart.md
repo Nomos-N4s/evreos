@@ -683,9 +683,10 @@ AA is claimed anywhere but on tier-1 page content.
 > chrome with one embedded webview on each tier's runner — first on the interim
 > instrument decisions/0004 names for tier 1, with each tier's pinned-runner run
 > owed and tier 2 open until measured there — driven by each platform's
-> assistive technology, with the resulting tree captured and committed. Nothing located answers it, and if the answer is bad on the drawn
-> chrome candidate, chrome accessibility becomes this project's own engineering
-> problem against a release-blocking principle.
+> assistive technology, with the resulting tree captured and committed. Nothing
+> located answers it, and if the answer is bad on the drawn chrome candidate,
+> chrome accessibility becomes this project's own engineering problem against a
+> release-blocking principle.
 
 **FR-041's distribution page is a separate obligation and a separate test.** It
 is neither a shell surface under FR-034 nor interface text under FR-035, and
