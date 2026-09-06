@@ -33,9 +33,10 @@
 ///
 /// The fields are the closed set a brand consists of: the names, the palette,
 /// every endpoint the shell may send to, and the support address. Adding a
-/// field is a schema change made here and in [`FIELDS`] together, which the
-/// `field_accessors_cover_every_field_distinctly` test in `brand.rs` keeps
-/// honest.
+/// field is a schema change made here and in [`FIELDS`] together: [`parse`]'s
+/// exhaustive struct literal refuses to compile while it does not name the
+/// new field, and the `field_accessors_cover_every_field_distinctly` test in
+/// `brand.rs` keeps each row's accessor reading its own field.
 #[derive(Debug)]
 pub struct Brand {
     /// The browser's own name, as shown to the member.

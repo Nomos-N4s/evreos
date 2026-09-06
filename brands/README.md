@@ -73,8 +73,10 @@ stable name, and this table is neither. Task numbers refer to
 Filling a field is editing `evreos.toml` in the change that settles the value,
 citing the record above. Adding a field is a schema change: the `Brand` struct
 and `FIELDS` table in `crates/evreos-shell/src/brand/schema.rs` first, both
-files here second, and the unit tests in `crates/evreos-shell/src/brand.rs`
-hold the two in step.
+files here second — `parse`'s exhaustive struct literal refuses to compile
+while it does not name the new field, and the unit tests in
+`crates/evreos-shell/src/brand.rs` keep each `FIELDS` accessor reading its
+own field.
 
 ## The fixture's values
 

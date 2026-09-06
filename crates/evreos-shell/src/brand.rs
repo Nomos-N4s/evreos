@@ -304,8 +304,12 @@ mod tests {
         // repeated or misdirected would silently exempt a field from the
         // missing-field and release gates. Ten distinct values in, ten
         // distinct values out proves each accessor reads its own field; the
-        // count is asserted so a Brand field added without a FIELDS row is a
-        // red test rather than an unvalidated value.
+        // count is asserted so a repeated or misdirected accessor collapses
+        // the dedup below ten and goes red here. A Brand field added without
+        // a FIELDS row is caught by something stronger than this test:
+        // parse()'s exhaustive Brand struct literal in schema.rs fails to
+        // compile without the new field (E0063), so no build reaches an
+        // unvalidated value.
         let brand = parse(&source(&[], &[])).expect("a complete source parses");
         let mut seen: Vec<&str> = FIELDS.iter().map(|(_, get)| get(&brand)).collect();
         seen.sort_unstable();
