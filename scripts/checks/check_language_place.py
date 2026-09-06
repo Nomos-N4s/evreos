@@ -17,18 +17,23 @@ the tree and fails on:
   CATALOGUE NAME  a file in any `catalogues/` directory whose name is not
                   exactly a bare primary language subtag -- two or three
                   lowercase ASCII letters -- followed by one dot and one
-                  extension. One stem, one extension, nothing more, so a
-                  region has nowhere in the name to stand: not fused into
-                  the stem (`de-DE.ftl` and `de_DE.json` -- BCP-47 is
+                  extension, where the extension is not itself
+                  region-shaped: not exactly two ASCII letters in any case
+                  and not exactly three digits, shapes a region subtag has
+                  and no catalogue extension (`messages`, `ftl`) does. One
+                  stem, one extension free of that shape, nothing more, so
+                  a region has nowhere in the name to stand: not fused
+                  into the stem (`de-DE.ftl` and `de_DE.json` -- BCP-47 is
                   case-insensitive, so those are one fused tag in two
                   spellings, and enumerating spellings is how one is
                   missed), not riding behind the stem (`de.de-DE.messages`),
-                  and not as a dot segment of its own (`de.AT.messages`,
-                  `de.419.messages`), which no fusion pattern could see
-                  because nothing joins the halves -- the SHAPE is refused,
-                  not spellings enumerated. A name carrying a `-`/`_`
-                  fusion anywhere is reported naming the fused value; any
-                  other break of the shape is unnameable. A catalogue
+                  not as an inner dot segment (`de.AT.messages`,
+                  `de.419.messages`), and not standing as the extension
+                  itself (`de.AT`, `de.419`), which no fusion pattern
+                  could see because nothing joins the halves -- the SHAPE
+                  is refused, not spellings enumerated. A name carrying a
+                  `-`/`_` fusion anywhere is reported naming the fused
+                  value; any other break of the shape is unnameable. A catalogue
                   directory holds catalogues named by subtag and nothing
                   else; a stray file
                   there fails as unnameable rather than passing as clutter,
@@ -139,6 +144,12 @@ CATALOGUE_DIR = "catalogues"
 # A bare primary language subtag: what a catalogue file's stem must be.
 SUBTAG = re.compile(r"^[a-z]{2,3}$")
 
+# The shape of a region subtag -- exactly two ASCII letters in any case, or
+# exactly three digits -- refused in a catalogue filename's extension slot,
+# where it would otherwise stand alone: `de.AT`, `de.419`. No catalogue
+# format's extension has this shape; `messages` and `ftl` do not.
+REGION_SHAPED = re.compile(r"^(?:[A-Za-z]{2}|[0-9]{3})$")
+
 # A fused language-place value in its canonical spelling: a primary subtag
 # joined to a letter region subtag as BCP-47 canonically cases one -- two
 # uppercase letters. `de-DE`, `de_AT`, `locale=de-DE`. Deliberately NO
@@ -225,6 +236,12 @@ def check_catalogue_file(where, name, text, problems):
             f"{where}: not named by a primary language subtag stem and one "
             "extension; a catalogue directory holds one file per language, "
             "named `de`, `el`, `en`"
+        )
+    elif REGION_SHAPED.match(parts[1]):
+        problems.append(
+            f"{where}: extension {parts[1]!r} is region-shaped, a region "
+            "subtag standing in the extension slot; a catalogue's extension "
+            "names its format, never a place"
         )
     if text is None:
         problems.append(f"{where}: not valid UTF-8, so its keys cannot be read")

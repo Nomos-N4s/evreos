@@ -127,6 +127,14 @@ report("a numeric region as its own dot segment fails",
 problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/el.ftl": CLEAN_CATALOGUE}))
 report("one subtag stem and one extension stays a legal name", problems == [])
 
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.AT": CLEAN_CATALOGUE}))
+report("a region subtag standing as the extension fails",
+       mentions(problems, "de.AT", "region-shaped"))
+
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.419": CLEAN_CATALOGUE}))
+report("a numeric region standing as the extension fails",
+       mentions(problems, "de.419", "region-shaped"))
+
 problems, read, _, _ = tree(passing_tree({
     "crates/y/Catalogues/de-DE.ftl": CLEAN_CATALOGUE,
 }))
