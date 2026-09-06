@@ -122,16 +122,22 @@ result = scenario(
 )
 check("a build script is workspace source too", result[0] != [])
 
+# A crates/ directory is present and clean, so a walk that visited crates/
+# INSTEAD of the root whenever crates/ exists would miss both breaches here
+# rather than passing by accident in a tree with no crates/ at all.
 result = scenario(
     {
         "brands/one.toml": BRAND,
         "build.rs": 'const E: &str = "https://wovenlark.invalid/";\n',
         "xtask/src/main.rs": 'const N: &str = "Wovenlark";\n',
+        "crates/a/src/lib.rs": CLEAN_RS,
     }
 )
 check(
-    "Rust source outside crates/ is scanned too",
-    mentions(result[0], "build.rs:1") and mentions(result[0], "xtask/src/main.rs"),
+    "Rust source outside crates/ is scanned beside a crates/ tree",
+    mentions(result[0], "build.rs:1")
+    and mentions(result[0], "xtask/src/main.rs")
+    and result[2] == 3,
 )
 
 # --- partial copies of URL-shaped values -------------------------------------
