@@ -151,6 +151,35 @@ fn no_money_field_can_hold_an_address_a_search_term_or_page_content() {
             "a click-out reference held {history:?}"
         );
     }
+    // Each excluded character is also probed alone, in a string whose every
+    // other character both charsets permit, so the offender is the character
+    // reported. A mixed probe like the ones above can hide a one-character
+    // weakening behind an earlier offender; these cannot.
+    let single_offenders = [
+        ("visited/page", '/'),
+        ("https:", ':'),
+        ("example.org", '.'),
+        ("what-the-member typed", ' '),
+        ("page<content", '<'),
+        ("page>content", '>'),
+        ("page&content", '&'),
+    ];
+    for (probe, offender) in single_offenders {
+        assert!(
+            matches!(
+                ClaimCode::new(probe),
+                Err(ValueError::Charset { found }) if found == offender
+            ),
+            "a claim code admitted {offender:?} in {probe:?}"
+        );
+        assert!(
+            matches!(
+                ClickOutReference::new(probe),
+                Err(ValueError::Charset { found }) if found == offender
+            ),
+            "a click-out reference admitted {offender:?} in {probe:?}"
+        );
+    }
     // The bounds hold too: empty and oversized values are refused, so the
     // charset cannot be padded around.
     assert!(matches!(
