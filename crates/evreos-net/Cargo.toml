@@ -5,8 +5,9 @@
 # manifest staying empty is what keeps the workspace's egress surface at zero
 # until a transport is reviewed in.
 #
-# evreos-net MUST NOT depend on evreos-shell: the shell depends on net, so the
-# binding of brand configuration to `Endpoint` happens on the shell side, in
+# evreos-net MUST NOT depend on evreos-shell: the shell will depend on net --
+# no crate depends on net at this head -- so the binding of brand
+# configuration to `Endpoint` happens on the shell side, in
 # crates/evreos-shell/src/brand.rs, and never here.
 [package]
 name = "evreos-net"

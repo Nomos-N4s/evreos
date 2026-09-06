@@ -22,11 +22,13 @@ fails on:
                package called evreos-net from a registry or git source in
                the same graph, and a package that merely shares the name is
                not this workspace's chokepoint -- and the paths through it.
-               Both halves are deliberate: the shell depends on evreos-net,
-               and evreos-net will one day hold the one transport
-               dependency, so every crate above it would reach that
-               transport transitively -- which is the chokepoint working,
-               not a second path. The walk therefore never expands the
+               Both halves are deliberate: the shell will depend on
+               evreos-net, and evreos-net will one day hold the one
+               transport dependency, so every crate above it would then
+               reach that transport transitively -- which will be the
+               chokepoint working, not a second path. Neither edge exists
+               at this head; the exemption is stated now so the diff that
+               adds them is not the diff that fails. The walk therefore never expands the
                chokepoint's own node, keyed by that id; a listed crate
                found any other way fails, with the chain named. The graph is read with every
                feature enabled and every target's dependencies included, and
