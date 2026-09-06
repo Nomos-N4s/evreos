@@ -97,12 +97,14 @@ impl BrandResolved {
 /// only way to hold an `Endpoint` is to have gone through [`BrandResolved`],
 /// whose documentation states which half of that guarantee the compiler
 /// carries and which half rests on review. An endpoint is a *destination for
-/// an enumerated transmission*; the page-load and certificate-status entries
-/// of FR-007a name destinations the member's own navigation chooses, which
-/// the system web runtime contacts while rendering and which never pass
-/// through brand configuration — those transmissions are the engine's, bound
-/// by FR-007a directly, and are represented in [`Purpose`] so the enumeration
-/// is complete, not because their traffic originates here.
+/// an enumerated transmission*; three of FR-007a's four entries name
+/// destinations that never pass through brand configuration. The page load
+/// and the certificate status go where the member's own navigation chooses,
+/// contacted by the system web runtime while rendering; the hand-off goes to
+/// the hand-off browser, a program on the same machine, not a server. None of
+/// that traffic originates here — those transmissions are bound by FR-007a
+/// directly, and are represented in [`Purpose`] so the enumeration is
+/// complete, matching the "three of the four" accounting in `purpose.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Endpoint {
     address: String,
