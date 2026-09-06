@@ -116,6 +116,17 @@ problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.de-DE.messages": 
 report("a region subtag after the first dot in a filename fails",
        mentions(problems, "de-DE", "filename"))
 
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.AT.messages": CLEAN_CATALOGUE}))
+report("a region subtag as its own dot segment fails",
+       mentions(problems, "de.AT.messages", "subtag"))
+
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.419.messages": CLEAN_CATALOGUE}))
+report("a numeric region as its own dot segment fails",
+       mentions(problems, "de.419.messages", "subtag"))
+
+problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/el.ftl": CLEAN_CATALOGUE}))
+report("one subtag stem and one extension stays a legal name", problems == [])
+
 problems, read, _, _ = tree(passing_tree({
     "crates/y/Catalogues/de-DE.ftl": CLEAN_CATALOGUE,
 }))

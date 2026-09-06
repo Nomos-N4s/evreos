@@ -14,17 +14,23 @@ foundational phase because it guards every catalogue key and every request
 builder the later phases write, not only the ones that exist today. It reads
 the tree and fails on:
 
-  CATALOGUE NAME  a file in any `catalogues/` directory whose name, up to its
-                  first dot, is not a bare primary language subtag -- two or
-                  three lowercase ASCII letters, nothing else -- or whose
-                  WHOLE name carries a fused value anywhere after that dot:
-                  the stem rule alone would pass `de.de-DE.messages`, whose
-                  region rides behind a legal stem. This is
-                  stricter than refusing region subtags alone, deliberately:
-                  BCP-47 is case-insensitive, so `de-de.ftl` and `de_DE.json`
-                  are the same fused tag in two spellings, and enumerating
-                  spellings is how one is missed. A catalogue directory holds
-                  catalogues named by subtag and nothing else; a stray file
+  CATALOGUE NAME  a file in any `catalogues/` directory whose name is not
+                  exactly a bare primary language subtag -- two or three
+                  lowercase ASCII letters -- followed by one dot and one
+                  extension. One stem, one extension, nothing more, so a
+                  region has nowhere in the name to stand: not fused into
+                  the stem (`de-DE.ftl` and `de_DE.json` -- BCP-47 is
+                  case-insensitive, so those are one fused tag in two
+                  spellings, and enumerating spellings is how one is
+                  missed), not riding behind the stem (`de.de-DE.messages`),
+                  and not as a dot segment of its own (`de.AT.messages`,
+                  `de.419.messages`), which no fusion pattern could see
+                  because nothing joins the halves -- the SHAPE is refused,
+                  not spellings enumerated. A name carrying a `-`/`_`
+                  fusion anywhere is reported naming the fused value; any
+                  other break of the shape is unnameable. A catalogue
+                  directory holds catalogues named by subtag and nothing
+                  else; a stray file
                   there fails as unnameable rather than passing as clutter,
                   and a DIRECTORY there fails the same way, whatever its
                   name -- a nested layout's files are catalogue files to no
@@ -195,17 +201,18 @@ def fused_values(text):
 def check_catalogue_file(where, name, text, problems):
     """The CATALOGUE NAME and CATALOGUE KEY clauses over one file."""
     fused = fused_values(name)
+    parts = name.split(".")
     if fused:
         problems.append(
             f"{where}: catalogue filename carries the fused value "
             f"{fused[0]!r}; FR-035 names a catalogue by the primary "
             "language subtag alone"
         )
-    elif not SUBTAG.match(name.split(".", 1)[0]):
+    elif len(parts) != 2 or not SUBTAG.match(parts[0]):
         problems.append(
-            f"{where}: not named by a primary language subtag alone; a "
-            "catalogue directory holds one file per language, named "
-            "`de`, `el`, `en`"
+            f"{where}: not named by a primary language subtag stem and one "
+            "extension; a catalogue directory holds one file per language, "
+            "named `de`, `el`, `en`"
         )
     if text is None:
         problems.append(f"{where}: not valid UTF-8, so its keys cannot be read")
