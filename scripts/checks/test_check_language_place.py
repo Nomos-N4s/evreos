@@ -116,6 +116,12 @@ problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/de.de-DE.messages": 
 report("a region subtag after the first dot in a filename fails",
        mentions(problems, "de-DE", "filename"))
 
+problems, read, _, _ = tree(passing_tree({
+    "crates/y/Catalogues/de-DE.ftl": CLEAN_CATALOGUE,
+}))
+report("a case-folded Catalogues/ spelling is read and its fused name fails",
+       read == 4 and mentions(problems, "de-DE", "filename"))
+
 problems, _, _, _ = tree(passing_tree({"crates/x/catalogues/README.md": "# notes\n"}))
 report("a stray file in a catalogue directory fails as unnameable",
        mentions(problems, "README.md", "subtag"))
