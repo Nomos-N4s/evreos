@@ -85,21 +85,24 @@ runs anything else, so a failure here fails the build.
 cargo test --all
 ```
 
-**Pass**: six tests in `crates/evreos-shell/tests/navigation_failures.rs`, all
-passing; every other target reports zero tests.
+**Pass**: eight tests in `crates/evreos-shell/tests/navigation_failures.rs`,
+three in the engine crate's own module and one inside the shell binary — all
+passing, with no other target reporting tests.
 
 ```
-running 6 tests
-test an_unscripted_address_fails_rather_than_silently_succeeding ... ok
-test a_failure_does_not_replace_the_page_the_member_was_on ... ok
+running 8 tests
 test a_failed_load_is_never_a_successful_empty_page ... ok
-test every_load_the_shell_asks_for_is_observable ... ok
-test the_shell_sees_the_address_that_loaded_not_the_one_requested ... ok
+test a_failure_does_not_replace_the_page_the_member_was_on ... ok
+test an_unscripted_address_fails_rather_than_silently_succeeding ... ok
+test current_reflects_a_commit_before_it_is_drained ... ok
 test each_of_the_four_causes_is_distinguishable ... ok
+test every_load_the_shell_asks_for_is_observable ... ok
+test the_generic_entry_points_carry_no_send_bound ... ok
+test the_shell_sees_the_address_that_loaded_not_the_one_requested ... ok
 ```
 
-What those six actually establish, stated narrowly because SC-009 asks for more
-than they give:
+What those eight actually establish, stated narrowly because SC-009 asks for
+more than they give:
 
 - each of FR-015's four causes — unresolvable, certificate, intercepted,
 authentication-required — is a distinct value producing a distinct message that
@@ -119,15 +122,24 @@ comment in `crates/evreos-engine/src/lib.rs` reads "the address that actually
 loaded, which may differ from the requested one after a redirect" — but the test
 does not yet prove it. A redirect case is a test worth adding, and adding it
 needs a headless engine that can script a response whose address differs from
-the request, which `HeadlessEngine::load` cannot do today: it builds the `Page`
-from the requested address;
+the request, which the headless engine cannot script today: it commits at the
+requested address, and the scripted event sequences that can express a redirect
+land with the contract's sequence support;
 - every address the *engine* was asked to load is observable to a test, through
 `HeadlessEngine::loads()`. That is a record of what the shell asked the engine
 for, and not a record of what left the machine: it observes an engine that opens
 no socket. FR-007a's boundary is outbound traffic, and B10 states the only
 instrument for it — a capture on real hardware, because WebView2 and WKWebView
 open their own sockets and no in-process recorder sees them. This test is a
-precondition for an assertion about that boundary, not the assertion.
+precondition for an assertion about that boundary, not the assertion;
+- a committed page is visible through `current()` before its events are drained
+— the contract's emission-time clause, pinned so the update cannot silently
+move to drain time;
+- the test file's own generic helper carries no `Send` bound, proved by an
+engine holding an `Rc` driven through it — the consumer-side half of the guard
+the engine crate's own test module carries for the trait itself. `navigate()`'s
+equivalent guard is the unit test inside the shell binary, not one of these
+eight.
 
 What they do **not** establish: anything about a real platform, and nothing
 about the shell's own code. The file sits under `crates/evreos-shell/tests/`,
@@ -136,10 +148,10 @@ it drives the headless engine directly. What it exercises is the seam's contract
 — `LoadError`'s closed set of four causes and its `Display` — and the headless
 implementation of that contract, on a machine with no system webview. The
 shell's own handling is `navigate()` in `crates/evreos-shell/src/main.rs`; it
-lives in a binary crate, so an integration test cannot import it, no test calls
-it, and A3's `cargo run` is the only thing that exercises it today. Giving the
-shell's half a test means first moving `navigate()` into a library target, and
-that is a change the plan owes. SC-009 separately requires the four causes
+lives in a binary crate, so an integration test cannot import it, and what
+exercises it today is the unit test inside that binary plus A3's `cargo run`.
+Giving the shell's half integration tests means moving its machinery into a
+library target, and that is a change the plan owes. SC-009 separately requires the four causes
 exercised "on every supported platform"; that exercise is B4 and needs a real
 backend on a real machine of each tier.
 
@@ -358,13 +370,14 @@ binds every measured figure to that tier's pinned runner and to no other
 machine, so a fast laptop producing a green number produces nothing that may be
 recorded, published under SC-013, or used to reset a baseline.
 - Neither shipping tier's backend exists yet. Phase 0 research established that
-the merged `Engine` trait's synchronous `load` cannot be implemented over either
-shipping backend without a nested message loop SC-006 forbids, that it cannot
-represent navigation the shell did not initiate, that it cannot express an
-in-flight load SC-009 requires to be testable, and that it has no construction
-seam where the shared platform context SC-004 depends on can live. The trait
-changes before the first backend is written, so scenarios in Part B that name a
-backend are gated on that change landing first.
+the merged `Engine` trait's synchronous `load` could not be implemented over
+either shipping backend without a nested message loop SC-006 forbids, that it
+could not represent navigation the shell did not initiate, and that it could
+not express an in-flight load SC-009 requires to be testable — which is why the
+trait changed to the event contract before the first backend was written. What
+it still lacks is the construction seam where the shared platform context
+SC-004 depends on can live, and scenarios in Part B that name a backend are
+gated on the remaining owed seam changes landing first.
 
 ---
 
@@ -564,8 +577,10 @@ it establishes that the four causes are four distinct values whose four distinct
 messages name the address, and nothing more. `LoadError`'s `Display` strings
 offer no next step, and `crates/evreos-engine/src/lib.rs` documents them as
 "deliberately not the member-facing copy, which is localised" under FR-035. The
-next step and the language are the shell's, and A2 records that the shell's own
-handling has no test at all.
+next step and the language are the shell's, whose handling is exercised today by
+the unit test inside the shell binary and A3's `cargo run` — and A2 records that
+giving it integration tests means moving its machinery into a library target, a
+change the plan owes.
 
 Per cause, with what actually produces it on each tier:
 
@@ -599,8 +614,8 @@ indistinguishable-cause state FR-015 exists to forbid, dressed as a pass.
 The 30-second clause has no home in `LoadError` at all: a stalled load is an
 absence of an event, not a cause. It is the shell's timeout policy, and it is
 testable only against a seam that can express an in-flight load — which the
-merged trait cannot. That is one of the three changes the seam owes before a
-backend is written.
+event contract now can: a navigation with no terminal event is that state, and
+the shell-side bound lands with the consumer that applies it.
 
 ## B5. SC-009a — the tier-2 floor
 
@@ -638,9 +653,10 @@ chrome** — the tab strip, address field and app surfaces carry their own
 obligation, and what renders them is spike S4's output. So this pass is owed on
 both tiers and cannot be inherited from the engine on either.
 
-**Prerequisites**: the chrome exists (S4 decided). Every candidate chrome
-renderer is disqualified by SC-006 before it reaches this scenario, so B9's
-SC-006 measurement precedes it.
+**Prerequisites**: the chrome exists (S4 decided — provisionally, under
+decisions/0004, until the pinned-runner re-run confirms it). B9's SC-006
+measurement precedes this scenario, and a selected candidate that misses there
+reopens ADR-0002 rather than being grandfathered.
 
 **Command** *(does not exist yet)*:
 
@@ -679,11 +695,13 @@ AA is claimed anywhere but on tier-1 page content.
 > **Open**: does an accessibility tree published by the chrome compose coherently
 > with an embedded WebView2 or WKWebView's own tree — one reading order, one
 > focus order, no orphaned subtree? **Settled by**: a spike building a minimal
-> chrome with one embedded webview on each tier's runner, driven by each
-> platform's assistive technology, with the resulting tree captured and
-> committed. Nothing located answers it, and if the answer is bad on the drawn
-> chrome candidate, chrome accessibility becomes this project's own engineering
-> problem against a release-blocking principle.
+> chrome with one embedded webview on each tier's runner — first on the interim
+> instrument decisions/0004 names for tier 1, with each tier's pinned-runner run
+> owed and tier 2 open until measured there — driven by each platform's
+> assistive technology, with the resulting tree captured and committed. Nothing
+> located answers it, and if the answer is bad on the drawn chrome candidate,
+> chrome accessibility becomes this project's own engineering problem against a
+> release-blocking principle.
 
 **FR-041's distribution page is a separate obligation and a separate test.** It
 is neither a shell surface under FR-034 nor interface text under FR-035, and
@@ -788,8 +806,11 @@ requirement names the ten pages; see *Gaps*.
 
 ## B9. SC-006 — chrome input latency
 
-**Requirement**: SC-006, ratified. Also the gate that disqualifies chrome
-renderer candidates before B6.
+**Requirement**: SC-006, ratified. Under decisions/0004 the candidate
+comparison this harness once gated runs first on the interim instrument; what
+this scenario measures is the built chrome of the candidate already selected,
+and a selected candidate that misses here reopens ADR-0002 rather than being
+grandfathered.
 
 **Platform**: [tier 1 runner], [tier 2 runner], on a display driven at 60 Hz.
 
@@ -1053,8 +1074,11 @@ configuration that tier's floor admits at 8 GB — a modern laptop passing is no
 evidence that the reference machine passes.
 
 **Procurement is on the critical path for validation, not only for the gates.**
-SC-002, SC-004, SC-005 and SC-006 all wait on it; so does the chrome decision,
-because S4's candidates are discriminated by SC-006 on the tier-1 runner; so
+SC-002, SC-004, SC-005 and SC-006 all wait on it. The chrome decision no longer
+does — decisions/0004 lets S4's comparison run first on the named interim
+instrument, as indicative figures with the pinned-runner re-run owed and
+carried by ADR-0002 as a named reopen condition — though its confirmation
+still does; so
 does the SC-005 idle floor, whose answer may be a specification amendment. Buy a
 cold spare of identical configuration per tier and write the swap procedure
 down: the budget file records a durable machine identifier, so swapping in a

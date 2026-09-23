@@ -16,7 +16,7 @@ Those six are the contracts, and this document is their index and definition.
 
 | # | Contract | Format | Produced by | Consumed by | Status |
 | --- | --- | --- | --- | --- | --- |
-| 1 | The `Engine` trait | Rust trait, `crates/evreos-engine` | Each rendering backend | The shell | Implemented at M0; seven changes owed before the first real backend |
+| 1 | The `Engine` trait | Rust trait, `crates/evreos-engine` | Each rendering backend | The shell | Implemented at M0 and revised to the event contract; five changes owed before the first real backend |
 | 2 | The app manifest | Signed, versioned declaration | The app publisher | The shell's verifier and capability intersection | Not built |
 | 3 | The delivered app surface | Signed bundle over a fixed preimage | The app publisher, served by the delivery host | The shell's verifier, then the engine | Not built |
 | 4 | The diagnostic report formats | Encrypted, padded payloads through a relay | The client | The receiving service's gateway | Not built; gated on a relay contract (**FR-039b**) |
@@ -72,11 +72,14 @@ defines as the consumer, with a headless implementation kept working from day
 one, so the seam is proved by a second implementation rather than asserted),
 **FR-044** (the same, from milestone M0), **FR-015**, **SC-009**, **ADR-0001**.
 
-This contract is implemented. It lives at `crates/evreos-engine/src/lib.rs` on
-`feat/engine-seam`, with a second implementation at
-`crates/evreos-engine-headless` and its consumer at `crates/evreos-shell`.
+This contract is implemented. It lives at `crates/evreos-engine/src/lib.rs`,
+with a second implementation at `crates/evreos-engine-headless` and its
+consumer at `crates/evreos-shell`.
 
-### Format, as merged
+### Format
+
+As revised by the event contract — the merged synchronous `load` is recorded
+under the owed clause it discharged, below:
 
 ```rust
 pub struct Request { address: String }          // address(&self) -> &str
@@ -89,12 +92,32 @@ pub enum LoadError {
     AuthenticationRequired { address: String },
 }
 
+pub struct NavigationId(u64);                   // opaque; FIRST, next()
+
+pub enum NavigationEvent {
+    Started       { id: NavigationId, address: String },
+    Redirected    { id: NavigationId, address: String },
+    Committed     { id: NavigationId, address: String },
+    Succeeded     { id: NavigationId },
+    Failed        { id: NavigationId, error: LoadError },
+    TitleChanged  { id: NavigationId, title: String },
+    NavigatedAway { id: NavigationId },
+}
+
 pub trait Engine {
     fn name(&self) -> &'static str;
-    fn load(&mut self, request: &Request) -> Result<Page, LoadError>;
+    fn start_navigation(&mut self, request: &Request) -> NavigationId;
+    fn poll_event(&mut self) -> Option<NavigationEvent>;   // never blocks
     fn current(&self) -> Option<&Page>;
 }
 ```
+
+The per-navigation event ordering, the three terminal events, the rule that
+`current()` changes at commit and reflects emission rather than drain, and the
+reason a synchronous load has no route on either shipping backend are stated as
+doc comments on these types in `crates/evreos-engine/src/lib.rs`, which are the
+contract's normative text; this document indexes them rather than restating
+them.
 
 `Request` carries the address as a string rather than a parsed URL type. Parsing
 and policy belong to the shell, which owns **FR-003**'s combined entry field and
@@ -120,9 +143,9 @@ report success for a load that did not produce a page, and a failure MUST NOT
 replace what `current()` returns. **FR-015** names both halves: "treating a
 failed load as a successful empty page is a defect", and a failure that silently
 blanks the page the member was on is the same defect one step later. The
-headless implementation holds this today — on a scripted failure it returns
-`Err` and leaves `current` untouched — and
-`crates/evreos-shell/tests/navigation_failures.rs` is the exercise.
+headless implementation holds this today — on a scripted failure it emits
+`Failed`, never `Committed` or `Succeeded`, and leaves `current` untouched —
+and `crates/evreos-shell/tests/navigation_failures.rs` is the exercise.
 
 3. **The address reported is the address that loaded, not the address
    requested.**
@@ -150,24 +173,27 @@ every change to this contract a change to two implementations in one commit.
 ### Invariants the contract does not yet carry, and owes
 
 Phase 0 examined the merged trait against both shipping backends and against the
-requirements already merged. Four properties are required by requirements or by
-ADR-0001 and have no expression in the contract as written. They are recorded
-here as owed clauses rather than as new requirements, because none of them adds
-a requirement — each is an existing one the interface currently cannot express.
+requirements already merged. Four properties were required by requirements or by
+ADR-0001 and had no expression in the contract as first merged. They are
+recorded here as owed clauses rather than as new requirements, because none of
+them adds a requirement — each is an existing one the interface could not
+express. Two of the four are now delivered and stay recorded because the
+reasoning is theirs; the delivered shape is named beside each.
 
-- **Navigation is not one outcome per call.** `load` is synchronous, and neither
-shipping backend can produce a navigation outcome synchronously; on both tiers
-the engine is affine to the UI thread, so the only implementation route for a
-synchronous `load` is a nested message loop on that thread, which **SC-006**
-admits no trial over 16 ms for. Separately, engine-initiated navigation — link
-clicks, script, form posts, redirects — produces no `load` call at all, so
-invariant 3 above is unattainable at the moment it matters most; there is no
-in-flight state, so **SC-009**'s "zero loading indicators that do not resolve
-within 30 s" is not testable against this trait; and there is no correlation
-between a request and its outcome. The replacement carries a navigation id and a
-small closed event set, with `LoadError` unchanged inside the failure event.
-**[design]** — the requirements are FR-015, SC-006 and SC-009; the shape is the
-plan's.
+- **Navigation is not one outcome per call — delivered, as the format above.**
+The merged `load` was synchronous, and neither shipping backend can produce a
+navigation outcome synchronously; on both tiers the engine is affine to the UI
+thread, so the only implementation route for a synchronous `load` was a nested
+message loop on that thread, which **SC-006** admits no trial over 16 ms for.
+Separately, engine-initiated navigation — link clicks, script, form posts,
+redirects — produced no `load` call at all, so invariant 3 above was
+unattainable at the moment it mattered most; there was no in-flight state, so
+**SC-009**'s "zero loading indicators that do not resolve within 30 s" was not
+testable against that trait; and there was no correlation between a request and
+its outcome. The replacement carries a navigation id and a small closed event
+set drained through a non-blocking `poll_event`, with `LoadError` unchanged
+inside the failure event. **[design]** — the requirements are FR-015, SC-006
+and SC-009; the shape is the plan's.
 
 - **`Intercepted` is not derivable from any platform error code on either
   shipping
@@ -194,9 +220,12 @@ provisional. So the trait owes a construction seam on ADR-0001's terms for tier
 1; what such a seam would share on tier 2, and whether sharing is the mechanism
 there at all, is unestablished and is not established here. **[gap]**
 
-- **No `Send` bound anywhere on the engine path.** Both shipping tiers are
-UI-thread-affine, so a `Send` bound is unimplementable on either and is cheaper
-to forbid now than to unwind later. **[design]**
+- **No `Send` bound anywhere on the engine path — delivered.** Both shipping
+tiers are UI-thread-affine, so a `Send` bound is unimplementable on either and
+was cheaper to forbid than to unwind later. Stated on the trait, and guarded by
+non-`Send` test engines on the trait itself and on the shell's generic entry
+points, because a bound added to a consumer is invisible to the engine crate.
+**[design]**
 
 Three further additions are owed by requirements outside FR-015, and are listed
 here so the seam is grown once rather than three times: a rendering-surface
