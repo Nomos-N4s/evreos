@@ -178,6 +178,9 @@ ISSUE_MUST_PASS = [
     ("Resolves", "feat(x): a thing\n\nResolves #1"),
     ("Resolve", "feat(x): a thing\n\nResolve #1"),
     ("Ref", "feat(x): a thing\n\nRef #1"),
+    ("Linear Closes key", "feat(x): a thing\n\nCloses CAR-143"),
+    ("Linear Refs key", "feat(x): a thing\n\nRefs CAR-143"),
+    ("Linear Fixes key", "feat(x): a thing\n\nFixes CAR-12"),
     # The issue search runs over the FOLDED message, the same text the
     # attribution rules read. A keyword split by an invisible character is
     # therefore still a link -- which is the reading that matches what a person
@@ -524,17 +527,27 @@ def end_to_end(failures):
             "feat(x): add thing\n\nCloses #1\n"
             "# Please enter the commit message. Generated with Claude Code.\n"
             "# ------------------------ >8 ------------------------\n"
-            f"diff --git a/x b/x\n+{FOOTER}\n"
+            f"diff --git a/x b/x\n+{FOOTER}\n",
+            encoding="utf-8",
         )
         cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook flagged git's comment block or diff")
-        msg.write_text(f"feat(x): add thing\n\nCloses #1\n\n{TRAILER}\n")
+        msg.write_text(f"feat(x): add thing\n\nCloses #1\n\n{TRAILER}\n", encoding="utf-8")
         cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 1:
             failures.append("end-to-end: hook accepted a co-author trailer")
+        # Linear issue keys (e.g. CAR-143) must be accepted.
+        msg.write_text("feat(x): add thing\n\nRefs CAR-143\n", encoding="utf-8")
+        cases += 1
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
+            failures.append("end-to-end: hook rejected a Linear issue reference like Refs CAR-143")
+        msg.write_text("feat(x): add thing\n\nCloses CAR-143\n", encoding="utf-8")
+        cases += 1
+        if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
+            failures.append("end-to-end: hook rejected a Linear issue reference like Closes CAR-143")
         # A merge subject is exempt from the subject and issue rules.
-        msg.write_text("Merge branch 'main' into feature\n")
+        msg.write_text("Merge branch 'main' into feature\n", encoding="utf-8")
         cases += 1
         if run_check(tmp, "--commit-msg", str(msg)).returncode != 0:
             failures.append("end-to-end: hook rejected a merge subject")
@@ -546,14 +559,14 @@ def end_to_end(failures):
         # would stop reaching the text a reviewer actually reads first.
         body = pathlib.Path(tmp) / "pr-body.txt"
         title = pathlib.Path(tmp) / "pr-title.txt"
-        body.write_text("A clean description.\n")
-        title.write_text("feat(x): a clean title\n")
+        body.write_text("A clean description.\n", encoding="utf-8")
+        title.write_text("feat(x): a clean title\n", encoding="utf-8")
         cases += 1
         if run_check(tmp, "--range", f"{base}..HEAD",
                      "--pr-body", str(body), "--pr-title", str(title)).returncode != 0:
             failed("a clean pull request title and body were rejected")
 
-        body.write_text(f"A description.\n\n{FOOTER}\n")
+        body.write_text(f"A description.\n\n{FOOTER}\n", encoding="utf-8")
         cases += 1
         result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-body", str(body))
         if result.returncode != 1:
@@ -561,8 +574,8 @@ def end_to_end(failures):
         elif "pull request body" not in result.stdout + result.stderr:
             failed("the pull request body was not named as the source")
 
-        body.write_text("A description.\n")
-        title.write_text(f"feat(x): {FOOTER}\n")
+        body.write_text("A description.\n", encoding="utf-8")
+        title.write_text(f"feat(x): {FOOTER}\n", encoding="utf-8")
         cases += 1
         result = run_check(tmp, "--range", f"{base}..HEAD", "--pr-title", str(title))
         if result.returncode != 1:

@@ -195,9 +195,10 @@ CONVENTIONAL = re.compile(
     r"(\([a-z0-9._/-]+\))?!?: [a-z].*"
 )
 # A linking keyword is required; a bare #NNN also matches CSS colours and URL
-# fragments.
+# fragments. Supports both GitHub issues (#123) and tracker keys (e.g. CAR-143).
 ISSUE_REF = re.compile(
-    r"\b(closes?|fixes|fixed|resolves?|refs?|see)\s+#\d+\b", re.IGNORECASE
+    r"\b(closes?|fixes|fixed|resolves?|refs?|see)\s+(?:#\d+|[A-Za-z]+-\d+)\b",
+    re.IGNORECASE,
 )
 # Messages a forge or git writes itself, exempt from subject and issue rules.
 GENERATED_SUBJECT = re.compile(r"^(Merge |Revert \"|fixup! |squash! )")
@@ -312,7 +313,7 @@ def check_message(message, where, problems):
         )
     if not ISSUE_REF.search(CODE_SPAN_OR_BLOCK.sub(" ", normalise(message))):
         problems.append(
-            f"{where}: does not reference an issue (e.g. 'Closes #12' or 'Refs #12')"
+            f"{where}: does not reference an issue (e.g. 'Closes #12', 'Refs #12', or 'Refs CAR-12')"
         )
 
 
