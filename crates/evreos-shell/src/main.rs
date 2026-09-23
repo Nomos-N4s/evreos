@@ -16,64 +16,289 @@
 
 mod brand;
 
-use evreos_engine::{Engine, LoadError, NavigationEvent, Request};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
+
+use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Request};
 use evreos_engine_headless::HeadlessEngine;
+
+/// Source of monotonic time for navigation timeout tracking.
+pub trait Clock {
+    fn now(&self) -> Instant;
+}
+
+/// Real time clock implementation using [`Instant::now`].
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SystemClock;
+
+impl Clock for SystemClock {
+    fn now(&self) -> Instant {
+        Instant::now()
+    }
+}
+
+/// Simulated clock for testing timeout policy deterministically.
+#[derive(Debug, Clone)]
+pub struct MockClock {
+    now: Instant,
+}
+
+impl MockClock {
+    pub fn new(start: Instant) -> Self {
+        Self { now: start }
+    }
+
+    pub fn advance(&mut self, duration: Duration) {
+        self.now += duration;
+    }
+}
+
+impl Clock for MockClock {
+    fn now(&self) -> Instant {
+        self.now
+    }
+}
+
+/// Default navigation timeout bound (30 seconds per SC-009).
+pub const DEFAULT_NAVIGATION_TIMEOUT: Duration = Duration::from_secs(30);
+
+/// State of an in-flight or completed navigation.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum NavigationState {
+    /// Navigation started and is awaiting commit or outcome.
+    Loading { start_time: Instant },
+    /// Navigation committed to a specific address.
+    Committed { address: String },
+    /// Navigation successfully finished.
+    Succeeded { address: String, title: String },
+    /// Navigation failed with an engine or timeout error.
+    Failed { error_message: String },
+    /// Navigation was superseded or abandoned.
+    NavigatedAway,
+}
+
+/// Tracks in-flight navigations by [`NavigationId`] and enforces shell policy.
+#[derive(Debug)]
+pub struct NavigationTracker<C: Clock> {
+    clock: C,
+    timeout_bound: Duration,
+    navigations: HashMap<NavigationId, NavigationState>,
+    requested_addresses: HashMap<NavigationId, String>,
+    titles: HashMap<NavigationId, String>,
+}
+
+impl<C: Clock> NavigationTracker<C> {
+    pub fn new(clock: C) -> Self {
+        Self::with_timeout_bound(clock, DEFAULT_NAVIGATION_TIMEOUT)
+    }
+
+    pub fn with_timeout_bound(clock: C, timeout_bound: Duration) -> Self {
+        Self {
+            clock,
+            timeout_bound,
+            navigations: HashMap::new(),
+            requested_addresses: HashMap::new(),
+            titles: HashMap::new(),
+        }
+    }
+
+    pub fn clock_mut(&mut self) -> &mut C {
+        &mut self.clock
+    }
+
+    /// Record the start of a navigation.
+    pub fn start_navigation(&mut self, id: NavigationId, requested_address: String) {
+        self.requested_addresses.insert(id, requested_address);
+        self.navigations.insert(
+            id,
+            NavigationState::Loading {
+                start_time: self.clock.now(),
+            },
+        );
+    }
+
+    /// Process a single [`NavigationEvent`] from the engine.
+    pub fn process_event(&mut self, event: NavigationEvent) {
+        let id = event.id();
+        match event {
+            NavigationEvent::Started { address, .. } => {
+                self.requested_addresses.entry(id).or_insert(address);
+                self.navigations
+                    .entry(id)
+                    .or_insert(NavigationState::Loading {
+                        start_time: self.clock.now(),
+                    });
+            }
+            NavigationEvent::Redirected { .. } => {
+                // Address redirected before commit; status remains Loading until Committed.
+            }
+            NavigationEvent::Committed { address, .. } => {
+                self.navigations
+                    .insert(id, NavigationState::Committed { address });
+            }
+            NavigationEvent::Succeeded { .. } => {
+                let loaded_address = match self.navigations.get(&id) {
+                    Some(NavigationState::Committed { address })
+                    | Some(NavigationState::Succeeded { address, .. }) => address.clone(),
+                    _ => self
+                        .requested_addresses
+                        .get(&id)
+                        .cloned()
+                        .unwrap_or_default(),
+                };
+                let title = self.titles.get(&id).cloned().unwrap_or_default();
+                self.navigations.insert(
+                    id,
+                    NavigationState::Succeeded {
+                        address: loaded_address,
+                        title,
+                    },
+                );
+            }
+            NavigationEvent::Failed { error, .. } => {
+                let formatted = format_load_error(&error);
+                self.navigations.insert(
+                    id,
+                    NavigationState::Failed {
+                        error_message: formatted,
+                    },
+                );
+            }
+            NavigationEvent::TitleChanged {
+                title: new_title, ..
+            } => {
+                self.titles.insert(id, new_title.clone());
+                if let Some(NavigationState::Succeeded { title, .. }) =
+                    self.navigations.get_mut(&id)
+                {
+                    *title = new_title;
+                }
+            }
+            NavigationEvent::NavigatedAway { .. } => {
+                self.navigations.insert(id, NavigationState::NavigatedAway);
+            }
+        }
+    }
+
+    /// Check for in-flight navigations past the timeout bound and resolve them into timeout error states.
+    pub fn check_timeouts(&mut self) {
+        let now = self.clock.now();
+        for (id, state) in self.navigations.iter_mut() {
+            if let NavigationState::Loading { start_time } = state {
+                if now.duration_since(*start_time) >= self.timeout_bound {
+                    let req_addr = self
+                        .requested_addresses
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(|| "unknown address".to_owned());
+                    let timeout_secs = self.timeout_bound.as_secs();
+                    let msg = format!(
+                        "navigation to {req_addr} timed out after {timeout_secs}s: check your network connection or try reloading"
+                    );
+                    *state = NavigationState::Failed { error_message: msg };
+                }
+            }
+        }
+    }
+
+    /// Get current state of a navigation.
+    pub fn get_state(&self, id: NavigationId) -> Option<&NavigationState> {
+        self.navigations.get(&id)
+    }
+
+    /// Format current display string for a navigation.
+    pub fn display_status(&self, id: NavigationId) -> String {
+        let req_addr = self
+            .requested_addresses
+            .get(&id)
+            .map(|s| s.as_str())
+            .unwrap_or("unknown");
+
+        match self.navigations.get(&id) {
+            Some(NavigationState::Loading { .. }) => format!("{req_addr} is still loading"),
+            Some(NavigationState::Committed { address }) => {
+                format!("loading response from {address}...")
+            }
+            Some(NavigationState::Succeeded { address, title }) => {
+                if title.is_empty() {
+                    address.clone()
+                } else {
+                    format!("{title} — {address}")
+                }
+            }
+            Some(NavigationState::Failed { error_message }) => error_message.clone(),
+            Some(NavigationState::NavigatedAway) => {
+                format!("{req_addr} was abandoned before it resolved")
+            }
+            None => format!("{req_addr} has no recorded navigation state"),
+        }
+    }
+}
+
+/// Format engine [`LoadError`] naming cause and offering next step.
+pub fn format_load_error(error: &LoadError) -> String {
+    match error {
+        LoadError::Unresolvable { address } => {
+            format!(
+                "could not load {address}: server address could not be found. Next step: check the address for typos or verify network connection."
+            )
+        }
+        LoadError::Certificate { address, detail } => {
+            format!(
+                "could not load {address}: security certificate error ({detail}). Next step: verify your system clock or do not proceed if on a public network."
+            )
+        }
+        LoadError::Intercepted { address } => {
+            format!(
+                "could not load {address}: connection intercepted by a captive portal or proxy. Next step: log in to the network or check proxy settings."
+            )
+        }
+        LoadError::AuthenticationRequired { address } => {
+            format!(
+                "could not load {address}: HTTP authentication required. Next step: enter valid credentials when prompted."
+            )
+        }
+    }
+}
 
 /// Drive an engine through one navigation and report what happened.
 ///
-/// This function is the whole point of the crate at M0: it is generic over
-/// [`Engine`], so it cannot reach for anything a webview happens to expose.
-/// When the system-webview backend lands it substitutes here with no change to
-/// this code, and if it cannot, the seam was wrong and this is where that
-/// shows.
-fn navigate<E: Engine>(engine: &mut E, address: &str) -> String {
+/// Generic over [`Engine`] and [`Clock`]. Drains event stream, tracks in-flight
+/// navigation, displays actual loaded address, and applies timeout policy.
+fn navigate<E: Engine, C: Clock>(
+    engine: &mut E,
+    tracker: &mut NavigationTracker<C>,
+    address: &str,
+) -> String {
     let id = engine.start_navigation(&Request::new(address));
+    tracker.start_navigation(id, address.to_owned());
 
-    // Drain the queue to quiescence and keep the terminal event — any of the
-    // contract's three — for the navigation this call started; events for
-    // other navigations are not this demo's to report. A navigation with no
-    // terminal event is still loading, and the bound on how long that may be
-    // shown is the shell's policy under SC-009 — the consumer that applies it
-    // replaces this demo.
-    let mut outcome = format!("{address} is still loading");
     while let Some(event) = engine.poll_event() {
-        if event.id() != id {
-            continue;
-        }
-        match event {
-            NavigationEvent::Succeeded { .. } => {
-                outcome = match engine.current() {
-                    Some(page) => format!("{} — {}", page.title(), page.address()),
-                    None => "succeeded with no current page".to_owned(),
-                };
-            }
-            // FR-015: name the cause and offer a next step. The next step is
-            // the shell's to choose; naming the cause is the engine's contract.
-            NavigationEvent::Failed { error, .. } => {
-                outcome = format!("could not load: {error}");
-            }
-            NavigationEvent::NavigatedAway { .. } => {
-                outcome = format!("{address} was abandoned before it resolved");
-            }
-            NavigationEvent::Started { .. }
-            | NavigationEvent::Redirected { .. }
-            | NavigationEvent::Committed { .. }
-            | NavigationEvent::TitleChanged { .. } => {}
-        }
+        tracker.process_event(event);
     }
-    outcome
+
+    // Apply policy check for in-flight timeout
+    tracker.check_timeouts();
+
+    tracker.display_status(id)
 }
 
 fn main() {
     let mut engine = HeadlessEngine::new()
         .with_page("https://example.invalid/", "Example")
+        .with_redirect(
+            "https://redirect.invalid/",
+            "https://example.invalid/destination",
+            "Redirect Target",
+        )
         .with_failure(
             "https://expired.invalid/",
             LoadError::Certificate {
                 address: "https://expired.invalid/".into(),
                 detail: "the certificate expired".into(),
             },
-        );
+        )
+        .with_hanging_load("https://hanging.invalid/");
 
     let brand = brand::brand();
     println!("brand: {}", brand.product_name);
@@ -88,13 +313,38 @@ fn main() {
     );
 
     println!("engine: {}", engine.name());
+
+    let mut tracker = NavigationTracker::new(SystemClock);
+
     for address in [
         "https://example.invalid/",
+        "https://redirect.invalid/",
         "https://expired.invalid/",
         "https://nowhere.invalid/",
     ] {
-        println!("{}", navigate(&mut engine, address));
+        println!("{}", navigate(&mut engine, &mut tracker, address));
     }
+
+    // Demonstrate hanging load timeout with mock clock
+    let start_time = Instant::now();
+    let mock_clock = MockClock::new(start_time);
+    let mut test_tracker = NavigationTracker::new(mock_clock);
+
+    let hanging_addr = "https://hanging.invalid/";
+    let hanging_id = engine.start_navigation(&Request::new(hanging_addr));
+    test_tracker.start_navigation(hanging_id, hanging_addr.to_owned());
+
+    while let Some(event) = engine.poll_event() {
+        test_tracker.process_event(event);
+    }
+
+    println!(
+        "Before timeout: {}",
+        test_tracker.display_status(hanging_id)
+    );
+    test_tracker.clock_mut().advance(DEFAULT_NAVIGATION_TIMEOUT);
+    test_tracker.check_timeouts();
+    println!("After timeout: {}", test_tracker.display_status(hanging_id));
 }
 
 #[cfg(test)]
@@ -150,10 +400,81 @@ mod tests {
             queue: Vec::new(),
             next: NavigationId::FIRST,
         };
-        let outcome = navigate(&mut engine, "https://gone.invalid/");
+        let mut tracker = NavigationTracker::new(SystemClock);
+        let outcome = navigate(&mut engine, &mut tracker, "https://gone.invalid/");
         assert_eq!(
             outcome,
             "https://gone.invalid/ was abandoned before it resolved"
         );
+    }
+
+    #[test]
+    fn displays_address_that_actually_loaded_on_redirect() {
+        let mut engine = HeadlessEngine::new().with_redirect(
+            "https://requested.invalid/",
+            "https://actual.invalid/",
+            "Actual Page",
+        );
+        let mut tracker = NavigationTracker::new(SystemClock);
+        let outcome = navigate(&mut engine, &mut tracker, "https://requested.invalid/");
+        assert_eq!(outcome, "Actual Page — https://actual.invalid/");
+    }
+
+    #[test]
+    fn in_flight_navigation_timing_out_resolves_to_error_state() {
+        let start = Instant::now();
+        let mock_clock = MockClock::new(start);
+        let mut tracker = NavigationTracker::new(mock_clock);
+
+        let id = NavigationId::FIRST;
+        tracker.start_navigation(id, "https://slow.invalid/".into());
+
+        assert_eq!(
+            tracker.display_status(id),
+            "https://slow.invalid/ is still loading"
+        );
+
+        // Advance clock past timeout bound
+        tracker.clock_mut().advance(Duration::from_secs(30));
+        tracker.check_timeouts();
+
+        let status = tracker.display_status(id);
+        assert!(status.contains("timed out after 30s"));
+        assert!(status.contains("check your network connection or try reloading"));
+    }
+
+    #[test]
+    fn load_errors_format_cause_and_next_step() {
+        let errors = [
+            (
+                LoadError::Unresolvable {
+                    address: "https://a.invalid/".into(),
+                },
+                "could not load https://a.invalid/: server address could not be found. Next step: check the address for typos or verify network connection.",
+            ),
+            (
+                LoadError::Certificate {
+                    address: "https://b.invalid/".into(),
+                    detail: "bad cert".into(),
+                },
+                "could not load https://b.invalid/: security certificate error (bad cert). Next step: verify your system clock or do not proceed if on a public network.",
+            ),
+            (
+                LoadError::Intercepted {
+                    address: "https://c.invalid/".into(),
+                },
+                "could not load https://c.invalid/: connection intercepted by a captive portal or proxy. Next step: log in to the network or check proxy settings.",
+            ),
+            (
+                LoadError::AuthenticationRequired {
+                    address: "https://d.invalid/".into(),
+                },
+                "could not load https://d.invalid/: HTTP authentication required. Next step: enter valid credentials when prompted.",
+            ),
+        ];
+
+        for (err, expected) in errors {
+            assert_eq!(format_load_error(&err), expected);
+        }
     }
 }
