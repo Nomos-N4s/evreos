@@ -1,0 +1,21 @@
+# The Greek interface catalogue. FR-035 keys interface text by the primary
+# language subtag alone, so this file is named `el` and nothing longer: a
+# region subtag in the filename would re-fuse language and place.
+#
+# One message per line, `key = text`. A `{name}` is a named argument supplied
+# at resolution, never text of this file, which is how FR-042 keeps brand
+# names out of message text.
+
+# FR-015's four navigation failures: each cause named, each with a next step.
+error.unresolvable.cause = Η διεύθυνση {address} δεν βρέθηκε.
+error.unresolvable.next_step = Ελέγξτε τη γραφή της διεύθυνσης και δοκιμάστε ξανά.
+error.certificate.cause = Η ταυτότητα του {host} δεν επιβεβαιώθηκε: το πιστοποιητικό δεν είναι αξιόπιστο ή έχει λήξει.
+error.certificate.next_step = Επιστρέψτε στην προηγούμενη σελίδα. Συνεχίστε μόνο αν εμπιστεύεστε αυτό το δίκτυο.
+error.intercepted.cause = Κάτι σε αυτό το δίκτυο απαντά στη θέση του {host}.
+error.intercepted.next_step = Συνδεθείτε στο δίκτυο ή αλλάξτε σε μια σύνδεση που εμπιστεύεστε.
+error.authentication.cause = Το {host} απαιτεί σύνδεση πριν φορτωθεί η σελίδα.
+error.authentication.next_step = Συνδεθείτε για να συνεχίσετε.
+
+# FR-016a: the one neutral entry point to the home surface, present in the
+# browser's own menus from first run. A static label, no brand name, no state.
+menu.home_surface = Εφαρμογές

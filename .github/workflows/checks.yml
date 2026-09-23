@@ -33,10 +33,10 @@ jobs:
         # with no module is not an error.
         #
         # Every module, not every check_*.py. rustlex.py is production logic
-        # both checks read Rust through, and while this loop keyed on the
-        # check_ prefix it was the one file here the rule could not reach --
-        # so the module that had already caused two checks to be wrong at once
-        # was also the module nothing required tests for.
+        # every check that reads Rust reads through, and while this loop keyed
+        # on the check_ prefix it was the one file here the rule could not
+        # reach -- so the module that had already caused two checks to be
+        # wrong at once was also the module nothing required tests for.
         #
         # BOTH directories, not just this one. The two scripts in scripts/ are
         # checks by every measure that matters -- one gates the budgets, one
