@@ -18,6 +18,23 @@ use std::collections::{HashMap, VecDeque};
 
 use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Page, Request};
 
+/// An individual step in a scripted navigation sequence.
+#[derive(Debug, Clone)]
+pub enum ScriptStep {
+    /// Emit a `Redirected` event to `address`.
+    Redirect { address: String },
+    /// Emit a `Committed` event for `address`, updating `current()` page address.
+    Commit { address: String },
+    /// Emit a `TitleChanged` event with `title`, updating `current()` page title if current.
+    Title { title: String },
+    /// Emit a `Succeeded` event.
+    Succeed,
+    /// Emit a `Failed` event with `error`.
+    Fail(LoadError),
+    /// Emit a `NavigatedAway` event.
+    NavigateAway,
+}
+
 /// What the headless engine will do when asked for a given address.
 #[derive(Debug, Clone)]
 pub enum Response {
@@ -25,6 +42,8 @@ pub enum Response {
     Page { title: String },
     /// Fail with this cause.
     Fail(LoadError),
+    /// Execute a custom step sequence.
+    Sequence(Vec<ScriptStep>),
 }
 
 /// An engine that answers from a script.
@@ -73,6 +92,106 @@ impl HeadlessEngine {
         self
     }
 
+    /// Script `address` to execute a sequence of `steps`.
+    pub fn with_sequence(
+        mut self,
+        address: impl Into<String>,
+        steps: impl IntoIterator<Item = ScriptStep>,
+    ) -> Self {
+        self.responses.insert(
+            address.into(),
+            Response::Sequence(steps.into_iter().collect()),
+        );
+        self
+    }
+
+    /// Convenience helper: Script `address` to redirect to `target_address` before committing and succeeding with `title`.
+    pub fn with_redirect(
+        self,
+        address: impl Into<String>,
+        target_address: impl Into<String>,
+        title: impl Into<String>,
+    ) -> Self {
+        let target = target_address.into();
+        self.with_sequence(
+            address,
+            [
+                ScriptStep::Redirect {
+                    address: target.clone(),
+                },
+                ScriptStep::Commit { address: target },
+                ScriptStep::Title {
+                    title: title.into(),
+                },
+                ScriptStep::Succeed,
+            ],
+        )
+    }
+
+    /// Convenience helper: Script `address` to commit and succeed before the `title` arrives.
+    pub fn with_delayed_title(self, address: impl Into<String>, title: impl Into<String>) -> Self {
+        let addr = address.into();
+        self.with_sequence(
+            addr.clone(),
+            [
+                ScriptStep::Commit { address: addr },
+                ScriptStep::Succeed,
+                ScriptStep::Title {
+                    title: title.into(),
+                },
+            ],
+        )
+    }
+
+    /// Convenience helper: Script `address` to be abandoned/navigated away from before completion.
+    pub fn with_abandoned_navigation(self, address: impl Into<String>) -> Self {
+        let addr = address.into();
+        self.with_sequence(
+            addr.clone(),
+            [
+                ScriptStep::Commit { address: addr },
+                ScriptStep::NavigateAway,
+            ],
+        )
+    }
+
+    /// Convenience helper: Script `address` to start loading and never resolve (SC-009 30-second clause).
+    pub fn with_hanging_load(self, address: impl Into<String>) -> Self {
+        self.with_sequence(address, [])
+    }
+
+    /// Script an engine-initiated (unsolicited) event sequence that will be enqueued immediately or on trigger.
+    pub fn with_engine_initiated_sequence(
+        mut self,
+        address: impl Into<String>,
+        steps: impl IntoIterator<Item = ScriptStep>,
+    ) -> Self {
+        let addr = address.into();
+        let id = self.mint();
+        self.queue
+            .push_back(NavigationEvent::Started { id, address: addr });
+        self.process_steps(id, steps);
+        self
+    }
+
+    /// Convenience helper: Script an engine-initiated page navigation.
+    pub fn with_engine_initiated_page(
+        self,
+        address: impl Into<String>,
+        title: impl Into<String>,
+    ) -> Self {
+        let addr = address.into();
+        let t = title.into();
+        self.with_engine_initiated_sequence(
+            addr.clone(),
+            [
+                ScriptStep::Commit { address: addr },
+                ScriptStep::Title { title: t },
+                ScriptStep::Succeed,
+            ],
+        )
+    }
+
     /// Every address this engine was asked to load, in order.
     ///
     /// FR-007a forbids browsing history leaving the machine and bounds what may
@@ -87,6 +206,45 @@ impl HeadlessEngine {
         let id = self.next_id.unwrap_or(NavigationId::FIRST);
         self.next_id = Some(id.next());
         id
+    }
+
+    fn process_steps(&mut self, id: NavigationId, steps: impl IntoIterator<Item = ScriptStep>) {
+        for step in steps {
+            match step {
+                ScriptStep::Redirect { address } => {
+                    self.queue
+                        .push_back(NavigationEvent::Redirected { id, address });
+                }
+                ScriptStep::Commit { address } => {
+                    self.queue.push_back(NavigationEvent::Committed {
+                        id,
+                        address: address.clone(),
+                    });
+                    self.current = Some(Page::new(address, ""));
+                    self.current_nav = Some(id);
+                }
+                ScriptStep::Title { title } => {
+                    self.queue.push_back(NavigationEvent::TitleChanged {
+                        id,
+                        title: title.clone(),
+                    });
+                    if self.current_nav == Some(id) {
+                        if let Some(page) = &self.current {
+                            self.current = Some(Page::new(page.address().to_owned(), title));
+                        }
+                    }
+                }
+                ScriptStep::Succeed => {
+                    self.queue.push_back(NavigationEvent::Succeeded { id });
+                }
+                ScriptStep::Fail(error) => {
+                    self.queue.push_back(NavigationEvent::Failed { id, error });
+                }
+                ScriptStep::NavigateAway => {
+                    self.queue.push_back(NavigationEvent::NavigatedAway { id });
+                }
+            }
+        }
     }
 }
 
@@ -107,39 +265,25 @@ impl Engine for HeadlessEngine {
 
         match self.responses.get(&address).cloned() {
             Some(Response::Page { title }) => {
-                // Commit is when the current page changes; the title arrives on
-                // its own event afterwards, and the page carries it from the
-                // moment that event exists, drained or not.
-                self.queue.push_back(NavigationEvent::Committed {
+                self.process_steps(
                     id,
-                    address: address.clone(),
-                });
-                self.current = Some(Page::new(address, ""));
-                self.current_nav = Some(id);
-
-                self.queue.push_back(NavigationEvent::TitleChanged {
-                    id,
-                    title: title.clone(),
-                });
-                if self.current_nav == Some(id) {
-                    if let Some(page) = &self.current {
-                        self.current = Some(Page::new(page.address().to_owned(), title));
-                    }
-                }
-
-                self.queue.push_back(NavigationEvent::Succeeded { id });
+                    [
+                        ScriptStep::Commit {
+                            address: address.clone(),
+                        },
+                        ScriptStep::Title { title },
+                        ScriptStep::Succeed,
+                    ],
+                );
             }
             Some(Response::Fail(error)) => {
-                // FR-015: a failed load does not become a successful empty
-                // page. The previously loaded page stays current, because the
-                // failure did not replace it.
-                self.queue.push_back(NavigationEvent::Failed { id, error });
+                self.process_steps(id, [ScriptStep::Fail(error)]);
+            }
+            Some(Response::Sequence(steps)) => {
+                self.process_steps(id, steps);
             }
             None => {
-                self.queue.push_back(NavigationEvent::Failed {
-                    id,
-                    error: LoadError::Unresolvable { address },
-                });
+                self.process_steps(id, [ScriptStep::Fail(LoadError::Unresolvable { address })]);
             }
         }
 
@@ -152,5 +296,250 @@ impl Engine for HeadlessEngine {
 
     fn current(&self) -> Option<&Page> {
         self.current.as_ref()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn engine_initiated_navigation_emits_without_start_navigation() {
+        let mut engine = HeadlessEngine::new()
+            .with_engine_initiated_page("https://unsolicited.invalid/", "Unsolicited Title");
+
+        let started = engine.poll_event();
+        assert!(matches!(
+            started,
+            Some(NavigationEvent::Started { address, .. }) if address == "https://unsolicited.invalid/"
+        ));
+
+        let committed = engine.poll_event();
+        assert!(matches!(
+            committed,
+            Some(NavigationEvent::Committed { address, .. }) if address == "https://unsolicited.invalid/"
+        ));
+
+        let title = engine.poll_event();
+        assert!(matches!(
+            title,
+            Some(NavigationEvent::TitleChanged { title, .. }) if title == "Unsolicited Title"
+        ));
+
+        let succeeded = engine.poll_event();
+        assert!(matches!(succeeded, Some(NavigationEvent::Succeeded { .. })));
+
+        assert_eq!(
+            engine.current().map(|p| p.title()),
+            Some("Unsolicited Title")
+        );
+        assert!(engine.loads().is_empty());
+    }
+
+    #[test]
+    fn redirect_before_commit_emits_redirected_then_committed() {
+        let mut engine = HeadlessEngine::new().with_redirect(
+            "https://initial.invalid/",
+            "https://target.invalid/",
+            "Target Page",
+        );
+
+        let request = Request::new("https://initial.invalid/");
+        let id = engine.start_navigation(&request);
+
+        let started = engine.poll_event();
+        assert_eq!(
+            started,
+            Some(NavigationEvent::Started {
+                id,
+                address: "https://initial.invalid/".into()
+            })
+        );
+
+        let redirected = engine.poll_event();
+        assert_eq!(
+            redirected,
+            Some(NavigationEvent::Redirected {
+                id,
+                address: "https://target.invalid/".into()
+            })
+        );
+
+        let committed = engine.poll_event();
+        assert_eq!(
+            committed,
+            Some(NavigationEvent::Committed {
+                id,
+                address: "https://target.invalid/".into()
+            })
+        );
+
+        let title = engine.poll_event();
+        assert_eq!(
+            title,
+            Some(NavigationEvent::TitleChanged {
+                id,
+                title: "Target Page".into()
+            })
+        );
+
+        let succeeded = engine.poll_event();
+        assert_eq!(succeeded, Some(NavigationEvent::Succeeded { id }));
+
+        assert_eq!(
+            engine.current().map(|p| p.address()),
+            Some("https://target.invalid/")
+        );
+    }
+
+    #[test]
+    fn title_arriving_after_outcome() {
+        let mut engine =
+            HeadlessEngine::new().with_delayed_title("https://delayed.invalid/", "Delayed Title");
+
+        let request = Request::new("https://delayed.invalid/");
+        let id = engine.start_navigation(&request);
+
+        let started = engine.poll_event();
+        assert_eq!(
+            started,
+            Some(NavigationEvent::Started {
+                id,
+                address: "https://delayed.invalid/".into()
+            })
+        );
+
+        let committed = engine.poll_event();
+        assert_eq!(
+            committed,
+            Some(NavigationEvent::Committed {
+                id,
+                address: "https://delayed.invalid/".into()
+            })
+        );
+
+        let succeeded = engine.poll_event();
+        assert_eq!(succeeded, Some(NavigationEvent::Succeeded { id }));
+
+        let title = engine.poll_event();
+        assert_eq!(
+            title,
+            Some(NavigationEvent::TitleChanged {
+                id,
+                title: "Delayed Title".into()
+            })
+        );
+
+        assert_eq!(engine.current().map(|p| p.title()), Some("Delayed Title"));
+    }
+
+    #[test]
+    fn abandoned_navigation_emits_navigated_away() {
+        let mut engine =
+            HeadlessEngine::new().with_abandoned_navigation("https://abandoned.invalid/");
+
+        let request = Request::new("https://abandoned.invalid/");
+        let id = engine.start_navigation(&request);
+
+        let started = engine.poll_event();
+        assert_eq!(
+            started,
+            Some(NavigationEvent::Started {
+                id,
+                address: "https://abandoned.invalid/".into()
+            })
+        );
+
+        let committed = engine.poll_event();
+        assert_eq!(
+            committed,
+            Some(NavigationEvent::Committed {
+                id,
+                address: "https://abandoned.invalid/".into()
+            })
+        );
+
+        let navigated_away = engine.poll_event();
+        assert_eq!(navigated_away, Some(NavigationEvent::NavigatedAway { id }));
+
+        assert_eq!(engine.poll_event(), None);
+    }
+
+    #[test]
+    fn hanging_load_starts_and_never_resolves() {
+        let mut engine = HeadlessEngine::new().with_hanging_load("https://hanging.invalid/");
+
+        let request = Request::new("https://hanging.invalid/");
+        let id = engine.start_navigation(&request);
+
+        let started = engine.poll_event();
+        assert_eq!(
+            started,
+            Some(NavigationEvent::Started {
+                id,
+                address: "https://hanging.invalid/".into()
+            })
+        );
+
+        // No further events emitted (never resolves)
+        assert_eq!(engine.poll_event(), None);
+        assert!(engine.current().is_none());
+    }
+
+    #[test]
+    fn with_page_and_with_failure_backward_compatibility() {
+        let mut engine = HeadlessEngine::new()
+            .with_page("https://page.invalid/", "Page Title")
+            .with_failure(
+                "https://fail.invalid/",
+                LoadError::Unresolvable {
+                    address: "https://fail.invalid/".into(),
+                },
+            );
+
+        let page_id = engine.start_navigation(&Request::new("https://page.invalid/"));
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::Started {
+                id: page_id,
+                address: "https://page.invalid/".into()
+            })
+        );
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::Committed {
+                id: page_id,
+                address: "https://page.invalid/".into()
+            })
+        );
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::TitleChanged {
+                id: page_id,
+                title: "Page Title".into()
+            })
+        );
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::Succeeded { id: page_id })
+        );
+
+        let fail_id = engine.start_navigation(&Request::new("https://fail.invalid/"));
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::Started {
+                id: fail_id,
+                address: "https://fail.invalid/".into()
+            })
+        );
+        assert_eq!(
+            engine.poll_event(),
+            Some(NavigationEvent::Failed {
+                id: fail_id,
+                error: LoadError::Unresolvable {
+                    address: "https://fail.invalid/".into()
+                }
+            })
+        );
     }
 }
