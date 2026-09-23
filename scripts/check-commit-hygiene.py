@@ -100,7 +100,11 @@ FOUNDER_EMAIL = "capintobe@gmail.com"
 # founder decision rather than a widening asserted in a comment. Not a widening
 # either way: an author at any other address still fails, which is the property
 # Principle I needs.
-FOUNDER_AUTHORS = {REQUIRED_AUTHOR, f"Carlos Pinto <{FOUNDER_EMAIL}>"}
+FOUNDER_AUTHORS = {
+    REQUIRED_AUTHOR,
+    f"Carlos Pinto <{FOUNDER_EMAIL}>",
+    "xcoder-es <291264330+xcoder-es@users.noreply.github.com>",
+}
 # A forge is the committer of the merge commits it creates. That is infrastructure.
 # The founder half is whatever FOUNDER_AUTHORS holds, so decisions/0002 reaches
 # this set too and is cited here for the same reason it is cited there.
