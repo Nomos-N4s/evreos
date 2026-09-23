@@ -24,7 +24,7 @@ independently.
 |---|---|
 | `crates/evreos-engine` | the `Engine` trait |
 | `crates/evreos-engine-headless` | the second implementation Principle III requires |
-| `crates/evreos-shell` | the shell binary, 6 tests over FR-015's four causes |
+| `crates/evreos-shell` | the shell binary and the FR-015 failure suite — the test census lives in quickstart A2, which is amended as tests land |
 | `scripts/check-budgets.py` | the three budget gates, 24 tests |
 | `budgets.toml` | 4 entries of the 18 the Success Criteria preamble enumerates |
 | `.github/workflows/build.yml` | fmt, clippy `-D warnings`, tests, release build, budget gate |
@@ -33,11 +33,12 @@ independently.
 ## Four constraints that govern the ordering
 
 **T014 revises the `Engine` trait, and every platform backend is ordered behind it.**
-`research.md` establishes the merged trait cannot be implemented on either shipping backend:
-`load` is synchronous while WebView2 is UI-thread-affine and wry's macOS delegates are
+`research.md` establishes the trait merged before T014 could not be implemented on either shipping
+backend: its `load` was synchronous while WebView2 is UI-thread-affine and wry's macOS delegates are
 `MainThreadOnly`, so the only synchronous route is a nested message pump that breaks SC-006 by
-construction. And `Result<Page, LoadError>` cannot express engine-initiated navigation, in-flight
-state, or a title arriving on its own event.
+construction. And `Result<Page, LoadError>` could not express engine-initiated navigation, in-flight
+state, or a title arriving on its own event. The revision has since landed as the event contract
+T014 describes; the constraint stays as the record of why it was ordered first.
 
 **T013 procures the two pinned reference machines, and every measurement is ordered behind it.**
 A figure measured on an unnamed machine is not reproducible under SC-013, so it cannot be what a
