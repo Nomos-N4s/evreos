@@ -112,3 +112,4 @@ Recorded as ADRs, cited by their own numbers, and holding no number here.
 
 - `docs/adr/0001-rendering-engine.md` — host web content in operating-system
   webviews.
+- `docs/adr/0002-chrome-renderer.md` — select winit and drawn chrome for windowing and chrome rendering.
