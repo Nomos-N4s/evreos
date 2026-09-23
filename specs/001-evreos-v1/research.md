@@ -772,6 +772,10 @@ candidate must demonstrate on the tier-1 pinned runner: SC-006's 16 ms with no
 trial over 16 ms across ≥1000 trials for both tab switch and address-field
 keystroke; a screen-reader pass with Narrator and NVDA; correct German dead-key
 and Greek entry in the FR-003 field; legible layout at 200% with no clipping.
+Decisions/0004 lets the comparison run first on the named interim instrument,
+as indicative figures under that record's closed claim scope; what a candidate
+must demonstrate is unchanged, and the demonstration on the pinned runner is
+owed rather than replaced.
 ADR-0001 states the limit of its own accessibility rationale — the OS-engine
 argument "covers page content, not the shell's own chrome … and what renders
 them is an output of spike S4, not settled here" — and SC-006, being ratified,
@@ -2041,14 +2045,16 @@ measuring gates need self-hosted machines that do not exist yet, and the
 budget-file gate is presently suppressed for exactly this by
 `--allow-unpinned-runners` in the build workflow; procurement is therefore the
 longest-lead item in this strand and gates SC-002's spike, SC-004's soak,
-SC-005's window, SC-006's trials, S4's decision and every tier-specific
-measurement above — which the specification already states (Q-E9a: "procurement
-is a release prerequisite and is the only thing standing between those gates and
-blocking"). `Nomos-N4s/evreos` is public, and GitHub's own guidance is that
-self-hosted runners should not be used with public repositories, because anyone
-who can fork and open a pull request can execute code on the runner — and a
-compromised benchmark runner is also the machine holding the project's baseline
-series. The spare matters because the budget file records "a durable machine
+SC-005's window, SC-006's trials, S4's pinned-runner confirmation (the decision
+itself now runs first on the interim instrument, decisions/0004) and every
+tier-specific measurement above — which the specification already states
+(Q-E9a: "procurement is a release prerequisite and is the only thing standing
+between those gates and blocking"). `Nomos-N4s/evreos` is public, and GitHub's
+own guidance is that self-hosted runners should not be used with public
+repositories, because anyone who can fork and open a pull request can execute
+code on the runner — and a compromised benchmark runner is also the machine
+holding the project's baseline series.
+The spare matters because the budget file records "a durable machine
 identifier": swapping in a different machine changes that identifier and,
 honestly applied, restarts every baseline series on that tier, so the swap
 procedure has to be written down rather than improvised the week a laptop dies.
@@ -2254,8 +2260,10 @@ affected requirement is stated.
 - **S4 (ADR-0001; not one of the four specification spikes).** The windowing
   crate and what renders the chrome. §5.2 gives the criteria and §5.3 the
   accessibility exposure. *Settled by*: a measured candidate comparison on the
-  tier-1 runner against SC-006 and SC-004, plus the screen-reader, dead-key and
-  200% passes.
+  tier-1 runner against SC-006 and SC-004 — taken first on the interim
+  instrument decisions/0004 names, as indicative figures, with the
+  pinned-runner re-run owed — plus the screen-reader, dead-key and 200% passes,
+  which stay with the pinned-runner demonstration.
 
 ### 12.2 New measurements this research opens
 
@@ -2313,7 +2321,9 @@ specification statement that lands as an amendment there.
   coherently with an embedded WebView2 or WKWebView tree** — one reading order,
   one focus order, no orphaned subtree — under Narrator, NVDA and VoiceOver?
   *Settled by*: a spike building a minimal AccessKit chrome with one embedded
-  webview on each tier's runner, driven by each platform's own assistive
+  webview on each tier's runner — first on the interim instrument decisions/0004
+  names for tier 1, with each tier's pinned-runner run owed and tier 2 open
+  until measured there — driven by each platform's own assistive
   technology, with the resulting tree captured from Accessibility Insights (UIA)
   and Accessibility Inspector (NSAccessibility) and committed. AccessKit's
   merged multiple-tree support explicitly does not cover native webview trees,
@@ -2541,7 +2551,9 @@ Q-E12's whole tier-2 route rides in the crate T4 created.
 
 **Three things run in parallel from Phase 1, because they are longer-lead than
 any code.** Runner procurement (§9.12), which gates SC-002's spike, SC-004's
-soak, SC-005's window, SC-006's trials, S4's decision and every tier-specific
+soak, SC-005's window, SC-006's trials, S4's pinned-runner confirmation, N6's
+owed pinned-runner re-runs — both spike measurements themselves now run first
+on the interim instrument (decisions/0004) — and every other tier-specific
 measurement above. The OHTTP relay contract and the DPIA (§8.8) — no operator,
 no signal, and the milestone that ships diagnostics must be able to ship with
 the feature dark and unofferable. And two cheap bring-up measurements taken
