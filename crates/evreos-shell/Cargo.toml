@@ -10,5 +10,13 @@ publish.workspace = true
 evreos-engine = { path = "../evreos-engine" }
 evreos-engine-headless = { path = "../evreos-engine-headless" }
 
+[features]
+# Principle VIII: the brand is selected at build time -- the real brand,
+# brands/evreos.toml, by default, and brands/fixture.toml under this feature,
+# which CI builds in the release profile on every change so the seam is proved
+# rather than asserted (FR-042). When both are enabled, `--all-features`
+# included, the fixture wins, in build.rs and src/brand.rs alike.
+fixture-brand = []
+
 [lints]
 workspace = true

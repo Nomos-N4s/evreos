@@ -44,6 +44,20 @@ jobs:
         # platform, and a Linux ELF meets neither entry's condition.
         run: cargo build --release
 
+      - name: Build the fixture brand
+        # Principle VIII and FR-042: a fixture brand MUST build in CI on every
+        # change, proving the brand seam rather than asserting it -- a
+        # rebrandability claim CI does not exercise is discovered to be false
+        # at the worst possible moment. The release profile is the one T034
+        # names, but on this runner it proves only that the fixture selection
+        # builds: the unset gate in crates/evreos-shell/build.rs binds on a
+        # shipping platform and this runner's target is linux, the gate's
+        # deliberate carve-out. brands/fixture.toml's completeness is held by
+        # the the_fixture_brand_has_every_field_set unit test in the Test
+        # step above, and the gate itself fires in the release-gate job
+        # below, which builds the fixture where the gate is live.
+        run: cargo build --release -p evreos-shell --features fixture-brand
+
       - name: Budgets, full report
         # Every gate, including the budget-file gate's requirement that each
         # tier's runner carry a durable identity. Informational until the
@@ -78,6 +92,58 @@ jobs:
           python3 scripts/check-budgets.py
           --allow-unpinned-runners
           --allow-unmeasured
+
+  release-gate:
+    name: Release gate on a shipping platform
+    # The unset gate in crates/evreos-shell/build.rs binds only on a
+    # release-profile build for a shipping platform (windows or macos -- see
+    # release_gate_applies in crates/evreos-shell/src/brand/schema.rs), so
+    # the build job above can never exercise its wiring: its target is
+    # linux, the gate's deliberate carve-out. This job runs where the gate
+    # binds and proves both of its answers on every change:
+    #
+    #   - the real brand, which honestly carries `unset` sentinels, REFUSES
+    #     a release build -- and the step checks that the refusal is the
+    #     gate's own, naming the unset fields, so an unrelated build break
+    #     cannot pass as the gate firing;
+    #   - the fixture brand, complete by construction, builds clean under
+    #     the same gate.
+    #
+    # A regression that disconnects build.rs from the gate turns the first
+    # build green, which the step turns red. When every field of
+    # brands/evreos.toml is filled, the first step's premise ends and the
+    # step changes with that edit.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        # Named for the reason the build job names it: a runner update must
+        # not silently change what the release path builds on.
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustc --version
+
+      - name: The unset real brand refuses a release build
+        shell: bash
+        run: |
+          set +e
+          output=$(cargo build --release -p evreos-shell 2>&1)
+          status=$?
+          echo "$output"
+          if [ "$status" -eq 0 ]; then
+            echo "FAIL: the release build succeeded where the unset gate must refuse it"
+            exit 1
+          fi
+          if ! grep -qF 'unset field(s)' <<<"$output"; then
+            echo "FAIL: the release build failed, but not with the gate's unset-field refusal"
+            exit 1
+          fi
+          echo "the gate refused the build and named the unset fields"
+
+      - name: The complete fixture brand builds under the same gate
+        run: cargo build --release -p evreos-shell --features fixture-brand
 
   release:
     name: Release

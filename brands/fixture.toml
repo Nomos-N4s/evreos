@@ -1,0 +1,34 @@
+# The fixture brand: a complete, deliberately fictional brand whose only job
+# is to prove the seam. CI builds it on every change (Principle VIII, FR-042),
+# and every field here is set. Two provers hold that line: the
+# the_fixture_brand_has_every_field_set unit test in
+# crates/evreos-shell/src/brand.rs makes an `unset` sentinel here a red test
+# on every change, and the release-gate job in .github/workflows/build.yml
+# builds this brand on windows, where the unset gate in
+# crates/evreos-shell/build.rs binds, so the sentinel is a red build there
+# too. The ubuntu fixture-build step alone cannot refuse an unset field: its
+# target is linux, the gate's deliberate carve-out.
+#
+# The values are this file's own and mean nothing: hosts sit under the
+# reserved `.invalid` top-level domain so none of them can ever resolve, and
+# the names are invented words no real product carries. Every set field MUST
+# differ from every set field in brands/evreos.toml -- the unit tests in
+# crates/evreos-shell/src/brand.rs hold that line. Not for the check's sake:
+# scripts/checks/check_brand.py forbids the union of every brand file's
+# values and reports a shared value with both origins named -- its own suite
+# proves that -- so nothing hides behind the wrong file. The reason is the
+# proof this file exists for: the fixture build demonstrates rebrandability
+# only where the values differ, because a field shared with the real brand
+# would look correct under either selection, hardcoded copies of it
+# included, and the CI proof FR-042 names would prove nothing about it.
+
+product_name = "Fixtureweave"
+money_service_name = "Fixturepurse"
+primary_colour = "#1a2b3c"
+accent_colour = "#c3b2a1"
+search_endpoint = "https://search.fixture.invalid/"
+money_endpoint = "https://money.fixture.invalid/"
+update_endpoint = "https://update.fixture.invalid/"
+surface_endpoint = "https://surfaces.fixture.invalid/"
+diagnostics_endpoint = "https://relay.fixture.invalid/"
+support_address = "support@fixture.invalid"

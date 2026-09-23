@@ -1,0 +1,32 @@
+# The real brand. Principle VIII and FR-042: no brand name, colour, endpoint
+# or support address exists outside this file and its fixture sibling, and
+# crates/evreos-shell/src/brand.rs is the one place the shell reads them.
+#
+# The format is TOML restricted to `key = "string"` lines, full-line comments
+# and blank lines -- parsed by crates/evreos-shell/src/brand/schema.rs, which
+# crates/evreos-shell/build.rs runs before anything compiles against this file.
+# Every field is required: a missing field fails the build rather than
+# defaulting.
+#
+# `unset` is a sentinel, not a value. It marks a field whose real value is
+# undetermined or owned outside this repository, and it is never replaced by a
+# plausible-looking placeholder, which is how a wrong endpoint ships. A
+# release-profile build for a shipping platform fails while any field here
+# carries it. brands/README.md records which later task or decision fills each
+# field.
+
+product_name = "unset"
+money_service_name = "unset"
+primary_colour = "unset"
+accent_colour = "unset"
+
+# The one settled value: Q-E2 (specs/001-evreos-v1/spec.md) names DuckDuckGo
+# as the default search provider, held to FR-003a's boundary -- the submitted
+# terms and nothing else, changeable by the member without penalty.
+search_endpoint = "https://duckduckgo.com/"
+
+money_endpoint = "unset"
+update_endpoint = "unset"
+surface_endpoint = "unset"
+diagnostics_endpoint = "unset"
+support_address = "unset"

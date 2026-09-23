@@ -34,7 +34,7 @@ request that amends this file.
 | Require a pull request before merging | On |
 | Required approvals | 0 |
 | Require status checks to pass before merging | On |
-| Required status checks | `Authorship and attribution`, `Build, test and budgets`, `Repository checks` |
+| Required status checks | `Authorship and attribution`, `Build, test and budgets`, `Release gate on a shipping platform`, `Repository checks` |
 | Require branches to be up to date before merging | On |
 | Do not allow bypassing the above settings | On |
 | Allow force pushes | Off, for everyone |
@@ -49,7 +49,7 @@ configuration rather than branch protection but guards the same property:
 | Allow squash merging | Off |
 | Allow rebase merging | Off |
 
-### The three required checks
+### The required checks
 
 The name the forge matches is the job's `name:` field, not the workflow's.
 Renaming a job silently detaches it from the requirement, and every pull
@@ -62,6 +62,18 @@ change to this file and to the forge settings in the same step.
   lists a key — the signature of every commit the pull request adds.
 - `Build, test and budgets` is the job in `.github/workflows/build.yml`:
   format, lint, tests, the release build and the budget gates of Principle II.
+- `Release gate on a shipping platform` is the second job in
+  `.github/workflows/build.yml`: it builds `evreos-shell` in the release
+  profile on windows, where the unset gate in `crates/evreos-shell/build.rs`
+  binds, asserting that the unset real brand is refused with the gate's own
+  unset-field message and that the complete fixture brand builds under the
+  same gate. It is required rather than advisory because it is the only
+  automation that can catch a regression in that gate's wiring — `Build, test
+  and budgets` runs on a linux target, where the gate is deliberately silent
+  — and a red check that is not required is advice. The same ordering
+  constraint as `Repository checks` applies: this row is applied the moment
+  the job is on `main`, and not before. Applying it on the forge, like every
+  setting in this file, is the founder's to do.
 - `Repository checks` is the job in `.github/workflows/checks.yml`, which runs
   every check under `scripts/checks/`. Every later task in
   `specs/001-evreos-v1/tasks.md` that adds a repository check enforces through
@@ -130,6 +142,7 @@ Otherwise the fields that matter, with other fields present and ignored:
     "contexts": [
       "Authorship and attribution",
       "Build, test and budgets",
+      "Release gate on a shipping platform",
       "Repository checks"
     ]
   },
