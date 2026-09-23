@@ -14,6 +14,8 @@
 
 #![forbid(unsafe_code)]
 
+mod brand;
+
 use evreos_engine::{Engine, LoadError, NavigationEvent, Request};
 use evreos_engine_headless::HeadlessEngine;
 
