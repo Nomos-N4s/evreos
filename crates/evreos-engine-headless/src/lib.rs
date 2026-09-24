@@ -20,7 +20,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    ContextId, Engine, EngineHost, LoadError, NavigationEvent, NavigationId, Page, Request,
+    ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, NavigationId,
+    Page, Request, SurfaceId, SurfaceState,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -67,6 +68,17 @@ struct SharedHostContext {
     id: ContextId,
     responses: RefCell<HashMap<String, Response>>,
     loads: RefCell<Vec<String>>,
+}
+
+#[derive(Debug, Clone)]
+struct HeadlessSurface {
+    _id: SurfaceId,
+    store: DataStoreSelector,
+    state: SurfaceState,
+    current: Option<Page>,
+    current_nav: Option<NavigationId>,
+    loads: Vec<String>,
+    data: HashMap<String, String>,
 }
 
 /// The host/factory type owning the shared platform context for headless engines.
@@ -243,8 +255,10 @@ pub struct HeadlessEngine {
     responses: HashMap<String, Response>,
     queue: VecDeque<NavigationEvent>,
     next_id: Option<NavigationId>,
-    current: Option<Page>,
-    current_nav: Option<NavigationId>,
+    next_surface_id: Option<SurfaceId>,
+    active_surface: Option<SurfaceId>,
+    surfaces: HashMap<SurfaceId, HeadlessSurface>,
+    persistent_data: HashMap<SurfaceId, HashMap<String, String>>,
     loads: Vec<String>,
     context: Option<Rc<SharedHostContext>>,
 }
@@ -262,8 +276,10 @@ impl HeadlessEngine {
             responses: HashMap::new(),
             queue: VecDeque::new(),
             next_id: None,
-            current: None,
-            current_nav: None,
+            next_surface_id: None,
+            active_surface: None,
+            surfaces: HashMap::new(),
+            persistent_data: HashMap::new(),
             loads: Vec::new(),
             context: None,
         }
@@ -275,8 +291,10 @@ impl HeadlessEngine {
             responses: HashMap::new(),
             queue: VecDeque::new(),
             next_id: None,
-            current: None,
-            current_nav: None,
+            next_surface_id: None,
+            active_surface: None,
+            surfaces: HashMap::new(),
+            persistent_data: HashMap::new(),
             loads: Vec::new(),
             context: Some(context),
         }
@@ -378,11 +396,12 @@ impl HeadlessEngine {
         address: impl Into<String>,
         steps: impl IntoIterator<Item = ScriptStep>,
     ) -> Self {
+        let surface = self.ensure_active_surface();
         let addr = address.into();
         let id = self.mint();
         self.queue
             .push_back(NavigationEvent::Started { id, address: addr });
-        self.process_steps(id, steps);
+        self.process_surface_steps(surface, id, steps);
         self
     }
 
@@ -420,7 +439,234 @@ impl HeadlessEngine {
         id
     }
 
-    fn process_steps(&mut self, id: NavigationId, steps: impl IntoIterator<Item = ScriptStep>) {
+    /// Ensure there is an active surface, creating a default persistent one if necessary.
+    fn ensure_active_surface(&mut self) -> SurfaceId {
+        if let Some(id) = self.active_surface {
+            if let Some(surface) = self.surfaces.get(&id) {
+                if !surface.state.is_closed() {
+                    return id;
+                }
+            }
+        }
+        if let Some((&id, _)) = self.surfaces.iter().find(|(_, s)| !s.state.is_closed()) {
+            self.activate_surface(id);
+            return id;
+        }
+        let id = self.create_surface(DataStoreSelector::Persistent);
+        self.activate_surface(id);
+        id
+    }
+
+    /// Create an addressable rendering surface with the specified data store.
+    pub fn create_surface(&mut self, store: DataStoreSelector) -> SurfaceId {
+        let id = self.next_surface_id.unwrap_or(SurfaceId::FIRST);
+        self.next_surface_id = Some(id.next());
+        self.surfaces.insert(
+            id,
+            HeadlessSurface {
+                _id: id,
+                store,
+                state: SurfaceState::Inactive,
+                current: None,
+                current_nav: None,
+                loads: Vec::new(),
+                data: HashMap::new(),
+            },
+        );
+        id
+    }
+
+    /// Activate `surface`, bringing it to the foreground.
+    pub fn activate_surface(&mut self, surface: SurfaceId) {
+        if let Some(s) = self.surfaces.get(&surface) {
+            if s.state.is_closed() {
+                return;
+            }
+        } else {
+            return;
+        }
+
+        if let Some(prev_id) = self.active_surface {
+            if prev_id != surface {
+                if let Some(prev) = self.surfaces.get_mut(&prev_id) {
+                    if prev.state == SurfaceState::Active {
+                        prev.state = SurfaceState::Inactive;
+                    }
+                }
+            }
+        }
+
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.state = SurfaceState::Active;
+            self.active_surface = Some(surface);
+        }
+    }
+
+    /// Suspend `surface` to conserve memory and resources (FR-002).
+    pub fn suspend_surface(&mut self, surface: SurfaceId) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            if s.state.is_closed() {
+                return;
+            }
+            s.state = SurfaceState::Suspended;
+            if self.active_surface == Some(surface) {
+                self.active_surface = None;
+            }
+        }
+    }
+
+    /// Resume a previously suspended rendering surface.
+    pub fn resume_surface(&mut self, surface: SurfaceId) {
+        if let Some(s) = self.surfaces.get(&surface) {
+            if s.state == SurfaceState::Suspended {
+                self.activate_surface(surface);
+            }
+        }
+    }
+
+    /// Close and destroy `surface`.
+    pub fn close_surface(&mut self, surface: SurfaceId) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.state = SurfaceState::Closed;
+            s.current = None;
+            if s.store == DataStoreSelector::NonPersistent {
+                s.data.clear();
+                self.persistent_data.remove(&surface);
+            } else {
+                self.persistent_data
+                    .entry(surface)
+                    .or_default()
+                    .extend(s.data.drain());
+            }
+        }
+        if self.active_surface == Some(surface) {
+            self.active_surface = None;
+        }
+    }
+
+    /// The currently active surface, if any.
+    pub fn active_surface(&self) -> Option<SurfaceId> {
+        self.active_surface
+    }
+
+    /// The data store selector of `surface`, if it exists.
+    pub fn surface_data_store(&self, surface: SurfaceId) -> Option<DataStoreSelector> {
+        self.surfaces.get(&surface).map(|s| s.store)
+    }
+
+    /// The lifecycle state of `surface`, if it exists.
+    pub fn surface_state(&self, surface: SurfaceId) -> Option<SurfaceState> {
+        self.surfaces.get(&surface).map(|s| s.state)
+    }
+
+    /// The page currently displayed on `surface`, if any.
+    pub fn surface_current(&self, surface: SurfaceId) -> Option<&Page> {
+        self.surfaces.get(&surface).and_then(|s| s.current.as_ref())
+    }
+
+    /// Whether `surface` retains any data in its data store.
+    pub fn surface_has_retained_data(&self, surface: SurfaceId) -> bool {
+        if let Some(s) = self.surfaces.get(&surface) {
+            if s.store == DataStoreSelector::NonPersistent {
+                !s.data.is_empty()
+            } else {
+                !s.data.is_empty()
+                    || self
+                        .persistent_data
+                        .get(&surface)
+                        .is_some_and(|d| !d.is_empty())
+            }
+        } else {
+            self.persistent_data
+                .get(&surface)
+                .is_some_and(|d| !d.is_empty())
+        }
+    }
+
+    /// All addresses requested for `surface`, in order.
+    pub fn surface_loads(&self, surface: SurfaceId) -> Option<&[String]> {
+        self.surfaces.get(&surface).map(|s| s.loads.as_slice())
+    }
+
+    /// Begin navigating `surface` to `request`.
+    pub fn start_surface_navigation(
+        &mut self,
+        surface: SurfaceId,
+        request: &Request,
+    ) -> NavigationId {
+        let address = request.address().to_owned();
+        self.loads.push(address.clone());
+        if let Some(ctx) = &self.context {
+            ctx.loads.borrow_mut().push(address.clone());
+        }
+
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            if s.state.is_closed() {
+                return self.mint();
+            }
+            s.loads.push(address.clone());
+            s.data.insert("visited_url".into(), address.clone());
+            s.data
+                .insert("session_cookie".into(), format!("session_for_{}", address));
+            if s.store == DataStoreSelector::Persistent {
+                self.persistent_data
+                    .entry(surface)
+                    .or_default()
+                    .insert("visited_url".into(), address.clone());
+            }
+        }
+
+        let id = self.mint();
+
+        self.queue.push_back(NavigationEvent::Started {
+            id,
+            address: address.clone(),
+        });
+
+        let response = self.responses.get(&address).cloned().or_else(|| {
+            self.context
+                .as_ref()
+                .and_then(|c| c.responses.borrow().get(&address).cloned())
+        });
+
+        match response {
+            Some(Response::Page { title }) => {
+                self.process_surface_steps(
+                    surface,
+                    id,
+                    [
+                        ScriptStep::Commit {
+                            address: address.clone(),
+                        },
+                        ScriptStep::Title { title },
+                        ScriptStep::Succeed,
+                    ],
+                );
+            }
+            Some(Response::Fail(error)) => {
+                self.process_surface_steps(surface, id, [ScriptStep::Fail(error)]);
+            }
+            Some(Response::Sequence(steps)) => {
+                self.process_surface_steps(surface, id, steps);
+            }
+            None => {
+                self.process_surface_steps(
+                    surface,
+                    id,
+                    [ScriptStep::Fail(LoadError::Unresolvable { address })],
+                );
+            }
+        }
+
+        id
+    }
+
+    fn process_surface_steps(
+        &mut self,
+        surface: SurfaceId,
+        id: NavigationId,
+        steps: impl IntoIterator<Item = ScriptStep>,
+    ) {
         for step in steps {
             match step {
                 ScriptStep::Redirect { address } => {
@@ -432,17 +678,21 @@ impl HeadlessEngine {
                         id,
                         address: address.clone(),
                     });
-                    self.current = Some(Page::new(address, ""));
-                    self.current_nav = Some(id);
+                    if let Some(s) = self.surfaces.get_mut(&surface) {
+                        s.current = Some(Page::new(address, ""));
+                        s.current_nav = Some(id);
+                    }
                 }
                 ScriptStep::Title { title } => {
                     self.queue.push_back(NavigationEvent::TitleChanged {
                         id,
                         title: title.clone(),
                     });
-                    if self.current_nav == Some(id) {
-                        if let Some(page) = &self.current {
-                            self.current = Some(Page::new(page.address().to_owned(), title));
+                    if let Some(s) = self.surfaces.get_mut(&surface) {
+                        if s.current_nav == Some(id) {
+                            if let Some(page) = &s.current {
+                                s.current = Some(Page::new(page.address().to_owned(), title));
+                            }
                         }
                     }
                 }
@@ -470,49 +720,8 @@ impl Engine for HeadlessEngine {
     }
 
     fn start_navigation(&mut self, request: &Request) -> NavigationId {
-        let address = request.address().to_owned();
-        self.loads.push(address.clone());
-        if let Some(ctx) = &self.context {
-            ctx.loads.borrow_mut().push(address.clone());
-        }
-        let id = self.mint();
-
-        self.queue.push_back(NavigationEvent::Started {
-            id,
-            address: address.clone(),
-        });
-
-        let response = self.responses.get(&address).cloned().or_else(|| {
-            self.context
-                .as_ref()
-                .and_then(|c| c.responses.borrow().get(&address).cloned())
-        });
-
-        match response {
-            Some(Response::Page { title }) => {
-                self.process_steps(
-                    id,
-                    [
-                        ScriptStep::Commit {
-                            address: address.clone(),
-                        },
-                        ScriptStep::Title { title },
-                        ScriptStep::Succeed,
-                    ],
-                );
-            }
-            Some(Response::Fail(error)) => {
-                self.process_steps(id, [ScriptStep::Fail(error)]);
-            }
-            Some(Response::Sequence(steps)) => {
-                self.process_steps(id, steps);
-            }
-            None => {
-                self.process_steps(id, [ScriptStep::Fail(LoadError::Unresolvable { address })]);
-            }
-        }
-
-        id
+        let surface = self.ensure_active_surface();
+        self.start_surface_navigation(surface, request)
     }
 
     fn poll_event(&mut self) -> Option<NavigationEvent> {
@@ -520,7 +729,51 @@ impl Engine for HeadlessEngine {
     }
 
     fn current(&self) -> Option<&Page> {
-        self.current.as_ref()
+        self.active_surface.and_then(|id| self.surface_current(id))
+    }
+
+    fn create_surface(&mut self, store: DataStoreSelector) -> SurfaceId {
+        self.create_surface(store)
+    }
+
+    fn activate_surface(&mut self, surface: SurfaceId) {
+        self.activate_surface(surface);
+    }
+
+    fn suspend_surface(&mut self, surface: SurfaceId) {
+        self.suspend_surface(surface);
+    }
+
+    fn resume_surface(&mut self, surface: SurfaceId) {
+        self.resume_surface(surface);
+    }
+
+    fn close_surface(&mut self, surface: SurfaceId) {
+        self.close_surface(surface);
+    }
+
+    fn active_surface(&self) -> Option<SurfaceId> {
+        self.active_surface()
+    }
+
+    fn surface_data_store(&self, surface: SurfaceId) -> Option<DataStoreSelector> {
+        self.surface_data_store(surface)
+    }
+
+    fn surface_state(&self, surface: SurfaceId) -> Option<SurfaceState> {
+        self.surface_state(surface)
+    }
+
+    fn surface_current(&self, surface: SurfaceId) -> Option<&Page> {
+        self.surface_current(surface)
+    }
+
+    fn start_surface_navigation(&mut self, surface: SurfaceId, request: &Request) -> NavigationId {
+        self.start_surface_navigation(surface, request)
+    }
+
+    fn surface_has_retained_data(&self, surface: SurfaceId) -> bool {
+        self.surface_has_retained_data(surface)
     }
 }
 
@@ -839,6 +1092,157 @@ mod tests {
         assert_eq!(
             host.loads(),
             vec!["https://page1.invalid/", "https://page2.invalid/"]
+        );
+    }
+
+    #[test]
+    fn surfaces_are_independently_addressable() {
+        let mut engine = HeadlessEngine::new()
+            .with_page("https://surface1.invalid/", "Surface 1 Page")
+            .with_page("https://surface2.invalid/", "Surface 2 Page");
+
+        let s1 = engine.create_surface(DataStoreSelector::Persistent);
+        let s2 = engine.create_surface(DataStoreSelector::Persistent);
+        assert_ne!(s1, s2);
+
+        engine.activate_surface(s1);
+        assert_eq!(engine.active_surface(), Some(s1));
+        assert_eq!(engine.surface_state(s1), Some(SurfaceState::Active));
+
+        let _ = engine.start_surface_navigation(s1, &Request::new("https://surface1.invalid/"));
+        while let Some(_event) = engine.poll_event() {}
+
+        assert_eq!(
+            engine.surface_current(s1).map(|p| p.address()),
+            Some("https://surface1.invalid/")
+        );
+        assert_eq!(
+            engine.current().map(|p| p.address()),
+            Some("https://surface1.invalid/")
+        );
+        assert_eq!(engine.surface_current(s2), None);
+
+        // Activate and navigate s2
+        engine.activate_surface(s2);
+        assert_eq!(engine.active_surface(), Some(s2));
+        assert_eq!(engine.surface_state(s1), Some(SurfaceState::Inactive));
+        assert_eq!(engine.surface_state(s2), Some(SurfaceState::Active));
+
+        let _ = engine.start_surface_navigation(s2, &Request::new("https://surface2.invalid/"));
+        while let Some(_event) = engine.poll_event() {}
+
+        assert_eq!(
+            engine.surface_current(s2).map(|p| p.address()),
+            Some("https://surface2.invalid/")
+        );
+        assert_eq!(
+            engine.current().map(|p| p.address()),
+            Some("https://surface2.invalid/")
+        );
+
+        // s1's current page is unchanged
+        assert_eq!(
+            engine.surface_current(s1).map(|p| p.address()),
+            Some("https://surface1.invalid/")
+        );
+        assert_eq!(
+            engine.surface_current(s1).map(|p| p.title()),
+            Some("Surface 1 Page")
+        );
+    }
+
+    #[test]
+    fn surface_suspend_and_resume_preserves_shell_observable_state() {
+        let mut engine = HeadlessEngine::new().with_page("https://page.invalid/", "Observed Title");
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        engine.activate_surface(surface);
+
+        let _ = engine.start_surface_navigation(surface, &Request::new("https://page.invalid/"));
+        while let Some(_event) = engine.poll_event() {}
+
+        assert_eq!(
+            engine.surface_current(surface).map(|p| p.title()),
+            Some("Observed Title")
+        );
+
+        engine.suspend_surface(surface);
+        assert_eq!(engine.surface_state(surface), Some(SurfaceState::Suspended));
+        assert_eq!(
+            engine.surface_current(surface).map(|p| p.title()),
+            Some("Observed Title"),
+            "Suspend must not discard shell-observable page state"
+        );
+
+        engine.resume_surface(surface);
+        assert_eq!(engine.surface_state(surface), Some(SurfaceState::Active));
+        assert_eq!(
+            engine.surface_current(surface).map(|p| p.title()),
+            Some("Observed Title"),
+            "Resume must maintain shell-observable page state"
+        );
+    }
+
+    #[test]
+    fn non_persistent_surface_cleans_up_on_close() {
+        let mut engine = HeadlessEngine::new().with_page("https://page.invalid/", "Private Page");
+        let s_np = engine.create_surface(DataStoreSelector::NonPersistent);
+        let s_p = engine.create_surface(DataStoreSelector::Persistent);
+
+        assert_eq!(
+            engine.surface_data_store(s_np),
+            Some(DataStoreSelector::NonPersistent)
+        );
+        assert_eq!(
+            engine.surface_data_store(s_p),
+            Some(DataStoreSelector::Persistent)
+        );
+
+        let _ = engine.start_surface_navigation(s_np, &Request::new("https://page.invalid/"));
+        let _ = engine.start_surface_navigation(s_p, &Request::new("https://page.invalid/"));
+        while let Some(_event) = engine.poll_event() {}
+
+        assert!(engine.surface_has_retained_data(s_np));
+        assert!(engine.surface_has_retained_data(s_p));
+
+        engine.close_surface(s_np);
+        assert_eq!(engine.surface_state(s_np), Some(SurfaceState::Closed));
+        assert_eq!(engine.surface_current(s_np), None);
+        assert!(
+            !engine.surface_has_retained_data(s_np),
+            "Non-persistent surface must leave nothing behind on close"
+        );
+
+        engine.close_surface(s_p);
+        assert_eq!(engine.surface_state(s_p), Some(SurfaceState::Closed));
+        assert!(
+            engine.surface_has_retained_data(s_p),
+            "Persistent store must retain persistent data after close"
+        );
+    }
+
+    #[test]
+    fn surface_loads_tracked_per_surface() {
+        let mut engine = HeadlessEngine::new()
+            .with_page("https://s1.invalid/", "S1")
+            .with_page("https://s2.invalid/", "S2");
+
+        let s1 = engine.create_surface(DataStoreSelector::Persistent);
+        let s2 = engine.create_surface(DataStoreSelector::Persistent);
+
+        let _ = engine.start_surface_navigation(s1, &Request::new("https://s1.invalid/"));
+        let _ = engine.start_surface_navigation(s2, &Request::new("https://s2.invalid/"));
+
+        assert_eq!(
+            engine.surface_loads(s1),
+            Some(&["https://s1.invalid/".to_string()][..])
+        );
+        assert_eq!(
+            engine.surface_loads(s2),
+            Some(&["https://s2.invalid/".to_string()][..])
+        );
+        assert_eq!(
+            engine.loads(),
+            &["https://s1.invalid/", "https://s2.invalid/"]
         );
     }
 }
