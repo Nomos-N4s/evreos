@@ -9,6 +9,7 @@
 //! 3. The address reported in `Committed` and `current()` is the address that actually loaded.
 //! 4. Event ordering and `NavigationId` correlation are strictly maintained.
 //! 5. A load that never resolves emits `Started` but no outcome event and leaves `current()` unchanged.
+//! 6. `LoadError::Intercepted` is produced from a shell-supplied/scripted classification rather than synthesised from a platform status.
 
 use super::{Engine, LoadError, NavigationEvent, Request};
 
@@ -28,6 +29,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_address_reported_is_address_that_loaded(&make);
     test_event_ordering_and_navigation_id_correlation(&make);
     test_load_that_never_resolves(&make);
+    test_intercepted_from_shell_classification(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -264,4 +266,40 @@ pub fn test_load_that_never_resolves<E: Engine>(make: &impl Fn() -> E) {
         engine.current().is_none(),
         "Hanging load must not set or change current page"
     );
+}
+
+/// Invariant 6: `LoadError::Intercepted` is reported from shell-supplied/scripted classification
+/// rather than from a mapped platform status.
+///
+/// Under decisions/0005, platform error codes contain no value denoting interception.
+/// No backend may synthesise `Intercepted` from a platform status code; an implementation
+/// reporting `Intercepted` does so from a shell-supplied classification (or scripted test classification),
+/// leaving the headless engine as the sole producer today.
+pub fn test_intercepted_from_shell_classification<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+    let url = "https://intercepted.test/";
+    let request = Request::new(url);
+    let nav_id = engine.start_navigation(&request);
+
+    let mut events = Vec::new();
+    while let Some(event) = engine.poll_event() {
+        events.push(event);
+    }
+
+    let failed_event = events
+        .into_iter()
+        .find(|e| matches!(e, NavigationEvent::Failed { .. }));
+    assert!(
+        failed_event.is_some(),
+        "Expected Failed event for intercepted request {url}"
+    );
+
+    if let Some(NavigationEvent::Failed { id, error }) = failed_event {
+        assert_eq!(id, nav_id, "NavigationId mismatch for {url}");
+        assert!(
+            matches!(error, LoadError::Intercepted { .. }),
+            "Expected LoadError::Intercepted for {url}, got {error:?}"
+        );
+        assert_eq!(error.address(), url, "Error address mismatch for {url}");
+    }
 }
