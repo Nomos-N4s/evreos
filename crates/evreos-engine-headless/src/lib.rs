@@ -21,7 +21,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
     CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
-    NavigationEvent, NavigationId, NavigationObservation, Page, Request, SurfaceId, SurfaceState,
+    NavigationEvent, NavigationId, NavigationObservation, Page, Request, SurfaceId,
+    SurfaceIdentity, SurfaceState,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -79,6 +80,8 @@ struct HeadlessSurface {
     store: DataStoreSelector,
     state: SurfaceState,
     epoch: NavigationEpoch,
+    identity: Option<SurfaceIdentity>,
+    hosted_bytes: Option<Vec<u8>>,
     current: Option<Page>,
     current_nav: Option<NavigationId>,
     loads: Vec<String>,
@@ -638,6 +641,8 @@ impl HeadlessEngine {
                 store,
                 state: SurfaceState::Inactive,
                 epoch: NavigationEpoch::FIRST,
+                identity: None,
+                hosted_bytes: None,
                 current: None,
                 current_nav: None,
                 loads: Vec::new(),
@@ -981,6 +986,59 @@ impl HeadlessEngine {
     pub fn poll_observation(&mut self) -> Option<NavigationObservation> {
         self.queue.pop_front()
     }
+
+    /// Host content on `surface` from shell-supplied bytes under `identity`.
+    pub fn host_surface_bytes(
+        &mut self,
+        surface: SurfaceId,
+        identity: SurfaceIdentity,
+        bytes: Vec<u8>,
+    ) -> NavigationId {
+        let id = self.mint();
+        let mut new_epoch = NavigationEpoch::FIRST;
+        let ident_str = identity.as_str().to_string();
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.identity = Some(identity);
+            s.hosted_bytes = Some(bytes);
+            s.epoch = s.epoch.next();
+            new_epoch = s.epoch;
+            s.current = Some(Page::new(ident_str.clone(), ""));
+            s.loads.push(ident_str.clone());
+        }
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Started {
+                id,
+                address: ident_str.clone(),
+            },
+        ));
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Committed {
+                id,
+                address: ident_str,
+            },
+        ));
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Succeeded { id },
+        ));
+        id
+    }
+
+    /// The [`SurfaceIdentity`] currently hosted on `surface`, if any.
+    pub fn surface_identity(&self, surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        self.surfaces
+            .get(&surface)
+            .and_then(|s| s.identity.as_ref())
+    }
+
+    /// The raw bytes currently hosted on `surface`, if any.
+    pub fn surface_hosted_bytes(&self, surface: SurfaceId) -> Option<&[u8]> {
+        self.surfaces
+            .get(&surface)
+            .and_then(|s| s.hosted_bytes.as_deref())
+    }
 }
 
 impl Engine for HeadlessEngine {
@@ -1003,6 +1061,23 @@ impl Engine for HeadlessEngine {
 
     fn poll_observation(&mut self) -> Option<NavigationObservation> {
         self.poll_observation()
+    }
+
+    fn host_surface_bytes(
+        &mut self,
+        surface: SurfaceId,
+        identity: SurfaceIdentity,
+        bytes: Vec<u8>,
+    ) -> NavigationId {
+        self.host_surface_bytes(surface, identity, bytes)
+    }
+
+    fn surface_identity(&self, surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        self.surface_identity(surface)
+    }
+
+    fn surface_hosted_bytes(&self, surface: SurfaceId) -> Option<&[u8]> {
+        self.surface_hosted_bytes(surface)
     }
 
     fn surface_navigation_epoch(&self, surface: SurfaceId) -> NavigationEpoch {
@@ -1697,5 +1772,47 @@ mod tests {
             .poll_event()
             .expect("poll_event returns unwrapped event");
         assert!(matches!(ev, NavigationEvent::SameDocumentNavigated { .. }));
+    }
+
+    #[test]
+    fn hosted_surface_from_shell_supplied_bytes() {
+        let mut engine = HeadlessEngine::new();
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        let identity = SurfaceIdentity::new("app://local-ledger");
+        let html_bytes = b"<!DOCTYPE html><html><body>Ledger UI</body></html>".to_vec();
+
+        let nav_id = engine.host_surface_bytes(surface, identity.clone(), html_bytes.clone());
+
+        assert_eq!(engine.surface_identity(surface), Some(&identity));
+        assert_eq!(engine.surface_hosted_bytes(surface), Some(&html_bytes[..]));
+        assert_eq!(
+            engine.surface_current(surface).map(|p| p.address()),
+            Some("app://local-ledger")
+        );
+
+        let mut events = Vec::new();
+        while let Some(obs) = engine.poll_observation() {
+            events.push(obs);
+        }
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(
+            events[0].event(),
+            &NavigationEvent::Started {
+                id: nav_id,
+                address: "app://local-ledger".into(),
+            }
+        );
+        assert_eq!(
+            events[1].event(),
+            &NavigationEvent::Committed {
+                id: nav_id,
+                address: "app://local-ledger".into(),
+            }
+        );
+        assert_eq!(
+            events[2].event(),
+            &NavigationEvent::Succeeded { id: nav_id }
+        );
     }
 }

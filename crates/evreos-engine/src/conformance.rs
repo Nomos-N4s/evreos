@@ -16,10 +16,11 @@
 //! 10. A non-persistent store leaves nothing behind when its surface closes.
 //! 11. The per-surface blocked count is observable to the shell, isolated across surfaces, reset on re-navigation, and honors site exemptions and policy replacement.
 //! 12. A navigation observation carries an epoch that increments on every change of address, same-document navigation included, defining an FR-018a navigation and bounding an occasion.
+//! 13. Hosting a surface from shell-supplied bytes under a shell-chosen identity ensures no scheme or protocol vocabulary enters the trait and FR-019a verification precedes rendering and caching.
 
 use super::{
     CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
-    NavigationEvent, Request, SurfaceState,
+    NavigationEvent, Request, SurfaceIdentity, SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -45,6 +46,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_non_persistent_store_leaves_nothing_on_close(&make);
     test_surface_blocked_count_observable(&make);
     test_navigation_epoch_increments_on_every_address_change(&make);
+    test_host_surface_from_bytes_under_shell_identity(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -712,6 +714,61 @@ pub fn test_navigation_epoch_increments_on_every_address_change<E: Engine>(make:
         same_doc_obs.unwrap().epoch(),
         epoch_after_same_doc,
         "SameDocumentNavigated observation must carry incremented epoch"
+    );
+}
+
+/// Invariant 13: Hosting a surface from shell-supplied bytes under a shell-chosen identity
+/// ensures no scheme or protocol vocabulary enters the trait, allowing FR-019a's verification
+/// to precede rendering and caching.
+pub fn test_host_surface_from_bytes_under_shell_identity<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+    let surface = engine.create_surface(DataStoreSelector::Persistent);
+    let identity = SurfaceIdentity::new("app://verified-app");
+    let payload = b"<!DOCTYPE html><html><body>Verified Content</body></html>".to_vec();
+
+    let nav_id = engine.host_surface_bytes(surface, identity.clone(), payload.clone());
+
+    assert_eq!(
+        engine.surface_identity(surface),
+        Some(&identity),
+        "surface_identity must return shell-chosen identity"
+    );
+    assert_eq!(
+        engine.surface_hosted_bytes(surface),
+        Some(&payload[..]),
+        "surface_hosted_bytes must return shell-supplied bytes"
+    );
+
+    let mut observations = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        observations.push(obs);
+    }
+
+    assert!(
+        !observations.is_empty(),
+        "host_surface_bytes must emit navigation observations"
+    );
+    let has_started = observations.iter().any(|obs| {
+        matches!(obs.event(), NavigationEvent::Started { id, address } if *id == nav_id && address == identity.as_str())
+    });
+    let has_committed = observations.iter().any(|obs| {
+        matches!(obs.event(), NavigationEvent::Committed { id, address } if *id == nav_id && address == identity.as_str())
+    });
+    let has_succeeded = observations
+        .iter()
+        .any(|obs| matches!(obs.event(), NavigationEvent::Succeeded { id } if *id == nav_id));
+
+    assert!(
+        has_started,
+        "Must emit Started observation for hosted surface"
+    );
+    assert!(
+        has_committed,
+        "Must emit Committed observation for hosted surface"
+    );
+    assert!(
+        has_succeeded,
+        "Must emit Succeeded observation for hosted surface"
     );
 }
 

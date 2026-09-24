@@ -491,6 +491,51 @@ impl NavigationEvent {
     }
 }
 
+/// An identifier for a surface hosted from shell-supplied bytes.
+///
+/// Under FR-019a, verification of signed app surface bytes precedes rendering
+/// and caching. The shell hands the verified bytes directly to the engine under
+/// a shell-chosen [`SurfaceIdentity`], ensuring that no custom URL scheme or
+/// protocol vocabulary (e.g. `evreos-app://` or `file://`) leaks into the trait.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SurfaceIdentity(String);
+
+impl SurfaceIdentity {
+    /// Create a new surface identity.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// The string representation of this surface identity.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for SurfaceIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for SurfaceIdentity {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for SurfaceIdentity {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for SurfaceIdentity {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
 /// A monotonic counter bounding a navigation occasion.
 ///
 /// Under FR-018a: "Every change of address the member observes is a navigation,
@@ -741,6 +786,31 @@ pub trait Engine {
     /// The list of URLs or resource identifiers that were blocked on `surface` during the current page load.
     fn surface_blocked_items(&self, _surface: SurfaceId) -> Vec<String> {
         Vec::new()
+    }
+
+    // Seam Addition: Host surface from shell-supplied bytes (FR-019a)
+    /// Host content on `surface` from shell-supplied `bytes` under a shell-chosen `identity`.
+    ///
+    /// Under FR-019a, the shell verifies signed app surfaces before rendering or
+    /// writing to cache, supplying the verified bytes directly to the engine without
+    /// leaking custom scheme or protocol vocabulary into the trait.
+    fn host_surface_bytes(
+        &mut self,
+        _surface: SurfaceId,
+        _identity: SurfaceIdentity,
+        _bytes: Vec<u8>,
+    ) -> NavigationId {
+        NavigationId::FIRST
+    }
+
+    /// The [`SurfaceIdentity`] currently hosted on `surface`, if any.
+    fn surface_identity(&self, _surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        None
+    }
+
+    /// The raw bytes currently hosted on `surface`, if any.
+    fn surface_hosted_bytes(&self, _surface: SurfaceId) -> Option<&[u8]> {
+        None
     }
 
     // Seam Addition: Navigation observation carrying an epoch (FR-018a)
@@ -1091,5 +1161,15 @@ mod tests {
         assert_eq!(obs.epoch(), epoch2);
         assert_eq!(obs.event(), &event);
         assert_eq!(obs.into_event(), event);
+    }
+
+    #[test]
+    fn surface_identity_type() {
+        let ident = SurfaceIdentity::new("app.home.v1");
+        assert_eq!(ident.as_str(), "app.home.v1");
+        assert_eq!(ident.to_string(), "app.home.v1");
+        let ident2: SurfaceIdentity = "app.home.v1".into();
+        assert_eq!(ident, ident2);
+        assert_eq!(ident.as_ref(), "app.home.v1");
     }
 }
