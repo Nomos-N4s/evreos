@@ -15,10 +15,11 @@
 //! 9. Suspend and resume lose no state the shell can observe.
 //! 10. A non-persistent store leaves nothing behind when its surface closes.
 //! 11. The per-surface blocked count is observable to the shell, isolated across surfaces, reset on re-navigation, and honors site exemptions and policy replacement.
+//! 12. A navigation observation carries an epoch that increments on every change of address, same-document navigation included, defining an FR-018a navigation and bounding an occasion.
 
 use super::{
-    CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, Request,
-    SurfaceState,
+    CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
+    NavigationEvent, Request, SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -43,6 +44,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_suspend_and_resume_preserve_surface_state(&make);
     test_non_persistent_store_leaves_nothing_on_close(&make);
     test_surface_blocked_count_observable(&make);
+    test_navigation_epoch_increments_on_every_address_change(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -652,6 +654,64 @@ pub fn test_surface_blocked_count_observable<E: Engine>(make: &impl Fn() -> E) {
         engine.surface_blocked_count(s1),
         0,
         "Navigating to clean page must reset surface blocked count to 0"
+    );
+}
+
+/// Invariant 12: A navigation observation carries an epoch that increments on every change of
+/// address, including same-document navigations, defining an FR-018a navigation and bounding
+/// an occasion.
+pub fn test_navigation_epoch_increments_on_every_address_change<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+    let surface = engine.create_surface(DataStoreSelector::Persistent);
+    let initial_epoch = engine.surface_navigation_epoch(surface);
+    assert_eq!(initial_epoch, NavigationEpoch::FIRST);
+
+    // Initial navigation to success page
+    let req = Request::new("https://success.test/");
+    let nav_id1 = engine.start_surface_navigation(surface, &req);
+    let mut obs1 = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        obs1.push(obs);
+    }
+    let epoch_after_nav = engine.surface_navigation_epoch(surface);
+    assert!(
+        epoch_after_nav.as_u64() > initial_epoch.as_u64(),
+        "Epoch must increment when regular navigation commits"
+    );
+
+    let committed_obs = obs1
+        .iter()
+        .find(|obs| matches!(obs.event(), NavigationEvent::Committed { id, .. } if *id == nav_id1));
+    assert!(committed_obs.is_some(), "Must emit Committed observation");
+    assert_eq!(
+        committed_obs.unwrap().epoch(),
+        epoch_after_nav,
+        "Committed observation must carry epoch active at commit"
+    );
+
+    // Same-document navigation (FR-018a)
+    let nav_id2 = engine.navigate_same_document(surface, "https://success.test/#section2");
+    let epoch_after_same_doc = engine.surface_navigation_epoch(surface);
+    assert!(
+        epoch_after_same_doc.as_u64() > epoch_after_nav.as_u64(),
+        "Epoch must increment on same-document navigation"
+    );
+
+    let mut obs2 = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        obs2.push(obs);
+    }
+    let same_doc_obs = obs2
+        .iter()
+        .find(|obs| matches!(obs.event(), NavigationEvent::SameDocumentNavigated { id, address } if *id == nav_id2 && address == "https://success.test/#section2"));
+    assert!(
+        same_doc_obs.is_some(),
+        "Must emit SameDocumentNavigated observation"
+    );
+    assert_eq!(
+        same_doc_obs.unwrap().epoch(),
+        epoch_after_same_doc,
+        "SameDocumentNavigated observation must carry incremented epoch"
     );
 }
 

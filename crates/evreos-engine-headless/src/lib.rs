@@ -20,8 +20,8 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent,
-    NavigationId, Page, Request, SurfaceId, SurfaceState,
+    CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
+    NavigationEvent, NavigationId, NavigationObservation, Page, Request, SurfaceId, SurfaceState,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -78,6 +78,7 @@ struct HeadlessSurface {
     _id: SurfaceId,
     store: DataStoreSelector,
     state: SurfaceState,
+    epoch: NavigationEpoch,
     current: Option<Page>,
     current_nav: Option<NavigationId>,
     loads: Vec<String>,
@@ -286,7 +287,7 @@ impl EngineHost for HeadlessHost {
 pub struct HeadlessEngine {
     context_id: ContextId,
     responses: HashMap<String, Response>,
-    queue: VecDeque<NavigationEvent>,
+    queue: VecDeque<NavigationObservation>,
     next_id: Option<NavigationId>,
     next_surface_id: Option<SurfaceId>,
     active_surface: Option<SurfaceId>,
@@ -454,8 +455,15 @@ impl HeadlessEngine {
         let surface = self.ensure_active_surface();
         let addr = address.into();
         let id = self.mint();
-        self.queue
-            .push_back(NavigationEvent::Started { id, address: addr });
+        let epoch = self
+            .surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST);
+        self.queue.push_back(NavigationObservation::new(
+            epoch,
+            NavigationEvent::Started { id, address: addr },
+        ));
         self.process_surface_steps(surface, id, steps);
         self
     }
@@ -629,6 +637,7 @@ impl HeadlessEngine {
                 _id: id,
                 store,
                 state: SurfaceState::Inactive,
+                epoch: NavigationEpoch::FIRST,
                 current: None,
                 current_nav: None,
                 loads: Vec::new(),
@@ -801,10 +810,19 @@ impl HeadlessEngine {
 
         let id = self.mint();
 
-        self.queue.push_back(NavigationEvent::Started {
-            id,
-            address: address.clone(),
-        });
+        let epoch = self
+            .surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST);
+
+        self.queue.push_back(NavigationObservation::new(
+            epoch,
+            NavigationEvent::Started {
+                id,
+                address: address.clone(),
+            },
+        ));
 
         let response = self
             .responses
@@ -864,45 +882,104 @@ impl HeadlessEngine {
         steps: impl IntoIterator<Item = ScriptStep>,
     ) {
         for step in steps {
+            let mut epoch = self
+                .surfaces
+                .get(&surface)
+                .map(|s| s.epoch)
+                .unwrap_or(NavigationEpoch::FIRST);
             match step {
                 ScriptStep::Redirect { address } => {
-                    self.queue
-                        .push_back(NavigationEvent::Redirected { id, address });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Redirected { id, address },
+                    ));
                 }
                 ScriptStep::Commit { address } => {
-                    self.queue.push_back(NavigationEvent::Committed {
-                        id,
-                        address: address.clone(),
-                    });
                     if let Some(s) = self.surfaces.get_mut(&surface) {
-                        s.current = Some(Page::new(address, ""));
+                        s.epoch = s.epoch.next();
+                        epoch = s.epoch;
+                        s.current = Some(Page::new(address.clone(), ""));
                         s.current_nav = Some(id);
                     }
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Committed { id, address },
+                    ));
                 }
                 ScriptStep::Title { title } => {
-                    self.queue.push_back(NavigationEvent::TitleChanged {
-                        id,
-                        title: title.clone(),
-                    });
                     if let Some(s) = self.surfaces.get_mut(&surface) {
                         if s.current_nav == Some(id) {
                             if let Some(page) = &s.current {
-                                s.current = Some(Page::new(page.address().to_owned(), title));
+                                s.current =
+                                    Some(Page::new(page.address().to_owned(), title.clone()));
                             }
                         }
                     }
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::TitleChanged { id, title },
+                    ));
                 }
                 ScriptStep::Succeed => {
-                    self.queue.push_back(NavigationEvent::Succeeded { id });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Succeeded { id },
+                    ));
                 }
                 ScriptStep::Fail(error) => {
-                    self.queue.push_back(NavigationEvent::Failed { id, error });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Failed { id, error },
+                    ));
                 }
                 ScriptStep::NavigateAway => {
-                    self.queue.push_back(NavigationEvent::NavigatedAway { id });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::NavigatedAway { id },
+                    ));
                 }
             }
         }
+    }
+
+    /// The current [`NavigationEpoch`] of `surface`.
+    pub fn surface_navigation_epoch(&self, surface: SurfaceId) -> NavigationEpoch {
+        self.surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST)
+    }
+
+    /// Perform a same-document navigation on `surface` to `address`.
+    pub fn navigate_same_document(
+        &mut self,
+        surface: SurfaceId,
+        address: impl Into<String>,
+    ) -> NavigationId {
+        let id = self.mint();
+        let addr = address.into();
+        let mut new_epoch = NavigationEpoch::FIRST;
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.epoch = s.epoch.next();
+            new_epoch = s.epoch;
+            let title = s
+                .current
+                .as_ref()
+                .map(|p| p.title().to_string())
+                .unwrap_or_default();
+            s.current = Some(Page::new(addr.clone(), title));
+            s.loads.push(addr.clone());
+        }
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::SameDocumentNavigated { id, address: addr },
+        ));
+        id
+    }
+
+    /// Poll the next navigation observation from the engine, if any is ready.
+    pub fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.queue.pop_front()
     }
 }
 
@@ -921,7 +998,19 @@ impl Engine for HeadlessEngine {
     }
 
     fn poll_event(&mut self) -> Option<NavigationEvent> {
-        self.queue.pop_front()
+        self.queue.pop_front().map(|obs| obs.into_event())
+    }
+
+    fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.poll_observation()
+    }
+
+    fn surface_navigation_epoch(&self, surface: SurfaceId) -> NavigationEpoch {
+        self.surface_navigation_epoch(surface)
+    }
+
+    fn navigate_same_document(&mut self, surface: SurfaceId, address: &str) -> NavigationId {
+        self.navigate_same_document(surface, address)
     }
 
     fn current(&self) -> Option<&Page> {
@@ -1554,5 +1643,59 @@ mod tests {
         // Re-navigating s1 to site-b resets s1's count
         let _ = engine.start_surface_navigation(s1, &Request::new("https://site-b.test/"));
         assert_eq!(engine.surface_blocked_count(s1), 0);
+    }
+
+    #[test]
+    fn navigation_epoch_increments_on_regular_and_same_document_navigation() {
+        let mut engine = HeadlessEngine::new().with_page("https://example.test/", "Home");
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        assert_eq!(
+            engine.surface_navigation_epoch(surface),
+            NavigationEpoch::FIRST
+        );
+
+        // Regular navigation
+        let nav1 = engine.start_surface_navigation(surface, &Request::new("https://example.test/"));
+        let obs1 = engine.poll_observation().expect("Started obs");
+        assert_eq!(obs1.epoch(), NavigationEpoch::FIRST); // Started before commit
+        assert_eq!(
+            obs1.event(),
+            &NavigationEvent::Started {
+                id: nav1,
+                address: "https://example.test/".into(),
+            }
+        );
+
+        let obs2 = engine.poll_observation().expect("Committed obs");
+        let expected_epoch = NavigationEpoch::FIRST.next();
+        assert_eq!(obs2.epoch(), expected_epoch);
+        assert_eq!(engine.surface_navigation_epoch(surface), expected_epoch);
+
+        let _ = engine.poll_observation(); // TitleChanged
+        let _ = engine.poll_observation(); // Succeeded
+
+        // Same document navigation
+        let nav2 = engine.navigate_same_document(surface, "https://example.test/#section");
+        let next_epoch = expected_epoch.next();
+        assert_eq!(engine.surface_navigation_epoch(surface), next_epoch);
+
+        let obs3 = engine
+            .poll_observation()
+            .expect("SameDocumentNavigated obs");
+        assert_eq!(obs3.epoch(), next_epoch);
+        assert_eq!(
+            obs3.event(),
+            &NavigationEvent::SameDocumentNavigated {
+                id: nav2,
+                address: "https://example.test/#section".into(),
+            }
+        );
+
+        // Confirm poll_event returns unwrapped NavigationEvent
+        let _ = engine.navigate_same_document(surface, "https://example.test/#another");
+        let ev = engine
+            .poll_event()
+            .expect("poll_event returns unwrapped event");
+        assert!(matches!(ev, NavigationEvent::SameDocumentNavigated { .. }));
     }
 }

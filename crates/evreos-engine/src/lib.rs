@@ -463,6 +463,8 @@ pub enum NavigationEvent {
     Redirected { id: NavigationId, address: String },
     /// The engine is now rendering the response from `address`.
     Committed { id: NavigationId, address: String },
+    /// A same-document navigation occurred without full document re-render.
+    SameDocumentNavigated { id: NavigationId, address: String },
     /// The committed navigation finished loading.
     Succeeded { id: NavigationId },
     /// The navigation did not commit, for the cause carried.
@@ -480,11 +482,86 @@ impl NavigationEvent {
             Self::Started { id, .. }
             | Self::Redirected { id, .. }
             | Self::Committed { id, .. }
+            | Self::SameDocumentNavigated { id, .. }
             | Self::Succeeded { id }
             | Self::Failed { id, .. }
             | Self::TitleChanged { id, .. }
             | Self::NavigatedAway { id } => *id,
         }
+    }
+}
+
+/// A monotonic counter bounding a navigation occasion.
+///
+/// Under FR-018a: "Every change of address the member observes is a navigation,
+/// including one the page performs without fetching a new document."
+/// The navigation epoch increments on every change of address (same-document
+/// navigation included), scoping a member occasion, click-out completion,
+/// and cashback offer control lifetime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NavigationEpoch(u64);
+
+impl NavigationEpoch {
+    /// The initial navigation epoch for a newly created surface.
+    pub const FIRST: Self = Self(1);
+
+    /// Construct an epoch from a raw counter value.
+    pub const fn new(val: u64) -> Self {
+        Self(val)
+    }
+
+    /// The underlying raw monotonic counter value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The underlying raw monotonic counter value as `u64`.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Return the next sequential epoch.
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for NavigationEpoch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "epoch:{}", self.0)
+    }
+}
+
+/// An observation emitted by the engine pairing a [`NavigationEvent`] with the
+/// active [`NavigationEpoch`].
+///
+/// Under FR-018a, the navigation epoch increments on every change to the address
+/// the member is on, including same-document navigations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationObservation {
+    epoch: NavigationEpoch,
+    event: NavigationEvent,
+}
+
+impl NavigationObservation {
+    /// Create a new navigation observation pairing an epoch with an event.
+    pub fn new(epoch: NavigationEpoch, event: NavigationEvent) -> Self {
+        Self { epoch, event }
+    }
+
+    /// The active navigation epoch at the moment this event was observed.
+    pub fn epoch(&self) -> NavigationEpoch {
+        self.epoch
+    }
+
+    /// The underlying navigation event.
+    pub fn event(&self) -> &NavigationEvent {
+        &self.event
+    }
+
+    /// Consume the observation, returning the underlying navigation event.
+    pub fn into_event(self) -> NavigationEvent {
+        self.event
     }
 }
 
@@ -664,6 +741,31 @@ pub trait Engine {
     /// The list of URLs or resource identifiers that were blocked on `surface` during the current page load.
     fn surface_blocked_items(&self, _surface: SurfaceId) -> Vec<String> {
         Vec::new()
+    }
+
+    // Seam Addition: Navigation observation carrying an epoch (FR-018a)
+    /// Poll the next navigation observation from the engine, if any is ready.
+    ///
+    /// Unlike [`poll_event`](Self::poll_event), this observation carries the [`NavigationEpoch`]
+    /// active at the moment the event occurred.
+    fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.poll_event()
+            .map(|event| NavigationObservation::new(NavigationEpoch::FIRST, event))
+    }
+
+    /// The current [`NavigationEpoch`] of `surface`.
+    ///
+    /// Under FR-018a, the epoch increments on every change to the address,
+    /// including same-document navigations.
+    fn surface_navigation_epoch(&self, _surface: SurfaceId) -> NavigationEpoch {
+        NavigationEpoch::FIRST
+    }
+
+    /// Perform a same-document navigation on `surface` to `address` (e.g. fragment identifier or history API).
+    ///
+    /// Under FR-018a, this updates the address without full document re-render and increments the navigation epoch.
+    fn navigate_same_document(&mut self, _surface: SurfaceId, _address: &str) -> NavigationId {
+        NavigationId::FIRST
     }
 }
 
@@ -968,5 +1070,26 @@ mod tests {
         assert_ne!(host1.context_id(), host2.context_id());
         assert!(engine1_a.shares_context_with(&engine1_b));
         assert!(!engine1_a.shares_context_with(&engine2));
+    }
+
+    #[test]
+    fn navigation_epoch_and_observation_types() {
+        let epoch1 = NavigationEpoch::FIRST;
+        assert_eq!(epoch1.get(), 1);
+        assert_eq!(epoch1.as_u64(), 1);
+        let epoch2 = epoch1.next();
+        assert_eq!(epoch2.get(), 2);
+        assert_eq!(epoch1.to_string(), "epoch:1");
+
+        let event = NavigationEvent::SameDocumentNavigated {
+            id: NavigationId::FIRST,
+            address: "https://example.test/#section".into(),
+        };
+        assert_eq!(event.id(), NavigationId::FIRST);
+
+        let obs = NavigationObservation::new(epoch2, event.clone());
+        assert_eq!(obs.epoch(), epoch2);
+        assert_eq!(obs.event(), &event);
+        assert_eq!(obs.into_event(), event);
     }
 }

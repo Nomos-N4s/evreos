@@ -177,6 +177,10 @@ impl<C: Clock> NavigationTracker<C> {
             NavigationEvent::NavigatedAway { .. } => {
                 self.navigations.insert(id, NavigationState::NavigatedAway);
             }
+            NavigationEvent::SameDocumentNavigated { address, .. } => {
+                self.navigations
+                    .insert(id, NavigationState::Committed { address });
+            }
         }
     }
 
