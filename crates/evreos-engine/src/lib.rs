@@ -22,6 +22,9 @@
 
 #![forbid(unsafe_code)]
 
+#[cfg(feature = "conformance")]
+pub mod conformance;
+
 use core::fmt;
 
 /// What the shell asks an engine to render.

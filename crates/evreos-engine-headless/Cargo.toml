@@ -9,5 +9,8 @@ publish.workspace = true
 [dependencies]
 evreos-engine = { path = "../evreos-engine" }
 
+[dev-dependencies]
+evreos-engine = { path = "../evreos-engine", features = ["conformance"] }
+
 [lints]
 workspace = true
