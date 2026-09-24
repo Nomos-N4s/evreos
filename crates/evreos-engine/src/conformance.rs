@@ -11,8 +11,13 @@
 //! 5. A load that never resolves emits `Started` but no outcome event and leaves `current()` unchanged.
 //! 6. `LoadError::Intercepted` is produced from a shell-supplied/scripted classification rather than synthesised from a platform status.
 //! 7. Instances minted from one host share a context and instances from two hosts do not.
+//! 8. Surfaces are independently addressable and navigation on one does not affect another.
+//! 9. Suspend and resume lose no state the shell can observe.
+//! 10. A non-persistent store leaves nothing behind when its surface closes.
 
-use super::{Engine, EngineHost, LoadError, NavigationEvent, Request};
+use super::{
+    DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, Request, SurfaceState,
+};
 
 /// Run the full conformance test battery against an engine instance factory.
 ///
@@ -31,6 +36,9 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_event_ordering_and_navigation_id_correlation(&make);
     test_load_that_never_resolves(&make);
     test_intercepted_from_shell_classification(&make);
+    test_surfaces_are_independently_addressable(&make);
+    test_suspend_and_resume_preserve_surface_state(&make);
+    test_non_persistent_store_leaves_nothing_on_close(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -303,6 +311,221 @@ pub fn test_intercepted_from_shell_classification<E: Engine>(make: &impl Fn() ->
         );
         assert_eq!(error.address(), url, "Error address mismatch for {url}");
     }
+}
+
+/// Invariant 8: Surfaces are independently addressable; navigation on one does not affect another.
+///
+/// Under FR-001, FR-002, and FR-016, rendering surfaces must be independently addressable.
+/// Navigating one surface updates only that surface's current page and document title,
+/// leaving other surfaces unaffected.
+pub fn test_surfaces_are_independently_addressable<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+
+    let s1 = engine.create_surface(DataStoreSelector::Persistent);
+    let s2 = engine.create_surface(DataStoreSelector::Persistent);
+    assert_ne!(s1, s2, "Surfaces must have distinct identifiers");
+
+    engine.activate_surface(s1);
+    assert_eq!(engine.active_surface(), Some(s1));
+    assert_eq!(engine.surface_state(s1), Some(SurfaceState::Active));
+
+    let req1 = Request::new("https://success.test/");
+    let _nav1 = engine.start_surface_navigation(s1, &req1);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_current(s1).map(|p| p.address()),
+        Some("https://success.test/")
+    );
+    assert_eq!(
+        engine.surface_current(s1).map(|p| p.title()),
+        Some("Success Page")
+    );
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://success.test/")
+    );
+    assert_eq!(
+        engine.surface_current(s2),
+        None,
+        "Surface 2 must not be affected by navigation on surface 1"
+    );
+
+    engine.activate_surface(s2);
+    assert_eq!(engine.active_surface(), Some(s2));
+    assert_eq!(engine.surface_state(s2), Some(SurfaceState::Active));
+    assert_eq!(engine.surface_state(s1), Some(SurfaceState::Inactive));
+
+    let req2 = Request::new("https://redirect-source.test/");
+    let _nav2 = engine.start_surface_navigation(s2, &req2);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_current(s2).map(|p| p.address()),
+        Some("https://redirect-target.test/")
+    );
+    assert_eq!(
+        engine.surface_current(s2).map(|p| p.title()),
+        Some("Redirected Page")
+    );
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://redirect-target.test/")
+    );
+
+    // Verify surface 1's current page was completely unaffected.
+    assert_eq!(
+        engine.surface_current(s1).map(|p| p.address()),
+        Some("https://success.test/"),
+        "Surface 1 page address was corrupted by navigation on surface 2"
+    );
+    assert_eq!(
+        engine.surface_current(s1).map(|p| p.title()),
+        Some("Success Page"),
+        "Surface 1 title was corrupted by navigation on surface 2"
+    );
+
+    // Switch back to surface 1; active surface changes without re-navigation.
+    engine.activate_surface(s1);
+    assert_eq!(engine.active_surface(), Some(s1));
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://success.test/")
+    );
+    assert_eq!(engine.current().map(|p| p.title()), Some("Success Page"));
+}
+
+/// Invariant 9: Suspend and resume lose no state the shell can observe.
+///
+/// Under FR-002, background or inactive surfaces can be suspended to conserve memory.
+/// Suspending and resuming a surface preserves all shell-observable state (such as the
+/// current page address and title) without losing state or forcing a re-navigation.
+pub fn test_suspend_and_resume_preserve_surface_state<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+
+    let surface = engine.create_surface(DataStoreSelector::Persistent);
+    engine.activate_surface(surface);
+
+    let req = Request::new("https://success.test/");
+    let _nav = engine.start_surface_navigation(surface, &req);
+    while let Some(_event) = engine.poll_event() {}
+
+    let page_before = engine
+        .surface_current(surface)
+        .expect("Page should be present after success")
+        .clone();
+    assert_eq!(page_before.address(), "https://success.test/");
+    assert_eq!(page_before.title(), "Success Page");
+
+    // Suspend the surface.
+    engine.suspend_surface(surface);
+    assert_eq!(
+        engine.surface_state(surface),
+        Some(SurfaceState::Suspended),
+        "Surface state should be Suspended after suspend_surface"
+    );
+
+    // Shell-observable state must not be lost while suspended.
+    let page_suspended = engine
+        .surface_current(surface)
+        .expect("Surface current page must be preserved while suspended");
+    assert_eq!(
+        page_suspended.address(),
+        page_before.address(),
+        "Address lost during suspend"
+    );
+    assert_eq!(
+        page_suspended.title(),
+        page_before.title(),
+        "Title lost during suspend"
+    );
+
+    // Resume the surface.
+    engine.resume_surface(surface);
+    assert_eq!(
+        engine.surface_state(surface),
+        Some(SurfaceState::Active),
+        "Surface state should be Active after resume_surface"
+    );
+
+    // Shell-observable state must still be preserved after resume.
+    let page_resumed = engine
+        .surface_current(surface)
+        .expect("Surface current page must be preserved after resume");
+    assert_eq!(
+        page_resumed.address(),
+        page_before.address(),
+        "Address lost after resume"
+    );
+    assert_eq!(
+        page_resumed.title(),
+        page_before.title(),
+        "Title lost after resume"
+    );
+}
+
+/// Invariant 10: A non-persistent store leaves nothing behind when its surface closes.
+///
+/// Under FR-007, a private surface's data store is isolated and non-persistent.
+/// When the surface is closed, its data store is destroyed completely, leaving no
+/// browsing traces behind, whereas a persistent store retains data across closure.
+pub fn test_non_persistent_store_leaves_nothing_on_close<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+
+    let s_np = engine.create_surface(DataStoreSelector::NonPersistent);
+    let s_p = engine.create_surface(DataStoreSelector::Persistent);
+
+    assert_eq!(
+        engine.surface_data_store(s_np),
+        Some(DataStoreSelector::NonPersistent)
+    );
+    assert_eq!(
+        engine.surface_data_store(s_p),
+        Some(DataStoreSelector::Persistent)
+    );
+
+    // Navigate both surfaces so they accumulate data.
+    engine.activate_surface(s_np);
+    let _ = engine.start_surface_navigation(s_np, &Request::new("https://success.test/"));
+    while let Some(_event) = engine.poll_event() {}
+
+    engine.activate_surface(s_p);
+    let _ = engine.start_surface_navigation(s_p, &Request::new("https://success.test/"));
+    while let Some(_event) = engine.poll_event() {}
+
+    assert!(
+        engine.surface_has_retained_data(s_np),
+        "Non-persistent surface must have session data while active"
+    );
+    assert!(
+        engine.surface_has_retained_data(s_p),
+        "Persistent surface must have session data while active"
+    );
+
+    // Close the non-persistent surface.
+    engine.close_surface(s_np);
+
+    assert_eq!(
+        engine.surface_state(s_np),
+        Some(SurfaceState::Closed),
+        "Surface state must be Closed after close_surface"
+    );
+    assert_eq!(
+        engine.surface_current(s_np),
+        None,
+        "Closed surface must have no current page"
+    );
+    assert!(
+        !engine.surface_has_retained_data(s_np),
+        "Non-persistent store MUST leave nothing behind when closed (FR-007)"
+    );
+
+    // Close the persistent surface and verify persistent data remains.
+    engine.close_surface(s_p);
+    assert!(
+        engine.surface_has_retained_data(s_p),
+        "Persistent store must retain persistent data even after surface closes"
+    );
 }
 
 /// Invariant 7: Instances minted from one host share a platform context and instances from two hosts do not.

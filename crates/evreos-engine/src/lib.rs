@@ -210,6 +210,116 @@ impl fmt::Display for ContextId {
     }
 }
 
+/// Identifies one addressable rendering surface within an [`Engine`].
+///
+/// Minted by the engine and opaque to the shell, which only ever stores,
+/// compares, and hashes it. There is no public constructor from an integer,
+/// so no integer semantics enter the seam — the id is a correlation token,
+/// not a capability, and [`SurfaceId::FIRST`] with [`SurfaceId::next`]
+/// makes the minting sequence public rather than secret. An engine with
+/// platform surface or window identifiers of its own maps them to these
+/// rather than exposing them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct SurfaceId(u64);
+
+impl SurfaceId {
+    /// The first surface id an engine mints.
+    pub const FIRST: SurfaceId = SurfaceId(0);
+
+    /// The id minted after this one. An engine mints sequentially from
+    /// [`SurfaceId::FIRST`], one sequence per engine instance.
+    #[must_use]
+    pub fn next(self) -> SurfaceId {
+        SurfaceId(self.0 + 1)
+    }
+}
+
+impl fmt::Display for SurfaceId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "surface-{}", self.0)
+    }
+}
+
+/// Distinguishes the persistent data store from a non-persistent one.
+///
+/// Under FR-007 and ADR-0001, a normal window or tab uses a persistent data
+/// store, whereas private browsing requires a distinct non-persistent store
+/// that leaves no browsing traces behind when its surface closes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum DataStoreSelector {
+    /// The default persistent data store used for normal browsing.
+    #[default]
+    Persistent,
+    /// A distinct, isolated, non-persistent data store for private browsing (FR-007).
+    NonPersistent,
+}
+
+impl DataStoreSelector {
+    /// Whether this selector designates a persistent data store.
+    pub fn is_persistent(self) -> bool {
+        matches!(self, Self::Persistent)
+    }
+
+    /// Whether this selector designates a non-persistent data store.
+    pub fn is_non_persistent(self) -> bool {
+        matches!(self, Self::NonPersistent)
+    }
+}
+
+impl fmt::Display for DataStoreSelector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Persistent => write!(f, "persistent"),
+            Self::NonPersistent => write!(f, "non-persistent"),
+        }
+    }
+}
+
+/// The lifecycle state of an addressable rendering surface.
+///
+/// Surfaces transition between these states through [`Engine::create_surface`],
+/// [`Engine::activate_surface`], [`Engine::suspend_surface`],
+/// [`Engine::resume_surface`], and [`Engine::close_surface`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SurfaceState {
+    /// The surface is active and in the foreground.
+    Active,
+    /// The surface is inactive (e.g. a background tab).
+    Inactive,
+    /// The surface is suspended to conserve memory and resources (FR-002).
+    Suspended,
+    /// The surface has been closed and destroyed.
+    Closed,
+}
+
+impl SurfaceState {
+    /// Whether the surface is currently active.
+    pub fn is_active(self) -> bool {
+        matches!(self, Self::Active)
+    }
+
+    /// Whether the surface is currently suspended.
+    pub fn is_suspended(self) -> bool {
+        matches!(self, Self::Suspended)
+    }
+
+    /// Whether the surface is closed.
+    pub fn is_closed(self) -> bool {
+        matches!(self, Self::Closed)
+    }
+}
+
+impl fmt::Display for SurfaceState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Active => write!(f, "active"),
+            Self::Inactive => write!(f, "inactive"),
+            Self::Suspended => write!(f, "suspended"),
+            Self::Closed => write!(f, "closed"),
+        }
+    }
+}
+
 /// One observation about one navigation.
 ///
 /// Every variant carries the [`NavigationId`] it belongs to. The title travels
@@ -364,6 +474,71 @@ pub trait Engine {
     /// Reflects every event the engine has emitted, drained or not: the page
     /// changes when a navigation commits, not when the shell reads about it.
     fn current(&self) -> Option<&Page>;
+
+    /// Create an addressable rendering surface with the specified data store.
+    ///
+    /// The returned [`SurfaceId`] is minted sequentially and is unique within
+    /// this engine instance.
+    fn create_surface(&mut self, _store: DataStoreSelector) -> SurfaceId {
+        SurfaceId::FIRST
+    }
+
+    /// Activate `surface`, bringing it to the foreground.
+    ///
+    /// A surface switch changes visibility and bounds rather than re-navigating
+    /// (SC-006 16 ms requirement).
+    fn activate_surface(&mut self, _surface: SurfaceId) {}
+
+    /// Suspend `surface` to conserve memory and resources (FR-002).
+    ///
+    /// Suspending a surface preserves all shell-observable state (such as the
+    /// current page, document title, and address) without losing state when
+    /// resumed.
+    fn suspend_surface(&mut self, _surface: SurfaceId) {}
+
+    /// Resume a previously suspended rendering surface.
+    ///
+    /// Restores the surface without losing any state the shell can observe.
+    fn resume_surface(&mut self, _surface: SurfaceId) {}
+
+    /// Close and destroy `surface`.
+    ///
+    /// If `surface` was created with a [`DataStoreSelector::NonPersistent`] data
+    /// store, all stored data is destroyed and leaves nothing behind (FR-007).
+    fn close_surface(&mut self, _surface: SurfaceId) {}
+
+    /// The currently active surface, if any.
+    fn active_surface(&self) -> Option<SurfaceId> {
+        Some(SurfaceId::FIRST)
+    }
+
+    /// The data store selector of `surface`, if the surface exists.
+    fn surface_data_store(&self, _surface: SurfaceId) -> Option<DataStoreSelector> {
+        Some(DataStoreSelector::Persistent)
+    }
+
+    /// The current lifecycle state of `surface`, if the surface exists.
+    fn surface_state(&self, _surface: SurfaceId) -> Option<SurfaceState> {
+        Some(SurfaceState::Active)
+    }
+
+    /// The page currently displayed on `surface`, if any.
+    fn surface_current(&self, _surface: SurfaceId) -> Option<&Page> {
+        self.current()
+    }
+
+    /// Begin navigating `surface` to `request`.
+    fn start_surface_navigation(&mut self, _surface: SurfaceId, request: &Request) -> NavigationId {
+        self.start_navigation(request)
+    }
+
+    /// Whether `surface` retains any data in its data store.
+    ///
+    /// For a non-persistent data store, closing the surface destroys all
+    /// browsing traces, so this returns `false` after [`close_surface`](Self::close_surface).
+    fn surface_has_retained_data(&self, _surface: SurfaceId) -> bool {
+        false
+    }
 }
 
 /// What the shell requires of anything that hosts engines and owns their shared
@@ -434,6 +609,60 @@ mod tests {
         assert_ne!(first, third);
         assert_eq!(first.to_string(), "ctx-0");
         assert_eq!(second.to_string(), "ctx-1");
+    }
+
+    #[test]
+    fn surface_ids_mint_sequentially_and_distinctly() {
+        let first = SurfaceId::FIRST;
+        let second = first.next();
+        let third = second.next();
+        assert_ne!(first, second);
+        assert_ne!(second, third);
+        assert_ne!(first, third);
+        assert_eq!(first.to_string(), "surface-0");
+        assert_eq!(second.to_string(), "surface-1");
+    }
+
+    #[test]
+    fn data_store_selector_variants_and_predicates() {
+        let persistent = DataStoreSelector::Persistent;
+        let non_persistent = DataStoreSelector::NonPersistent;
+        assert!(persistent.is_persistent());
+        assert!(!persistent.is_non_persistent());
+        assert!(non_persistent.is_non_persistent());
+        assert!(!non_persistent.is_persistent());
+        assert_eq!(persistent.to_string(), "persistent");
+        assert_eq!(non_persistent.to_string(), "non-persistent");
+        assert_eq!(DataStoreSelector::default(), DataStoreSelector::Persistent);
+    }
+
+    #[test]
+    fn surface_state_variants_and_predicates() {
+        let active = SurfaceState::Active;
+        let inactive = SurfaceState::Inactive;
+        let suspended = SurfaceState::Suspended;
+        let closed = SurfaceState::Closed;
+
+        assert!(active.is_active());
+        assert!(!active.is_suspended());
+        assert!(!active.is_closed());
+
+        assert!(!inactive.is_active());
+        assert!(!inactive.is_suspended());
+        assert!(!inactive.is_closed());
+
+        assert!(!suspended.is_active());
+        assert!(suspended.is_suspended());
+        assert!(!suspended.is_closed());
+
+        assert!(!closed.is_active());
+        assert!(!closed.is_suspended());
+        assert!(closed.is_closed());
+
+        assert_eq!(active.to_string(), "active");
+        assert_eq!(inactive.to_string(), "inactive");
+        assert_eq!(suspended.to_string(), "suspended");
+        assert_eq!(closed.to_string(), "closed");
     }
 
     #[test]
