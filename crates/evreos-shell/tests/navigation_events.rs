@@ -30,7 +30,8 @@ impl TestMockClock {
 
 #[test]
 fn title_arrives_on_its_own_event_and_never_inside_an_outcome() {
-    let mut engine = HeadlessEngine::new().with_delayed_title("https://site.invalid/", "Delayed Title");
+    let mut engine =
+        HeadlessEngine::new().with_delayed_title("https://site.invalid/", "Delayed Title");
 
     let req = Request::new("https://site.invalid/");
     let id = engine.start_navigation(&req);
@@ -45,7 +46,9 @@ fn title_arrives_on_its_own_event_and_never_inside_an_outcome() {
     assert!(matches!(events[0], NavigationEvent::Started { id: e_id, .. } if e_id == id));
     assert!(matches!(events[1], NavigationEvent::Committed { id: e_id, .. } if e_id == id));
     assert!(matches!(events[2], NavigationEvent::Succeeded { id: e_id } if e_id == id));
-    assert!(matches!(events[3], NavigationEvent::TitleChanged { id: e_id, ref title } if e_id == id && title == "Delayed Title"));
+    assert!(
+        matches!(events[3], NavigationEvent::TitleChanged { id: e_id, ref title } if e_id == id && title == "Delayed Title")
+    );
 
     // Verify Succeeded carries no title or page payload
     if let NavigationEvent::Succeeded { id: succ_id } = events[2] {
@@ -70,15 +73,27 @@ fn engine_initiated_navigation_observed_by_shell_without_start_navigation() {
     assert_eq!(events.len(), 4);
     let init_id = events[0].id();
 
-    assert!(matches!(events[0], NavigationEvent::Started { id, ref address } if id == init_id && address == "https://unsolicited.invalid/"));
-    assert!(matches!(events[1], NavigationEvent::Committed { id, ref address } if id == init_id && address == "https://unsolicited.invalid/"));
-    assert!(matches!(events[2], NavigationEvent::TitleChanged { id, ref title } if id == init_id && title == "Unsolicited Title"));
+    assert!(
+        matches!(events[0], NavigationEvent::Started { id, ref address } if id == init_id && address == "https://unsolicited.invalid/")
+    );
+    assert!(
+        matches!(events[1], NavigationEvent::Committed { id, ref address } if id == init_id && address == "https://unsolicited.invalid/")
+    );
+    assert!(
+        matches!(events[2], NavigationEvent::TitleChanged { id, ref title } if id == init_id && title == "Unsolicited Title")
+    );
     assert!(matches!(events[3], NavigationEvent::Succeeded { id } if id == init_id));
 
     // Notice no start_navigation was called on engine, but loads() is empty
     assert!(engine.loads().is_empty());
-    assert_eq!(engine.current().map(|p| p.address()), Some("https://unsolicited.invalid/"));
-    assert_eq!(engine.current().map(|p| p.title()), Some("Unsolicited Title"));
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://unsolicited.invalid/")
+    );
+    assert_eq!(
+        engine.current().map(|p| p.title()),
+        Some("Unsolicited Title")
+    );
 }
 
 #[test]
@@ -95,7 +110,11 @@ fn outcome_for_abandoned_navigation_told_apart_from_current_by_navigation_id() {
         events1.push(event);
     }
 
-    assert!(events1.iter().any(|e| matches!(e, NavigationEvent::NavigatedAway { id } if *id == id1)));
+    assert!(
+        events1
+            .iter()
+            .any(|e| matches!(e, NavigationEvent::NavigatedAway { id } if *id == id1))
+    );
 
     let req2 = Request::new("https://new.invalid/");
     let id2 = engine.start_navigation(&req2);
@@ -106,8 +125,15 @@ fn outcome_for_abandoned_navigation_told_apart_from_current_by_navigation_id() {
     }
 
     assert_ne!(id1, id2);
-    assert!(events2.iter().any(|e| matches!(e, NavigationEvent::Succeeded { id } if *id == id2)));
-    assert_eq!(engine.current().map(|p| p.address()), Some("https://new.invalid/"));
+    assert!(
+        events2
+            .iter()
+            .any(|e| matches!(e, NavigationEvent::Succeeded { id } if *id == id2))
+    );
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://new.invalid/")
+    );
 }
 
 #[test]
@@ -162,11 +188,38 @@ fn redirect_reports_actual_loaded_address_not_requested_address() {
         events.push(event);
     }
 
-    assert_eq!(events[0], NavigationEvent::Started { id, address: "https://requested.invalid/".into() });
-    assert_eq!(events[1], NavigationEvent::Redirected { id, address: "https://destination.invalid/".into() });
-    assert_eq!(events[2], NavigationEvent::Committed { id, address: "https://destination.invalid/".into() });
-    assert_eq!(events[3], NavigationEvent::TitleChanged { id, title: "Destination Title".into() });
+    assert_eq!(
+        events[0],
+        NavigationEvent::Started {
+            id,
+            address: "https://requested.invalid/".into()
+        }
+    );
+    assert_eq!(
+        events[1],
+        NavigationEvent::Redirected {
+            id,
+            address: "https://destination.invalid/".into()
+        }
+    );
+    assert_eq!(
+        events[2],
+        NavigationEvent::Committed {
+            id,
+            address: "https://destination.invalid/".into()
+        }
+    );
+    assert_eq!(
+        events[3],
+        NavigationEvent::TitleChanged {
+            id,
+            title: "Destination Title".into()
+        }
+    );
     assert_eq!(events[4], NavigationEvent::Succeeded { id });
 
-    assert_eq!(engine.current().map(|p| p.address()), Some("https://destination.invalid/"));
+    assert_eq!(
+        engine.current().map(|p| p.address()),
+        Some("https://destination.invalid/")
+    );
 }
