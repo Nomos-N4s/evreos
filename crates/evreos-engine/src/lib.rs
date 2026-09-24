@@ -180,6 +180,36 @@ impl NavigationId {
     }
 }
 
+/// Identifies one shared platform context for the lifetime of an [`EngineHost`].
+///
+/// Minted by the host and opaque to the shell, which only ever stores,
+/// compares and hashes it. There is no public constructor from an integer,
+/// so no integer semantics enter the seam — the id is a correlation token,
+/// not a capability, and [`ContextId::FIRST`] with [`ContextId::next`]
+/// makes the minting sequence public rather than secret. An engine host
+/// with platform context identifiers of its own maps them to these rather
+/// than exposing them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub struct ContextId(u64);
+
+impl ContextId {
+    /// The first context id a host sequence mints.
+    pub const FIRST: ContextId = ContextId(0);
+
+    /// The id minted after this one. An engine host mints sequentially from
+    /// [`ContextId::FIRST`], one sequence per host environment.
+    #[must_use]
+    pub fn next(self) -> ContextId {
+        ContextId(self.0 + 1)
+    }
+}
+
+impl fmt::Display for ContextId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ctx-{}", self.0)
+    }
+}
+
 /// One observation about one navigation.
 ///
 /// Every variant carries the [`NavigationId`] it belongs to. The title travels
@@ -294,6 +324,23 @@ pub trait Engine {
     /// the benchmark records SC-013 requires to be reproducible.
     fn name(&self) -> &'static str;
 
+    /// The opaque identifier of the shared platform context this engine belongs to.
+    ///
+    /// Engines minted from the same [`EngineHost`] share the same context ID;
+    /// engines minted from different hosts have distinct context IDs.
+    ///
+    /// The default implementation returns [`ContextId::FIRST`], suitable for
+    /// isolated or single-engine test mocks. Real implementations and host-minted
+    /// engines supply the identifier from their host.
+    fn context_id(&self) -> ContextId {
+        ContextId::FIRST
+    }
+
+    /// Whether this engine shares its platform context with `other`.
+    fn shares_context_with(&self, other: &impl Engine) -> bool {
+        self.context_id() == other.context_id()
+    }
+
     /// Begin navigating to `request`.
     ///
     /// Returns immediately with the id the engine minted for this navigation;
@@ -319,6 +366,49 @@ pub trait Engine {
     fn current(&self) -> Option<&Page>;
 }
 
+/// What the shell requires of anything that hosts engines and owns their shared
+/// platform context.
+///
+/// Implemented by the system-webview backend on each supported platform
+/// (e.g. WebView2 on Windows, WKWebView on macOS) and by
+/// [`evreos-engine-headless`] for tests.
+///
+/// # Why there is a host seam above [`Engine`]
+///
+/// The system web runtime on both supported tiers is per-view-by-default:
+/// WebView2 creates a fresh user data folder and browser process per view unless
+/// an explicit `CoreWebView2Environment` is shared, and WKWebView creates a fresh
+/// data store per web view unless a shared `WKWebViewConfiguration` /
+/// `WKWebsiteDataStore` is provided. Ten tabs each minting their own context
+/// loses SC-004's 150 MB memory budget before any product code exists.
+///
+/// The host owns the shared platform context and mints [`Engine`] instances from it,
+/// ensuring that instances minted from the same host share the context and
+/// instances from two hosts do not.
+///
+/// There is deliberately no `Send` bound anywhere on this path. Both shipping
+/// backends are affine to the interface thread; a bound that let an engine or host
+/// cross threads would promise what no implementation can keep.
+pub trait EngineHost {
+    /// The type of [`Engine`] this host mints.
+    type Engine: Engine;
+
+    /// A short, stable name for this host implementation, used in diagnostics and
+    /// benchmark records.
+    fn name(&self) -> &'static str;
+
+    /// The opaque identifier of the shared platform context this host owns.
+    fn context_id(&self) -> ContextId;
+
+    /// Mint a new [`Engine`] instance that shares this host's platform context.
+    fn create_engine(&mut self) -> Self::Engine;
+
+    /// Synonym for [`create_engine`](Self::create_engine).
+    fn mint_engine(&mut self) -> Self::Engine {
+        self.create_engine()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -332,6 +422,18 @@ mod tests {
         assert_ne!(first, second);
         assert_ne!(second, third);
         assert_ne!(first, third);
+    }
+
+    #[test]
+    fn context_ids_mint_sequentially_and_distinctly() {
+        let first = ContextId::FIRST;
+        let second = first.next();
+        let third = second.next();
+        assert_ne!(first, second);
+        assert_ne!(second, third);
+        assert_ne!(first, third);
+        assert_eq!(first.to_string(), "ctx-0");
+        assert_eq!(second.to_string(), "ctx-1");
     }
 
     #[test]
@@ -377,6 +479,7 @@ mod tests {
     /// the shell carries its own non-`Send` engine where it lives.
     struct ThreadAffine {
         _pinned: Rc<()>,
+        context_id: ContextId,
         queue: Vec<NavigationEvent>,
         next: NavigationId,
     }
@@ -384,6 +487,10 @@ mod tests {
     impl Engine for ThreadAffine {
         fn name(&self) -> &'static str {
             "thread-affine"
+        }
+
+        fn context_id(&self) -> ContextId {
+            self.context_id
         }
 
         fn start_navigation(&mut self, request: &Request) -> NavigationId {
@@ -409,15 +516,77 @@ mod tests {
         }
     }
 
+    struct ThreadAffineHost {
+        _pinned: Rc<()>,
+        context_id: ContextId,
+    }
+
+    impl EngineHost for ThreadAffineHost {
+        type Engine = ThreadAffine;
+
+        fn name(&self) -> &'static str {
+            "thread-affine-host"
+        }
+
+        fn context_id(&self) -> ContextId {
+            self.context_id
+        }
+
+        fn create_engine(&mut self) -> Self::Engine {
+            ThreadAffine {
+                _pinned: self._pinned.clone(),
+                context_id: self.context_id,
+                queue: Vec::new(),
+                next: NavigationId::FIRST,
+            }
+        }
+    }
+
     #[test]
     fn the_engine_path_carries_no_send_bound() {
         let mut engine = ThreadAffine {
             _pinned: Rc::new(()),
+            context_id: ContextId::FIRST,
             queue: Vec::new(),
             next: NavigationId::FIRST,
         };
         let id = engine.start_navigation(&Request::new("https://a.invalid/"));
         assert_eq!(engine.poll_event().map(|event| event.id()), Some(id));
         assert_eq!(engine.poll_event(), None);
+    }
+
+    #[test]
+    fn the_engine_host_path_carries_no_send_bound() {
+        let mut host = ThreadAffineHost {
+            _pinned: Rc::new(()),
+            context_id: ContextId::FIRST,
+        };
+        let mut engine = host.create_engine();
+        assert_eq!(engine.context_id(), host.context_id());
+        let id = engine.start_navigation(&Request::new("https://a.invalid/"));
+        assert_eq!(engine.poll_event().map(|event| event.id()), Some(id));
+    }
+
+    #[test]
+    fn engines_from_same_host_share_context_and_from_different_hosts_do_not() {
+        let mut host1 = ThreadAffineHost {
+            _pinned: Rc::new(()),
+            context_id: ContextId::FIRST,
+        };
+        let engine1_a = host1.create_engine();
+        let engine1_b = host1.create_engine();
+
+        let mut host2 = ThreadAffineHost {
+            _pinned: Rc::new(()),
+            context_id: ContextId::FIRST.next(),
+        };
+        let engine2 = host2.create_engine();
+
+        assert_eq!(engine1_a.context_id(), engine1_b.context_id());
+        assert_eq!(engine1_a.context_id(), host1.context_id());
+        assert_ne!(engine1_a.context_id(), engine2.context_id());
+        assert_ne!(host1.context_id(), host2.context_id());
+        assert!(engine1_a.shares_context_with(&engine1_b));
+        assert!(!engine1_a.shares_context_with(&engine2));
     }
 }
