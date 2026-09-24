@@ -36,6 +36,15 @@ fn make_configured_headless_host() -> HeadlessHost {
             "Redirected Page",
         )
         .with_hanging_load("https://hanging.test/")
+        .with_page("https://blocked-content.test/", "Blocked Content Test Page")
+        .with_subresources(
+            "https://blocked-content.test/",
+            [
+                "https://blocked-content.test/tracker.js",
+                "https://blocked-content.test/ad.png",
+                "https://blocked-content.test/content.css",
+            ],
+        )
 }
 
 fn make_configured_headless_engine() -> HeadlessEngine {
