@@ -132,7 +132,8 @@ impl<C: Clock> NavigationTracker<C> {
             NavigationEvent::Redirected { .. } => {
                 // Address redirected before commit; status remains Loading until Committed.
             }
-            NavigationEvent::Committed { address, .. } => {
+            NavigationEvent::Committed { address, .. }
+            | NavigationEvent::SameDocumentNavigated { address, .. } => {
                 self.navigations
                     .insert(id, NavigationState::Committed { address });
             }
@@ -176,10 +177,6 @@ impl<C: Clock> NavigationTracker<C> {
             }
             NavigationEvent::NavigatedAway { .. } => {
                 self.navigations.insert(id, NavigationState::NavigatedAway);
-            }
-            NavigationEvent::SameDocumentNavigated { address, .. } => {
-                self.navigations
-                    .insert(id, NavigationState::Committed { address });
             }
         }
     }

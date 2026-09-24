@@ -18,10 +18,11 @@
 //! 12. A navigation observation carries an epoch that increments on every change of address, same-document navigation included, defining an FR-018a navigation and bounding an occasion.
 //! 13. Hosting a surface from shell-supplied bytes under a shell-chosen identity ensures no scheme or protocol vocabulary enters the trait and FR-019a verification precedes rendering and caching.
 //! 14. A message channel delivers incoming messages tagged with the shell-assigned app identity, ensuring an FR-018 per-app grant is never checked against a forged identity.
+//! 15. A request-gating hook enforces deny-all confinement for surface webviews ([GAP] G15) and evaluates page webviews through the FR-008 content-blocking pipeline.
 
 use super::{
     AppId, CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
-    NavigationEvent, Request, SurfaceIdentity, SurfaceState,
+    NavigationEvent, Request, RequestGateDecision, SurfaceIdentity, SurfaceKind, SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -49,6 +50,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_navigation_epoch_increments_on_every_address_change(&make);
     test_host_surface_from_bytes_under_shell_identity(&make);
     test_message_channel_tagged_with_shell_assigned_app_identity(&make);
+    test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pages(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -781,8 +783,10 @@ pub fn test_message_channel_tagged_with_shell_assigned_app_identity<E: Engine>(
     make: &impl Fn() -> E,
 ) {
     let mut engine = make();
-    let surface1 = engine.create_surface(DataStoreSelector::Persistent);
-    let surface2 = engine.create_surface(DataStoreSelector::Persistent);
+    let surface1 =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+    let surface2 =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
 
     let app_id1 = AppId::new("ledger-app-v1");
     let app_id2 = AppId::new("settings-app-v1");
@@ -826,6 +830,66 @@ pub fn test_message_channel_tagged_with_shell_assigned_app_identity<E: Engine>(
     assert!(
         engine.poll_message().is_none(),
         "No more messages should be queued"
+    );
+}
+
+/// Invariant 15: The request-gating hook enforces deny-all confinement for surface webviews
+/// ([`SurfaceKind::AppSurface`]) per [GAP] G15, while page webviews ([`SurfaceKind::Page`])
+/// evaluate requests through the FR-008 content-blocking pipeline.
+pub fn test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pages<E: Engine>(
+    make: &impl Fn() -> E,
+) {
+    let mut engine = make();
+
+    // 1. Surface webview ([GAP] G15: Deny-all)
+    let app_surface =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+    assert_eq!(
+        engine.surface_kind(app_surface),
+        Some(SurfaceKind::AppSurface)
+    );
+
+    // Outbound requests must be unconditionally denied for surface webviews
+    assert_eq!(
+        engine.gate_request(app_surface, "https://api.external.com/telemetry"),
+        RequestGateDecision::Deny,
+        "Surface webview must deny arbitrary outbound traffic under G15"
+    );
+    assert_eq!(
+        engine.gate_request(app_surface, "https://allowed.example.com/asset.js"),
+        RequestGateDecision::Deny,
+        "Surface webview must deny traffic even to allowed sites under G15"
+    );
+
+    // 2. Page webview (FR-008 pipeline)
+    let page_surface =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::Page);
+    assert_eq!(engine.surface_kind(page_surface), Some(SurfaceKind::Page));
+
+    // Install content-blocking policy
+    let policy = CompiledPolicy::from_rules("adblock", ["tracker.ad.test", "banner.ad.test"]);
+    engine.install_policy(policy);
+
+    // Allowed page request
+    assert_eq!(
+        engine.gate_request(page_surface, "https://news.test/article"),
+        RequestGateDecision::Allow,
+        "Regular content on page webview should be allowed"
+    );
+
+    // Blocked page request matching policy
+    assert_eq!(
+        engine.gate_request(page_surface, "https://tracker.ad.test/pixel.gif"),
+        RequestGateDecision::Deny,
+        "Policy-matching tracker on page webview should be denied"
+    );
+
+    // Exemption bypasses policy on page webviews
+    engine.exempt_site("tracker.ad.test");
+    assert_eq!(
+        engine.gate_request(page_surface, "https://tracker.ad.test/pixel.gif"),
+        RequestGateDecision::Allow,
+        "Exempted site on page webview should be allowed"
     );
 }
 

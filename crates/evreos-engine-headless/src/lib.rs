@@ -22,7 +22,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use evreos_engine::{
     AppId, CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError,
     NavigationEpoch, NavigationEvent, NavigationId, NavigationObservation, Page, Request,
-    SurfaceId, SurfaceIdentity, SurfaceState, TaggedMessage,
+    RequestGateDecision, SurfaceId, SurfaceIdentity, SurfaceKind, SurfaceState, TaggedMessage,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -78,6 +78,7 @@ struct SharedHostContext {
 struct HeadlessSurface {
     _id: SurfaceId,
     store: DataStoreSelector,
+    kind: SurfaceKind,
     state: SurfaceState,
     epoch: NavigationEpoch,
     identity: Option<SurfaceIdentity>,
@@ -639,6 +640,15 @@ impl HeadlessEngine {
 
     /// Create an addressable rendering surface with the specified data store.
     pub fn create_surface(&mut self, store: DataStoreSelector) -> SurfaceId {
+        self.create_surface_with_kind(store, SurfaceKind::Page)
+    }
+
+    /// Create an addressable rendering surface with the specified data store and surface kind.
+    pub fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
         let id = self.next_surface_id.unwrap_or(SurfaceId::FIRST);
         self.next_surface_id = Some(id.next());
         self.surfaces.insert(
@@ -646,6 +656,7 @@ impl HeadlessEngine {
             HeadlessSurface {
                 _id: id,
                 store,
+                kind,
                 state: SurfaceState::Inactive,
                 epoch: NavigationEpoch::FIRST,
                 identity: None,
@@ -660,6 +671,38 @@ impl HeadlessEngine {
             },
         );
         id
+    }
+
+    /// Set the [`SurfaceKind`] for `surface`.
+    pub fn set_surface_kind(&mut self, surface: SurfaceId, kind: SurfaceKind) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.kind = kind;
+        }
+    }
+
+    /// The [`SurfaceKind`] of `surface`, if it exists.
+    pub fn surface_kind(&self, surface: SurfaceId) -> Option<SurfaceKind> {
+        self.surfaces.get(&surface).map(|s| s.kind)
+    }
+
+    /// Evaluate the request-gating hook for a request originating on `surface`.
+    pub fn gate_request(&self, surface: SurfaceId, url: &str) -> RequestGateDecision {
+        if let Some(s) = self.surfaces.get(&surface) {
+            if s.kind == SurfaceKind::AppSurface {
+                // [GAP] G15: Deny-all for surface webviews
+                return RequestGateDecision::Deny;
+            }
+        }
+        // FR-008 pipeline for page webviews
+        if self.is_site_exempt(url) {
+            return RequestGateDecision::Allow;
+        }
+        if let Some(policy) = self.active_policy() {
+            if policy.matches(url) {
+                return RequestGateDecision::Deny;
+            }
+        }
+        RequestGateDecision::Allow
     }
 
     /// Activate `surface`, bringing it to the foreground.
@@ -1006,6 +1049,7 @@ impl HeadlessEngine {
         let mut new_epoch = NavigationEpoch::FIRST;
         let ident_str = identity.as_str().to_string();
         if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.kind = SurfaceKind::AppSurface;
             s.identity = Some(identity);
             s.hosted_bytes = Some(bytes);
             s.epoch = s.epoch.next();
@@ -1151,6 +1195,26 @@ impl Engine for HeadlessEngine {
 
     fn post_message_from_surface(&mut self, surface: SurfaceId, message: &str) {
         self.post_message_from_surface(surface, message);
+    }
+
+    fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
+        self.create_surface_with_kind(store, kind)
+    }
+
+    fn set_surface_kind(&mut self, surface: SurfaceId, kind: SurfaceKind) {
+        self.set_surface_kind(surface, kind);
+    }
+
+    fn surface_kind(&self, surface: SurfaceId) -> Option<SurfaceKind> {
+        self.surface_kind(surface)
+    }
+
+    fn gate_request(&self, surface: SurfaceId, url: &str) -> RequestGateDecision {
+        self.gate_request(surface, url)
     }
 
     fn current(&self) -> Option<&Page> {
@@ -1904,5 +1968,44 @@ mod tests {
         assert_eq!(received.app_id(), &app_id);
         assert_eq!(received.payload(), "{\"balance\":42}");
         assert!(engine.poll_message().is_none());
+    }
+
+    #[test]
+    fn request_gating_hook_confinement_and_policy() {
+        let mut engine = HeadlessEngine::new();
+        let app_surface =
+            engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+        let page_surface =
+            engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::Page);
+
+        // [GAP] G15: App surfaces are strictly denied all network traffic
+        assert_eq!(
+            engine.gate_request(app_surface, "https://google.com"),
+            RequestGateDecision::Deny
+        );
+        assert_eq!(
+            engine.gate_request(app_surface, "https://example.com/api"),
+            RequestGateDecision::Deny
+        );
+
+        // Page surfaces apply the FR-008 content blocking pipeline
+        let policy = CompiledPolicy::from_rules("tracker-policy", ["tracker.js", "telemetry"]);
+        engine.install_policy(policy);
+
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/tracker.js"),
+            RequestGateDecision::Deny
+        );
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/app.js"),
+            RequestGateDecision::Allow
+        );
+
+        // Site exemption
+        engine.exempt_site("example.com");
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/tracker.js"),
+            RequestGateDecision::Allow
+        );
     }
 }

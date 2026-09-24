@@ -491,6 +491,55 @@ impl NavigationEvent {
     }
 }
 
+/// The kind of rendering surface, distinguishing page webviews from surface webviews.
+///
+/// Under [GAP] G15, surface webviews (rendering shell-supplied app surfaces) are
+/// strictly confined with a deny-all request-gating hook, preventing them from
+/// originating outbound network traffic. Page webviews route requests through
+/// the FR-008 content-blocking pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SurfaceKind {
+    /// A regular web page surface navigating addresses, governed by FR-008 blocking.
+    #[default]
+    Page,
+    /// An app or shell surface, subject to [GAP] G15 deny-all request gating.
+    AppSurface,
+}
+
+impl fmt::Display for SurfaceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Page => write!(f, "page"),
+            Self::AppSurface => write!(f, "app-surface"),
+        }
+    }
+}
+
+/// The decision returned by the engine's request-gating hook.
+///
+/// Under [GAP] G15, surface webviews evaluate to [`Deny`](Self::Deny) for any
+/// network request. Page webviews evaluate requests against the FR-008 policy
+/// and site exemptions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RequestGateDecision {
+    /// The request is permitted.
+    Allow,
+    /// The request is denied (blocked by content policy or confined under G15).
+    Deny,
+}
+
+impl RequestGateDecision {
+    /// Whether the decision allows the request.
+    pub fn is_allowed(self) -> bool {
+        matches!(self, Self::Allow)
+    }
+
+    /// Whether the decision denies the request.
+    pub fn is_denied(self) -> bool {
+        matches!(self, Self::Deny)
+    }
+}
+
 /// An identifier for a surface hosted from shell-supplied bytes.
 ///
 /// Under FR-019a, verification of signed app surface bytes precedes rendering
@@ -946,6 +995,36 @@ pub trait Engine {
     ///
     /// The engine tags this message with the shell-assigned [`AppId`] of `surface`.
     fn post_message_from_surface(&mut self, _surface: SurfaceId, _message: &str) {}
+
+    // Seam Addition 4: Request-gating hook ([GAP] G15 / FR-008)
+    /// Create an addressable rendering surface with the specified data store and surface kind.
+    fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
+        let id = self.create_surface(store);
+        self.set_surface_kind(id, kind);
+        id
+    }
+
+    /// Set the [`SurfaceKind`] for `surface`.
+    fn set_surface_kind(&mut self, _surface: SurfaceId, _kind: SurfaceKind) {}
+
+    /// The [`SurfaceKind`] of `surface`, if it exists.
+    fn surface_kind(&self, _surface: SurfaceId) -> Option<SurfaceKind> {
+        Some(SurfaceKind::Page)
+    }
+
+    /// Evaluate the request-gating hook for a request originating on `surface`.
+    ///
+    /// Under [GAP] G15, requests from surface webviews ([`SurfaceKind::AppSurface`])
+    /// are unconditionally denied (`Deny`), confining app surfaces from originating
+    /// network traffic. Requests from page webviews ([`SurfaceKind::Page`]) are
+    /// evaluated through the FR-008 content-blocking pipeline.
+    fn gate_request(&self, _surface: SurfaceId, _url: &str) -> RequestGateDecision {
+        RequestGateDecision::Allow
+    }
 }
 
 /// What the shell requires of anything that hosts engines and owns their shared
@@ -1295,5 +1374,17 @@ mod tests {
         assert_eq!(msg.app_id(), &app_id);
         assert_eq!(msg.surface(), SurfaceId::FIRST);
         assert_eq!(msg.payload(), "{\"balance\":100}");
+    }
+
+    #[test]
+    fn surface_kind_and_request_gate_decision_types() {
+        assert_eq!(SurfaceKind::default(), SurfaceKind::Page);
+        assert_eq!(SurfaceKind::Page.to_string(), "page");
+        assert_eq!(SurfaceKind::AppSurface.to_string(), "app-surface");
+
+        assert!(RequestGateDecision::Allow.is_allowed());
+        assert!(!RequestGateDecision::Allow.is_denied());
+        assert!(RequestGateDecision::Deny.is_denied());
+        assert!(!RequestGateDecision::Deny.is_allowed());
     }
 }
