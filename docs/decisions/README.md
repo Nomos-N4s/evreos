@@ -103,6 +103,7 @@ and the amendment cites the record that carries the founder's reasons.
 | [0002](0002-founder-display-name.md) | The founder's forge display name is an accepted author | Decided | 2026-09-01 | Principle I; `FOUNDER_AUTHORS` and `ALLOWED_COMMITTERS` |
 | [0003](0003-review-record-footer.md) | The attribution footer on pull request review records is accepted | Decided | 2026-09-02 | Principle I; the Development Workflow's merge gate |
 | [0004](0004-interim-spike-hardware.md) | Interim hardware for the chrome spikes | Decided | 2026-09-05 | T015 and T016; Principle X's ordering evidence; ADR-0002's reopen conditions |
+| [0005](0005-intercepted-navigation.md) | Intercepted navigation classification | Open | 2026-09-24 | FR-015, SC-009, Principle VI, FR-007a; T021, T022, T083, T099 |
 
 The next free number is the one after the last row.
 
