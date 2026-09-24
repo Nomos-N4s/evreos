@@ -610,6 +610,89 @@ impl NavigationObservation {
     }
 }
 
+/// An immutable application identity assigned by the shell.
+///
+/// Under FR-018 and FR-019a, page-adjacent capability grants are keyed to an app.
+/// Messages arriving from an app surface across the message channel are tagged
+/// by the engine seam with the shell-assigned [`AppId`], ensuring that security
+/// checks never rely on an identity the untrusted engine or page script could forge.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AppId(String);
+
+impl AppId {
+    /// Create a new app identity.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// The string representation of this app identity.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for AppId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for AppId {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for AppId {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for AppId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A message arriving across the shell-engine message channel, tagged with the shell-assigned app identity.
+///
+/// Under FR-018, every message arriving from an app surface carries the [`AppId`]
+/// the shell assigned to that surface. The engine tags the message at the seam,
+/// preventing the page content or engine from spoofing the sender identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaggedMessage {
+    app_id: AppId,
+    surface: SurfaceId,
+    payload: String,
+}
+
+impl TaggedMessage {
+    /// Construct a new tagged message.
+    pub fn new(app_id: AppId, surface: SurfaceId, payload: impl Into<String>) -> Self {
+        Self {
+            app_id,
+            surface,
+            payload: payload.into(),
+        }
+    }
+
+    /// The shell-assigned app identity this message originated from.
+    pub fn app_id(&self) -> &AppId {
+        &self.app_id
+    }
+
+    /// The surface that emitted the message.
+    pub fn surface(&self) -> SurfaceId {
+        self.surface
+    }
+
+    /// The message payload string.
+    pub fn payload(&self) -> &str {
+        &self.payload
+    }
+}
+
 /// What the shell requires of anything that renders web content.
 ///
 /// Implemented by the system-webview backend on each supported platform and by
@@ -837,6 +920,32 @@ pub trait Engine {
     fn navigate_same_document(&mut self, _surface: SurfaceId, _address: &str) -> NavigationId {
         NavigationId::FIRST
     }
+
+    // Seam Addition: Message channel tagged with shell-assigned app identity (FR-018)
+    /// Assign an immutable [`AppId`] to `surface`.
+    ///
+    /// Under FR-018, messages originating from this surface will be tagged with
+    /// this shell-assigned identity, preventing page script or the engine from
+    /// forging an identity to bypass per-app grant checks.
+    fn set_surface_app_id(&mut self, _surface: SurfaceId, _app_id: AppId) {}
+
+    /// The shell-assigned [`AppId`] of `surface`, if assigned.
+    fn surface_app_id(&self, _surface: SurfaceId) -> Option<&AppId> {
+        None
+    }
+
+    /// Send a message from the shell to `surface`.
+    fn send_message_to_surface(&mut self, _surface: SurfaceId, _message: &str) {}
+
+    /// Poll the next incoming tagged message from an app surface, if any.
+    fn poll_message(&mut self) -> Option<TaggedMessage> {
+        None
+    }
+
+    /// Simulate or deliver an incoming message originating from `surface`.
+    ///
+    /// The engine tags this message with the shell-assigned [`AppId`] of `surface`.
+    fn post_message_from_surface(&mut self, _surface: SurfaceId, _message: &str) {}
 }
 
 /// What the shell requires of anything that hosts engines and owns their shared
@@ -1171,5 +1280,20 @@ mod tests {
         let ident2: SurfaceIdentity = "app.home.v1".into();
         assert_eq!(ident, ident2);
         assert_eq!(ident.as_ref(), "app.home.v1");
+    }
+
+    #[test]
+    fn app_id_and_tagged_message_types() {
+        let app_id = AppId::new("app.wallet.v1");
+        assert_eq!(app_id.as_str(), "app.wallet.v1");
+        assert_eq!(app_id.to_string(), "app.wallet.v1");
+        let app_id2: AppId = "app.wallet.v1".into();
+        assert_eq!(app_id, app_id2);
+        assert_eq!(app_id.as_ref(), "app.wallet.v1");
+
+        let msg = TaggedMessage::new(app_id.clone(), SurfaceId::FIRST, "{\"balance\":100}");
+        assert_eq!(msg.app_id(), &app_id);
+        assert_eq!(msg.surface(), SurfaceId::FIRST);
+        assert_eq!(msg.payload(), "{\"balance\":100}");
     }
 }

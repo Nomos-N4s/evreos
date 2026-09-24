@@ -20,9 +20,9 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
-    NavigationEvent, NavigationId, NavigationObservation, Page, Request, SurfaceId,
-    SurfaceIdentity, SurfaceState,
+    AppId, CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError,
+    NavigationEpoch, NavigationEvent, NavigationId, NavigationObservation, Page, Request,
+    SurfaceId, SurfaceIdentity, SurfaceState, TaggedMessage,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -82,6 +82,7 @@ struct HeadlessSurface {
     epoch: NavigationEpoch,
     identity: Option<SurfaceIdentity>,
     hosted_bytes: Option<Vec<u8>>,
+    app_id: Option<AppId>,
     current: Option<Page>,
     current_nav: Option<NavigationId>,
     loads: Vec<String>,
@@ -301,6 +302,8 @@ pub struct HeadlessEngine {
     subresources: HashMap<String, Vec<String>>,
     policy: Option<CompiledPolicy>,
     exemptions: HashSet<String>,
+    messages: VecDeque<TaggedMessage>,
+    outgoing_messages: Vec<(SurfaceId, String)>,
 }
 
 fn normalize_site(site: &str) -> &str {
@@ -338,6 +341,8 @@ impl HeadlessEngine {
             subresources: HashMap::new(),
             policy: None,
             exemptions: HashSet::new(),
+            messages: VecDeque::new(),
+            outgoing_messages: Vec::new(),
         }
     }
 
@@ -356,6 +361,8 @@ impl HeadlessEngine {
             subresources: HashMap::new(),
             policy: None,
             exemptions: HashSet::new(),
+            messages: VecDeque::new(),
+            outgoing_messages: Vec::new(),
         }
     }
 
@@ -643,6 +650,7 @@ impl HeadlessEngine {
                 epoch: NavigationEpoch::FIRST,
                 identity: None,
                 hosted_bytes: None,
+                app_id: None,
                 current: None,
                 current_nav: None,
                 loads: Vec::new(),
@@ -1039,6 +1047,43 @@ impl HeadlessEngine {
             .get(&surface)
             .and_then(|s| s.hosted_bytes.as_deref())
     }
+
+    /// Assign an immutable [`AppId`] to `surface`.
+    pub fn set_surface_app_id(&mut self, surface: SurfaceId, app_id: AppId) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.app_id = Some(app_id);
+        }
+    }
+
+    /// The shell-assigned [`AppId`] of `surface`, if assigned.
+    pub fn surface_app_id(&self, surface: SurfaceId) -> Option<&AppId> {
+        self.surfaces.get(&surface).and_then(|s| s.app_id.as_ref())
+    }
+
+    /// Send a message from the shell to `surface`.
+    pub fn send_message_to_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.outgoing_messages.push((surface, message.to_string()));
+    }
+
+    /// Messages sent from the shell to surfaces.
+    pub fn outgoing_messages(&self) -> &[(SurfaceId, String)] {
+        &self.outgoing_messages
+    }
+
+    /// Poll the next incoming tagged message from an app surface, if any.
+    pub fn poll_message(&mut self) -> Option<TaggedMessage> {
+        self.messages.pop_front()
+    }
+
+    /// Simulate an incoming message originating from `surface`, tagged with its assigned `AppId`.
+    pub fn post_message_from_surface(&mut self, surface: SurfaceId, payload: impl Into<String>) {
+        let app_id = self
+            .surface_app_id(surface)
+            .cloned()
+            .unwrap_or_else(|| AppId::new("unassigned"));
+        self.messages
+            .push_back(TaggedMessage::new(app_id, surface, payload));
+    }
 }
 
 impl Engine for HeadlessEngine {
@@ -1086,6 +1131,26 @@ impl Engine for HeadlessEngine {
 
     fn navigate_same_document(&mut self, surface: SurfaceId, address: &str) -> NavigationId {
         self.navigate_same_document(surface, address)
+    }
+
+    fn set_surface_app_id(&mut self, surface: SurfaceId, app_id: AppId) {
+        self.set_surface_app_id(surface, app_id);
+    }
+
+    fn surface_app_id(&self, surface: SurfaceId) -> Option<&AppId> {
+        self.surface_app_id(surface)
+    }
+
+    fn send_message_to_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.send_message_to_surface(surface, message);
+    }
+
+    fn poll_message(&mut self) -> Option<TaggedMessage> {
+        self.poll_message()
+    }
+
+    fn post_message_from_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.post_message_from_surface(surface, message);
     }
 
     fn current(&self) -> Option<&Page> {
@@ -1814,5 +1879,30 @@ mod tests {
             events[2].event(),
             &NavigationEvent::Succeeded { id: nav_id }
         );
+    }
+
+    #[test]
+    fn tagged_message_channel_with_shell_assigned_app_id() {
+        let mut engine = HeadlessEngine::new();
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        let app_id = AppId::new("app.system.ledger");
+
+        engine.set_surface_app_id(surface, app_id.clone());
+        assert_eq!(engine.surface_app_id(surface), Some(&app_id));
+
+        // Shell sends message to surface
+        engine.send_message_to_surface(surface, "{\"command\":\"get_balance\"}");
+        assert_eq!(
+            engine.outgoing_messages(),
+            &[(surface, "{\"command\":\"get_balance\"}".to_string())]
+        );
+
+        // Surface posts message back to shell
+        engine.post_message_from_surface(surface, "{\"balance\":42}");
+        let received = engine.poll_message().expect("Tagged message expected");
+        assert_eq!(received.surface(), surface);
+        assert_eq!(received.app_id(), &app_id);
+        assert_eq!(received.payload(), "{\"balance\":42}");
+        assert!(engine.poll_message().is_none());
     }
 }

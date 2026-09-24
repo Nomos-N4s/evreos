@@ -17,9 +17,10 @@
 //! 11. The per-surface blocked count is observable to the shell, isolated across surfaces, reset on re-navigation, and honors site exemptions and policy replacement.
 //! 12. A navigation observation carries an epoch that increments on every change of address, same-document navigation included, defining an FR-018a navigation and bounding an occasion.
 //! 13. Hosting a surface from shell-supplied bytes under a shell-chosen identity ensures no scheme or protocol vocabulary enters the trait and FR-019a verification precedes rendering and caching.
+//! 14. A message channel delivers incoming messages tagged with the shell-assigned app identity, ensuring an FR-018 per-app grant is never checked against a forged identity.
 
 use super::{
-    CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
+    AppId, CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
     NavigationEvent, Request, SurfaceIdentity, SurfaceState,
 };
 
@@ -47,6 +48,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_surface_blocked_count_observable(&make);
     test_navigation_epoch_increments_on_every_address_change(&make);
     test_host_surface_from_bytes_under_shell_identity(&make);
+    test_message_channel_tagged_with_shell_assigned_app_identity(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -769,6 +771,61 @@ pub fn test_host_surface_from_bytes_under_shell_identity<E: Engine>(make: &impl 
     assert!(
         has_succeeded,
         "Must emit Succeeded observation for hosted surface"
+    );
+}
+
+/// Invariant 14: A message channel delivers incoming messages tagged with the shell-assigned
+/// app identity, ensuring an FR-018 per-app grant is never checked against an identity the
+/// engine or webview could forge.
+pub fn test_message_channel_tagged_with_shell_assigned_app_identity<E: Engine>(
+    make: &impl Fn() -> E,
+) {
+    let mut engine = make();
+    let surface1 = engine.create_surface(DataStoreSelector::Persistent);
+    let surface2 = engine.create_surface(DataStoreSelector::Persistent);
+
+    let app_id1 = AppId::new("ledger-app-v1");
+    let app_id2 = AppId::new("settings-app-v1");
+
+    engine.set_surface_app_id(surface1, app_id1.clone());
+    engine.set_surface_app_id(surface2, app_id2.clone());
+
+    assert_eq!(engine.surface_app_id(surface1), Some(&app_id1));
+    assert_eq!(engine.surface_app_id(surface2), Some(&app_id2));
+
+    // Send outgoing message from shell to surface
+    engine.send_message_to_surface(surface1, "{\"rpc\":\"balance\"}");
+
+    // Simulate incoming message originating from surface1
+    engine.post_message_from_surface(surface1, "{\"result\":100}");
+    // Simulate incoming message originating from surface2
+    engine.post_message_from_surface(surface2, "{\"theme\":\"dark\"}");
+
+    let msg1 = engine
+        .poll_message()
+        .expect("Expected message from surface1");
+    assert_eq!(msg1.surface(), surface1);
+    assert_eq!(
+        msg1.app_id(),
+        &app_id1,
+        "Message must be tagged with shell-assigned AppId"
+    );
+    assert_eq!(msg1.payload(), "{\"result\":100}");
+
+    let msg2 = engine
+        .poll_message()
+        .expect("Expected message from surface2");
+    assert_eq!(msg2.surface(), surface2);
+    assert_eq!(
+        msg2.app_id(),
+        &app_id2,
+        "Message must be tagged with shell-assigned AppId"
+    );
+    assert_eq!(msg2.payload(), "{\"theme\":\"dark\"}");
+
+    assert!(
+        engine.poll_message().is_none(),
+        "No more messages should be queued"
     );
 }
 
