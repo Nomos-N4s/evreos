@@ -66,6 +66,21 @@ pub enum LoadError {
     /// The certificate was untrusted, expired, or did not match.
     Certificate { address: String, detail: String },
     /// Something between the shell and the site answered in its place.
+    ///
+    /// # Contract Clause: Platform Synthesis Forbidden
+    ///
+    /// No platform backend (e.g., WebView2 on Windows or WKWebView on macOS)
+    /// may synthesise `Intercepted` from a platform error code or status.
+    /// Platform error codes contain no value denoting interception because an
+    /// intercepted request (such as a captive portal) completes successfully
+    /// from the platform webview's network perspective.
+    ///
+    /// An engine implementation reporting `Intercepted` MUST do so from a
+    /// shell-supplied classification rather than from a mapped platform status.
+    /// The headless engine is currently the sole producer of this error variant
+    /// for testing and simulation, keeping SC-009's fourth case exercisable
+    /// while the intercepted-navigation founder decision recorded in
+    /// `decisions/0005` remains open.
     Intercepted { address: String },
     /// The site demanded credentials before serving anything.
     AuthenticationRequired { address: String },
