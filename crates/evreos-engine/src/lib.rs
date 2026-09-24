@@ -320,6 +320,89 @@ impl fmt::Display for SurfaceState {
     }
 }
 
+/// A compiled content-blocking policy installed into an [`Engine`].
+///
+/// Under FR-008 and ADR-0001, tracker and advert blocking is active from first
+/// launch. Because enforcement mechanisms differ structurally across platforms —
+/// in-process evaluation of an adblock matcher on tier 1 versus precompiled
+/// rule lists in WebKit on tier 2 — the engine seam accepts a compiled policy
+/// rather than exposing a per-request veto (`should_block`), preventing the seam
+/// from becoming platform-shaped.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CompiledPolicy {
+    name: String,
+    data: Vec<u8>,
+}
+
+impl Default for CompiledPolicy {
+    fn default() -> Self {
+        Self {
+            name: "default".into(),
+            data: Vec::new(),
+        }
+    }
+}
+
+impl CompiledPolicy {
+    /// Create a new compiled policy from `name` and raw policy `data`.
+    pub fn new(name: impl Into<String>, data: impl Into<Vec<u8>>) -> Self {
+        Self {
+            name: name.into(),
+            data: data.into(),
+        }
+    }
+
+    /// Construct a compiled policy from a sequence of text rules.
+    pub fn from_rules<S: AsRef<str>>(
+        name: impl Into<String>,
+        rules: impl IntoIterator<Item = S>,
+    ) -> Self {
+        let joined = rules
+            .into_iter()
+            .map(|r| r.as_ref().to_owned())
+            .collect::<Vec<_>>()
+            .join("\n");
+        Self::new(name, joined.into_bytes())
+    }
+
+    /// The name or identifier of this policy.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// The raw compiled policy payload.
+    pub fn data(&self) -> &[u8] {
+        &self.data
+    }
+
+    /// Whether this policy matches `url`, blocking it.
+    ///
+    /// Evaluates line-delimited pattern rules against `url`.
+    pub fn matches(&self, url: &str) -> bool {
+        if self.data.is_empty() {
+            return false;
+        }
+        if let Ok(text) = core::str::from_utf8(&self.data) {
+            for line in text.lines() {
+                let line = line.trim();
+                if line.is_empty() || line.starts_with('#') || line.starts_with('!') {
+                    continue;
+                }
+                if url.contains(line) {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+}
+
+impl fmt::Display for CompiledPolicy {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "policy:{}({} bytes)", self.name, self.data.len())
+    }
+}
+
 /// One observation about one navigation.
 ///
 /// Every variant carries the [`NavigationId`] it belongs to. The title travels
@@ -539,6 +622,49 @@ pub trait Engine {
     fn surface_has_retained_data(&self, _surface: SurfaceId) -> bool {
         false
     }
+
+    /// Install or replace the compiled content-blocking policy for this engine.
+    ///
+    /// Under FR-008 and ADR-0001, tracker and advert blocking is active from first
+    /// launch. Because enforcement mechanisms differ structurally across platforms —
+    /// in-process evaluation of an adblock matcher on tier 1 versus precompiled
+    /// rule lists in WebKit on tier 2 — the engine seam accepts a compiled policy
+    /// rather than exposing a per-request veto (`should_block`), preventing the seam
+    /// from becoming platform-shaped.
+    fn install_policy(&mut self, _policy: CompiledPolicy) {}
+
+    /// Exempt `site` from content blocking.
+    ///
+    /// Under FR-008, the browser provides a visible per-site control to turn
+    /// blocking off for a broken site. An exempted site allows all subresource
+    /// requests without blocking.
+    fn exempt_site(&mut self, _site: &str) {}
+
+    /// Remove a previously granted site exemption.
+    fn remove_site_exemption(&mut self, _site: &str) {}
+
+    /// Whether `site` is currently exempted from content blocking.
+    fn is_site_exempt(&self, _site: &str) -> bool {
+        false
+    }
+
+    /// The count of blocked requests or resources for the page currently loaded on `surface`.
+    ///
+    /// Under FR-008, the chrome observes this count to display blocking status
+    /// to the member and support parity verification in CI.
+    fn surface_blocked_count(&self, _surface: SurfaceId) -> u64 {
+        0
+    }
+
+    /// Synonym for [`surface_blocked_count`](Self::surface_blocked_count).
+    fn blocked_count(&self, surface: SurfaceId) -> u64 {
+        self.surface_blocked_count(surface)
+    }
+
+    /// The list of URLs or resource identifiers that were blocked on `surface` during the current page load.
+    fn surface_blocked_items(&self, _surface: SurfaceId) -> Vec<String> {
+        Vec::new()
+    }
 }
 
 /// What the shell requires of anything that hosts engines and owns their shared
@@ -663,6 +789,31 @@ mod tests {
         assert_eq!(inactive.to_string(), "inactive");
         assert_eq!(suspended.to_string(), "suspended");
         assert_eq!(closed.to_string(), "closed");
+    }
+
+    #[test]
+    fn compiled_policy_creation_and_matching() {
+        let policy =
+            CompiledPolicy::new("test-policy", b"tracker.test\n# comment\n\nanalytics.test");
+        assert_eq!(policy.name(), "test-policy");
+        assert_eq!(policy.data(), b"tracker.test\n# comment\n\nanalytics.test");
+        assert!(policy.matches("https://tracker.test/pixel.gif"));
+        assert!(policy.matches("https://sub.analytics.test/script.js"));
+        assert!(!policy.matches("https://clean-site.test/style.css"));
+        assert_eq!(
+            policy.to_string(),
+            format!("policy:test-policy({} bytes)", policy.data().len())
+        );
+
+        let from_rules = CompiledPolicy::from_rules("rules-policy", ["ads.test", "banner.test"]);
+        assert_eq!(from_rules.name(), "rules-policy");
+        assert!(from_rules.matches("https://ads.test/banner.jpg"));
+        assert!(from_rules.matches("https://banner.test/"));
+        assert!(!from_rules.matches("https://other.test/"));
+
+        let empty = CompiledPolicy::default();
+        assert_eq!(empty.name(), "default");
+        assert!(!empty.matches("https://anything.test/"));
     }
 
     #[test]

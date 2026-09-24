@@ -14,9 +14,11 @@
 //! 8. Surfaces are independently addressable and navigation on one does not affect another.
 //! 9. Suspend and resume lose no state the shell can observe.
 //! 10. A non-persistent store leaves nothing behind when its surface closes.
+//! 11. The per-surface blocked count is observable to the shell, isolated across surfaces, reset on re-navigation, and honors site exemptions and policy replacement.
 
 use super::{
-    DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, Request, SurfaceState,
+    CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, Request,
+    SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -29,6 +31,7 @@ use super::{
 /// - `https://success.test/` -> Page titled "Success Page"
 /// - `https://redirect-source.test/` -> Redirects to `https://redirect-target.test/` and succeeds
 /// - `https://hanging.test/` -> Starts and never emits an outcome event
+/// - `https://blocked-content.test/` -> Page with subresources matching test blocking policies
 pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_four_causes_distinguishable(&make);
     test_failed_load_never_becomes_current_page(&make);
@@ -39,6 +42,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_surfaces_are_independently_addressable(&make);
     test_suspend_and_resume_preserve_surface_state(&make);
     test_non_persistent_store_leaves_nothing_on_close(&make);
+    test_surface_blocked_count_observable(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -525,6 +529,129 @@ pub fn test_non_persistent_store_leaves_nothing_on_close<E: Engine>(make: &impl 
     assert!(
         engine.surface_has_retained_data(s_p),
         "Persistent store must retain persistent data even after surface closes"
+    );
+}
+
+/// Invariant 11: The per-surface blocked count is observable to the shell.
+///
+/// Under FR-008 and ADR-0001, tracker and advert blocking is active from first
+/// launch. This test proves that:
+/// - Blocked counts are observable per surface to the shell.
+/// - Surfaces maintain independent blocked counts (surface isolation).
+/// - Navigating to a clean page resets the blocked count for that surface.
+/// - Installing a replacement policy updates the blocking behaviour.
+/// - Exempting a site allows subresources through with zero blocked count.
+/// - Revoking an exemption re-enables blocking for subsequent navigations.
+pub fn test_surface_blocked_count_observable<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+
+    let s1 = engine.create_surface(DataStoreSelector::Persistent);
+    let s2 = engine.create_surface(DataStoreSelector::Persistent);
+
+    // Initial blocked counts must be zero.
+    assert_eq!(engine.surface_blocked_count(s1), 0);
+    assert_eq!(engine.surface_blocked_count(s2), 0);
+    assert_eq!(engine.blocked_count(s1), 0);
+
+    // Install a compiled policy matching tracker and ad subresources.
+    let policy = CompiledPolicy::from_rules("test-block-policy", ["tracker.js", "ad.png"]);
+    engine.install_policy(policy);
+
+    // Navigate s1 to a page with subresources.
+    let req_blocked = Request::new("https://blocked-content.test/");
+    let _ = engine.start_surface_navigation(s1, &req_blocked);
+    while let Some(_event) = engine.poll_event() {}
+
+    // s1 must observe the blocked count (2 items: tracker.js and ad.png).
+    let count_s1 = engine.surface_blocked_count(s1);
+    assert_eq!(
+        count_s1, 2,
+        "Surface s1 blocked count must be observable to the shell"
+    );
+    assert_eq!(
+        engine.blocked_count(s1),
+        2,
+        "blocked_count synonym must match surface_blocked_count"
+    );
+
+    // s2 was not navigated and must still have 0 blocked count (surface isolation).
+    assert_eq!(
+        engine.surface_blocked_count(s2),
+        0,
+        "Surface s2 blocked count must remain 0"
+    );
+
+    // Navigate s2 to a clean page.
+    let req_clean = Request::new("https://success.test/");
+    let _ = engine.start_surface_navigation(s2, &req_clean);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_blocked_count(s2),
+        0,
+        "Clean page on s2 must have 0 blocked count"
+    );
+    assert_eq!(
+        engine.surface_blocked_count(s1),
+        2,
+        "s1 blocked count must remain isolated and unaffected by s2 navigation"
+    );
+
+    // Exempt the site for s1.
+    engine.exempt_site("blocked-content.test");
+    assert!(
+        engine.is_site_exempt("blocked-content.test"),
+        "Site must be reported as exempt after exempt_site"
+    );
+
+    // Re-navigating s1 to the exempted site must yield 0 blocked items.
+    let _ = engine.start_surface_navigation(s1, &req_blocked);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_blocked_count(s1),
+        0,
+        "Exempted site must have 0 blocked count"
+    );
+
+    // Revoke the site exemption.
+    engine.remove_site_exemption("blocked-content.test");
+    assert!(
+        !engine.is_site_exempt("blocked-content.test"),
+        "Site must no longer be exempt after remove_site_exemption"
+    );
+
+    // Re-navigating s1 must block items again.
+    let _ = engine.start_surface_navigation(s1, &req_blocked);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_blocked_count(s1),
+        2,
+        "Blocked count must restore after exemption is revoked"
+    );
+
+    // Replace policy with a narrower policy matching only tracker.js.
+    let narrow_policy = CompiledPolicy::from_rules("tracker-only-policy", ["tracker.js"]);
+    engine.install_policy(narrow_policy);
+
+    let _ = engine.start_surface_navigation(s1, &req_blocked);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_blocked_count(s1),
+        1,
+        "Replaced policy must be active and report new blocked count"
+    );
+
+    // Navigating s1 to a clean page resets its blocked count to 0.
+    let _ = engine.start_surface_navigation(s1, &req_clean);
+    while let Some(_event) = engine.poll_event() {}
+
+    assert_eq!(
+        engine.surface_blocked_count(s1),
+        0,
+        "Navigating to clean page must reset surface blocked count to 0"
     );
 }
 

@@ -15,13 +15,13 @@
 #![forbid(unsafe_code)]
 
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, NavigationId,
-    Page, Request, SurfaceId, SurfaceState,
+    CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent,
+    NavigationId, Page, Request, SurfaceId, SurfaceState,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -68,6 +68,9 @@ struct SharedHostContext {
     id: ContextId,
     responses: RefCell<HashMap<String, Response>>,
     loads: RefCell<Vec<String>>,
+    subresources: RefCell<HashMap<String, Vec<String>>>,
+    policy: RefCell<Option<CompiledPolicy>>,
+    exemptions: RefCell<HashSet<String>>,
 }
 
 #[derive(Debug, Clone)]
@@ -79,6 +82,8 @@ struct HeadlessSurface {
     current_nav: Option<NavigationId>,
     loads: Vec<String>,
     data: HashMap<String, String>,
+    blocked_count: u64,
+    blocked_urls: Vec<String>,
 }
 
 /// The host/factory type owning the shared platform context for headless engines.
@@ -105,6 +110,9 @@ impl HeadlessHost {
                 id,
                 responses: RefCell::new(HashMap::new()),
                 loads: RefCell::new(Vec::new()),
+                subresources: RefCell::new(HashMap::new()),
+                policy: RefCell::new(None),
+                exemptions: RefCell::new(HashSet::new()),
             }),
         }
     }
@@ -207,6 +215,31 @@ impl HeadlessHost {
         self.context.loads.borrow().clone()
     }
 
+    /// Script `address` with a set of `subresources` that will be requested when navigating to it.
+    pub fn with_subresources(
+        self,
+        address: impl Into<String>,
+        subresources: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.context.subresources.borrow_mut().insert(
+            address.into(),
+            subresources.into_iter().map(Into::into).collect(),
+        );
+        self
+    }
+
+    /// Install a default compiled blocking policy on this host's shared platform context.
+    pub fn with_policy(self, policy: CompiledPolicy) -> Self {
+        *self.context.policy.borrow_mut() = Some(policy);
+        self
+    }
+
+    /// Add a site exemption to this host's shared platform context.
+    pub fn with_site_exemption(self, site: impl Into<String>) -> Self {
+        self.context.exemptions.borrow_mut().insert(site.into());
+        self
+    }
+
     /// Mint an engine instance sharing this host's platform context.
     pub fn create_engine(&mut self) -> HeadlessEngine {
         HeadlessEngine::from_shared_context(Rc::clone(&self.context))
@@ -261,6 +294,22 @@ pub struct HeadlessEngine {
     persistent_data: HashMap<SurfaceId, HashMap<String, String>>,
     loads: Vec<String>,
     context: Option<Rc<SharedHostContext>>,
+    subresources: HashMap<String, Vec<String>>,
+    policy: Option<CompiledPolicy>,
+    exemptions: HashSet<String>,
+}
+
+fn normalize_site(site: &str) -> &str {
+    let s = site
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
+    s.split('/').next().unwrap_or(s)
+}
+
+fn site_matches(exemption: &str, url_or_site: &str) -> bool {
+    let norm_exempt = normalize_site(exemption);
+    let norm_target = normalize_site(url_or_site);
+    norm_target == norm_exempt || norm_target.ends_with(&format!(".{norm_exempt}"))
 }
 
 impl Default for HeadlessEngine {
@@ -282,6 +331,9 @@ impl HeadlessEngine {
             persistent_data: HashMap::new(),
             loads: Vec::new(),
             context: None,
+            subresources: HashMap::new(),
+            policy: None,
+            exemptions: HashSet::new(),
         }
     }
 
@@ -297,6 +349,9 @@ impl HeadlessEngine {
             persistent_data: HashMap::new(),
             loads: Vec::new(),
             context: Some(context),
+            subresources: HashMap::new(),
+            policy: None,
+            exemptions: HashSet::new(),
         }
     }
 
@@ -423,6 +478,113 @@ impl HeadlessEngine {
         )
     }
 
+    /// Script `address` with a set of `subresources` that will be requested when navigating to it.
+    pub fn with_subresources(
+        mut self,
+        address: impl Into<String>,
+        subresources: impl IntoIterator<Item = impl Into<String>>,
+    ) -> Self {
+        self.subresources.insert(
+            address.into(),
+            subresources.into_iter().map(Into::into).collect(),
+        );
+        self
+    }
+
+    /// Install a compiled blocking policy on this engine.
+    pub fn with_policy(mut self, policy: CompiledPolicy) -> Self {
+        self.policy = Some(policy);
+        self
+    }
+
+    /// Exempt `site` from blocking on this engine.
+    pub fn with_site_exemption(mut self, site: impl Into<String>) -> Self {
+        self.exemptions.insert(site.into());
+        self
+    }
+
+    fn active_policy(&self) -> Option<CompiledPolicy> {
+        if let Some(p) = &self.policy {
+            return Some(p.clone());
+        }
+        if let Some(ctx) = &self.context {
+            if let Some(p) = ctx.policy.borrow().as_ref() {
+                return Some(p.clone());
+            }
+        }
+        None
+    }
+
+    fn get_subresources(&self, address: &str) -> Vec<String> {
+        if let Some(sub) = self.subresources.get(address) {
+            return sub.clone();
+        }
+        if let Some(ctx) = &self.context {
+            if let Some(sub) = ctx.subresources.borrow().get(address) {
+                return sub.clone();
+            }
+        }
+        if address == "https://blocked-content.test/" {
+            return vec![
+                "https://blocked-content.test/tracker.js".to_string(),
+                "https://blocked-content.test/ad.png".to_string(),
+                "https://blocked-content.test/content.css".to_string(),
+            ];
+        }
+        Vec::new()
+    }
+
+    /// Install or replace the compiled content-blocking policy.
+    pub fn install_policy(&mut self, policy: CompiledPolicy) {
+        self.policy = Some(policy);
+    }
+
+    /// Exempt `site` from content blocking.
+    pub fn exempt_site(&mut self, site: &str) {
+        self.exemptions.insert(site.to_string());
+    }
+
+    /// Remove a previously granted site exemption.
+    pub fn remove_site_exemption(&mut self, site: &str) {
+        let norm = normalize_site(site);
+        self.exemptions.retain(|s| normalize_site(s) != norm);
+        if let Some(ctx) = &self.context {
+            ctx.exemptions
+                .borrow_mut()
+                .retain(|s| normalize_site(s) != norm);
+        }
+    }
+
+    /// Whether `site` is currently exempted from content blocking.
+    pub fn is_site_exempt(&self, site: &str) -> bool {
+        if self.exemptions.iter().any(|e| site_matches(e, site)) {
+            return true;
+        }
+        if let Some(ctx) = &self.context {
+            if ctx
+                .exemptions
+                .borrow()
+                .iter()
+                .any(|e| site_matches(e, site))
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// The count of blocked requests or resources for the page currently loaded on `surface`.
+    pub fn surface_blocked_count(&self, surface: SurfaceId) -> u64 {
+        self.surfaces.get(&surface).map_or(0, |s| s.blocked_count)
+    }
+
+    /// The list of URLs or resource identifiers that were blocked on `surface` during the current page load.
+    pub fn surface_blocked_items(&self, surface: SurfaceId) -> Vec<String> {
+        self.surfaces
+            .get(&surface)
+            .map_or_else(Vec::new, |s| s.blocked_urls.clone())
+    }
+
     /// Every address this engine was asked to load, in order.
     ///
     /// FR-007a forbids browsing history leaving the machine and bounds what may
@@ -471,6 +633,8 @@ impl HeadlessEngine {
                 current_nav: None,
                 loads: Vec::new(),
                 data: HashMap::new(),
+                blocked_count: 0,
+                blocked_urls: Vec::new(),
             },
         );
         id
@@ -600,6 +764,22 @@ impl HeadlessEngine {
             ctx.loads.borrow_mut().push(address.clone());
         }
 
+        // Evaluate content blocking for this navigation
+        let is_exempt = self.is_site_exempt(&address);
+        let mut blocked_count = 0u64;
+        let mut blocked_urls = Vec::new();
+        if !is_exempt {
+            if let Some(policy) = self.active_policy() {
+                let subresources = self.get_subresources(&address);
+                for subres in subresources {
+                    if policy.matches(&subres) {
+                        blocked_count += 1;
+                        blocked_urls.push(subres);
+                    }
+                }
+            }
+        }
+
         if let Some(s) = self.surfaces.get_mut(&surface) {
             if s.state.is_closed() {
                 return self.mint();
@@ -614,6 +794,9 @@ impl HeadlessEngine {
                     .or_default()
                     .insert("visited_url".into(), address.clone());
             }
+
+            s.blocked_count = blocked_count;
+            s.blocked_urls = blocked_urls;
         }
 
         let id = self.mint();
@@ -623,11 +806,24 @@ impl HeadlessEngine {
             address: address.clone(),
         });
 
-        let response = self.responses.get(&address).cloned().or_else(|| {
-            self.context
-                .as_ref()
-                .and_then(|c| c.responses.borrow().get(&address).cloned())
-        });
+        let response = self
+            .responses
+            .get(&address)
+            .cloned()
+            .or_else(|| {
+                self.context
+                    .as_ref()
+                    .and_then(|c| c.responses.borrow().get(&address).cloned())
+            })
+            .or_else(|| {
+                if address == "https://blocked-content.test/" {
+                    Some(Response::Page {
+                        title: "Blocked Content Test Page".into(),
+                    })
+                } else {
+                    None
+                }
+            });
 
         match response {
             Some(Response::Page { title }) => {
@@ -774,6 +970,34 @@ impl Engine for HeadlessEngine {
 
     fn surface_has_retained_data(&self, surface: SurfaceId) -> bool {
         self.surface_has_retained_data(surface)
+    }
+
+    fn install_policy(&mut self, policy: CompiledPolicy) {
+        self.install_policy(policy);
+    }
+
+    fn exempt_site(&mut self, site: &str) {
+        self.exempt_site(site);
+    }
+
+    fn remove_site_exemption(&mut self, site: &str) {
+        self.remove_site_exemption(site);
+    }
+
+    fn is_site_exempt(&self, site: &str) -> bool {
+        self.is_site_exempt(site)
+    }
+
+    fn surface_blocked_count(&self, surface: SurfaceId) -> u64 {
+        self.surface_blocked_count(surface)
+    }
+
+    fn blocked_count(&self, surface: SurfaceId) -> u64 {
+        self.surface_blocked_count(surface)
+    }
+
+    fn surface_blocked_items(&self, surface: SurfaceId) -> Vec<String> {
+        self.surface_blocked_items(surface)
     }
 }
 
@@ -1244,5 +1468,91 @@ mod tests {
             engine.loads(),
             &["https://s1.invalid/", "https://s2.invalid/"]
         );
+    }
+
+    #[test]
+    fn policy_installation_replacement_and_exemption() {
+        let mut engine = HeadlessEngine::new().with_page("https://example.test/", "Example");
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        engine.activate_surface(surface);
+
+        let policy = CompiledPolicy::from_rules("policy-1", ["bad-tracker.js", "banner.png"]);
+        engine.install_policy(policy);
+
+        let engine = engine.with_subresources(
+            "https://example.test/",
+            [
+                "https://example.test/bad-tracker.js",
+                "https://example.test/banner.png",
+                "https://example.test/app.js",
+            ],
+        );
+        let mut engine = engine;
+
+        let _ = engine.start_surface_navigation(surface, &Request::new("https://example.test/"));
+        assert_eq!(engine.surface_blocked_count(surface), 2);
+        assert_eq!(
+            engine.surface_blocked_items(surface),
+            vec![
+                "https://example.test/bad-tracker.js".to_string(),
+                "https://example.test/banner.png".to_string()
+            ]
+        );
+
+        // Site exemption
+        engine.exempt_site("example.test");
+        assert!(engine.is_site_exempt("example.test"));
+        assert!(engine.is_site_exempt("https://example.test/"));
+
+        let _ = engine.start_surface_navigation(surface, &Request::new("https://example.test/"));
+        assert_eq!(engine.surface_blocked_count(surface), 0);
+        assert!(engine.surface_blocked_items(surface).is_empty());
+
+        // Remove exemption
+        engine.remove_site_exemption("https://example.test");
+        assert!(!engine.is_site_exempt("example.test"));
+
+        // Replace policy with policy that only blocks banner.png
+        let policy2 = CompiledPolicy::from_rules("policy-2", ["banner.png"]);
+        engine.install_policy(policy2);
+
+        let _ = engine.start_surface_navigation(surface, &Request::new("https://example.test/"));
+        assert_eq!(engine.surface_blocked_count(surface), 1);
+        assert_eq!(
+            engine.surface_blocked_items(surface),
+            vec!["https://example.test/banner.png".to_string()]
+        );
+    }
+
+    #[test]
+    fn surface_blocked_counts_are_isolated_across_surfaces() {
+        let mut engine = HeadlessEngine::new()
+            .with_page("https://site-a.test/", "Site A")
+            .with_page("https://site-b.test/", "Site B")
+            .with_subresources(
+                "https://site-a.test/",
+                [
+                    "https://site-a.test/tracker.js",
+                    "https://site-a.test/ad.png",
+                ],
+            )
+            .with_subresources("https://site-b.test/", ["https://site-b.test/clean.js"])
+            .with_policy(CompiledPolicy::from_rules(
+                "blocker",
+                ["tracker.js", "ad.png"],
+            ));
+
+        let s1 = engine.create_surface(DataStoreSelector::Persistent);
+        let s2 = engine.create_surface(DataStoreSelector::Persistent);
+
+        let _ = engine.start_surface_navigation(s1, &Request::new("https://site-a.test/"));
+        let _ = engine.start_surface_navigation(s2, &Request::new("https://site-b.test/"));
+
+        assert_eq!(engine.surface_blocked_count(s1), 2);
+        assert_eq!(engine.surface_blocked_count(s2), 0);
+
+        // Re-navigating s1 to site-b resets s1's count
+        let _ = engine.start_surface_navigation(s1, &Request::new("https://site-b.test/"));
+        assert_eq!(engine.surface_blocked_count(s1), 0);
     }
 }
