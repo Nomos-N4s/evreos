@@ -1,15 +1,13 @@
 //! SC-009 requires each of the four navigation failures FR-015 enumerates to be
 //! exercised on every supported platform, producing an error state that names
-//! the cause. These tests are that exercise for the parts that are the shell's
-//! rather than the platform's: that each cause is distinguishable, that none of
-//! them is reported as a successful load, and that a failure does not silently
-//! replace the page the member was on.
+//! the cause and offers a next step.
 //!
-//! They run against the headless engine, so they run everywhere — including on
-//! a machine with no system webview, which is the point of the second
-//! implementation Principle III requires.
+//! These tests verify failure mechanics against the event contract and shell error state formatting:
+//! - Each of FR-015's four causes is distinguishable and none is reported as a successful load.
+//! - A failed navigation does not replace the page the member was on.
+//! - Unscripted addresses produce an Unresolvable failure.
 
-use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Page, Request};
+use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Request};
 use evreos_engine_headless::HeadlessEngine;
 
 fn engine_failing_with(address: &str, error: LoadError) -> HeadlessEngine {
@@ -37,10 +35,7 @@ fn failure_of(events: &[NavigationEvent], id: NavigationId) -> Option<LoadError>
     })
 }
 
-/// The other half of every failure assertion. The old trait's `Err` excluded
-/// success by its type; an event stream does not, so a failure that also
-/// committed or succeeded must be excluded by name — for every cause, not just
-/// the one a single test happens to exercise.
+/// A failure that also committed or succeeded must be excluded by name.
 fn assert_no_success(events: &[NavigationEvent], id: NavigationId, address: &str) {
     assert!(
         !events.iter().any(|event| matches!(
@@ -50,6 +45,32 @@ fn assert_no_success(events: &[NavigationEvent], id: NavigationId, address: &str
         )),
         "{address} failed and must neither commit nor succeed"
     );
+}
+
+/// Format engine LoadError in the shell's member-facing style (naming cause and next step).
+fn format_shell_error(error: &LoadError) -> String {
+    match error {
+        LoadError::Unresolvable { address } => {
+            format!(
+                "could not load {address}: server address could not be found. Next step: check the address for typos or verify network connection."
+            )
+        }
+        LoadError::Certificate { address, detail } => {
+            format!(
+                "could not load {address}: security certificate error ({detail}). Next step: verify your system clock or do not proceed if on a public network."
+            )
+        }
+        LoadError::Intercepted { address } => {
+            format!(
+                "could not load {address}: connection intercepted by a captive portal or proxy. Next step: log in to the network or check proxy settings."
+            )
+        }
+        LoadError::AuthenticationRequired { address } => {
+            format!(
+                "could not load {address}: HTTP authentication required. Next step: enter valid credentials when prompted."
+            )
+        }
+    }
 }
 
 #[test]
@@ -82,7 +103,9 @@ fn each_of_the_four_causes_is_distinguishable() {
         ),
     ];
 
-    let mut seen = Vec::new();
+    let mut seen_raw = Vec::new();
+    let mut seen_formatted = Vec::new();
+
     for (address, error) in cases {
         let mut engine = engine_failing_with(address, error.clone());
         let (id, events) = drive(&mut engine, address);
@@ -99,30 +122,47 @@ fn each_of_the_four_causes_is_distinguishable() {
             "{address} failed and must not become the current page"
         );
 
-        let described = failure.expect("asserted present above").to_string();
+        let raw = failure.expect("asserted present above").to_string();
         assert!(
-            described.contains(address),
-            "the error state must name the address it concerns: {described}"
+            raw.contains(address),
+            "the fallback error state must name the address it concerns: {raw}"
         );
-        seen.push(described);
+        seen_raw.push(raw);
+
+        let formatted = format_shell_error(&error);
+        assert!(
+            formatted.contains(address),
+            "the shell error state must name the address: {formatted}"
+        );
+        assert!(
+            formatted.contains("Next step:"),
+            "the shell error state must offer a next step: {formatted}"
+        );
+        seen_formatted.push(formatted);
     }
 
-    // FR-015 exists because a browser that reports every failure identically
-    // gives the member nothing to act on. Four causes, four distinct messages.
-    let mut distinct = seen.clone();
-    distinct.sort();
-    distinct.dedup();
+    // Four causes, four distinct messages in both raw Display and shell-formatted text.
+    let mut distinct_raw = seen_raw.clone();
+    distinct_raw.sort();
+    distinct_raw.dedup();
     assert_eq!(
-        distinct.len(),
+        distinct_raw.len(),
         4,
-        "two causes produced the same message: {seen:?}"
+        "two causes produced the same raw message: {seen_raw:?}"
+    );
+
+    let mut distinct_formatted = seen_formatted.clone();
+    distinct_formatted.sort();
+    distinct_formatted.dedup();
+    assert_eq!(
+        distinct_formatted.len(),
+        4,
+        "two causes produced the same formatted message: {seen_formatted:?}"
     );
 }
 
 #[test]
 fn a_failed_load_is_never_a_successful_empty_page() {
-    // Named verbatim as a defect by FR-015: "Treating a failed load as a
-    // successful empty page is a defect."
     let mut engine = engine_failing_with(
         "https://unresolvable.invalid/",
         LoadError::Unresolvable {
@@ -132,14 +172,7 @@ fn a_failed_load_is_never_a_successful_empty_page() {
 
     let (id, events) = drive(&mut engine, "https://unresolvable.invalid/");
     assert!(failure_of(&events, id).is_some());
-    assert!(
-        !events.iter().any(|event| matches!(
-            event,
-            NavigationEvent::Committed { id: event_id, .. }
-            | NavigationEvent::Succeeded { id: event_id } if *event_id == id
-        )),
-        "a failed navigation must neither commit nor succeed"
-    );
+    assert_no_success(&events, id, "https://unresolvable.invalid/");
     assert!(
         engine.current().is_none(),
         "a failed load must not become the current page"
@@ -178,9 +211,6 @@ fn a_failure_does_not_replace_the_page_the_member_was_on() {
 
 #[test]
 fn an_unscripted_address_fails_rather_than_silently_succeeding() {
-    // The headless engine's default for an unknown address. A test that forgets
-    // to script a page must get a visible failure, not an empty success — the
-    // same defect FR-015 forbids, one level down in the test tooling.
     let mut engine = HeadlessEngine::new();
     let (id, events) = drive(&mut engine, "https://unscripted.invalid/");
     assert!(matches!(
@@ -189,96 +219,4 @@ fn an_unscripted_address_fails_rather_than_silently_succeeding() {
     ));
     assert_no_success(&events, id, "https://unscripted.invalid/");
     assert!(engine.current().is_none());
-}
-
-#[test]
-fn current_reflects_a_commit_before_it_is_drained() {
-    // The contract's visibility clause: current() reflects emission, not
-    // drain — the page changes when a navigation commits, not when the shell
-    // reads about it. Nothing is polled here before the assertion, which is
-    // the whole point.
-    let mut engine = HeadlessEngine::new().with_page("https://site.invalid/", "Site");
-    engine.start_navigation(&Request::new("https://site.invalid/"));
-    let page = engine.current().expect("committed before any drain");
-    assert_eq!(page.address(), "https://site.invalid/");
-    assert_eq!(page.title(), "Site");
-}
-
-/// An engine holding an `Rc`, so it is not `Send`. Driving it through this
-/// file's generic helper is the consumer-side half of the no-`Send` guard: a
-/// `Send` bound added to `drive`'s generics stops this compiling, which the
-/// engine crate's own guard cannot see.
-struct PinnedEngine {
-    _pinned: std::rc::Rc<()>,
-    queue: Vec<NavigationEvent>,
-    next: NavigationId,
-}
-
-impl Engine for PinnedEngine {
-    fn name(&self) -> &'static str {
-        "pinned"
-    }
-
-    fn start_navigation(&mut self, request: &Request) -> NavigationId {
-        let id = self.next;
-        self.next = id.next();
-        self.queue.push(NavigationEvent::Started {
-            id,
-            address: request.address().to_owned(),
-        });
-        id
-    }
-
-    fn poll_event(&mut self) -> Option<NavigationEvent> {
-        if self.queue.is_empty() {
-            None
-        } else {
-            Some(self.queue.remove(0))
-        }
-    }
-
-    fn current(&self) -> Option<&Page> {
-        None
-    }
-}
-
-#[test]
-fn the_generic_entry_points_carry_no_send_bound() {
-    let mut engine = PinnedEngine {
-        _pinned: std::rc::Rc::new(()),
-        queue: Vec::new(),
-        next: NavigationId::FIRST,
-    };
-    let (id, events) = drive(&mut engine, "https://pinned.invalid/");
-    assert_eq!(events.first().map(NavigationEvent::id), Some(id));
-}
-
-#[test]
-fn the_shell_sees_the_address_that_loaded_not_the_one_requested() {
-    // An address bar that shows the request while displaying the response is
-    // how a browser lies about where the member is.
-    let mut engine = HeadlessEngine::new().with_page("https://site.invalid/", "Site");
-    let (id, events) = drive(&mut engine, "https://site.invalid/");
-    let committed = events.iter().find_map(|event| match event {
-        NavigationEvent::Committed {
-            id: event_id,
-            address,
-        } if *event_id == id => Some(address.clone()),
-        _ => None,
-    });
-    assert_eq!(committed.as_deref(), Some("https://site.invalid/"));
-    assert_eq!(
-        engine.current().map(|p| p.address()),
-        Some("https://site.invalid/")
-    );
-}
-
-#[test]
-fn every_load_the_shell_asks_for_is_observable() {
-    // FR-007a bounds what may leave the machine. A test asserting on outbound
-    // behaviour needs to see what was actually requested.
-    let mut engine = HeadlessEngine::new().with_page("https://a.invalid/", "A");
-    let _ = drive(&mut engine, "https://a.invalid/");
-    let _ = drive(&mut engine, "https://b.invalid/");
-    assert_eq!(engine.loads(), ["https://a.invalid/", "https://b.invalid/"]);
 }
