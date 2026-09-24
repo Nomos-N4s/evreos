@@ -463,6 +463,8 @@ pub enum NavigationEvent {
     Redirected { id: NavigationId, address: String },
     /// The engine is now rendering the response from `address`.
     Committed { id: NavigationId, address: String },
+    /// A same-document navigation occurred without full document re-render.
+    SameDocumentNavigated { id: NavigationId, address: String },
     /// The committed navigation finished loading.
     Succeeded { id: NavigationId },
     /// The navigation did not commit, for the cause carried.
@@ -480,11 +482,263 @@ impl NavigationEvent {
             Self::Started { id, .. }
             | Self::Redirected { id, .. }
             | Self::Committed { id, .. }
+            | Self::SameDocumentNavigated { id, .. }
             | Self::Succeeded { id }
             | Self::Failed { id, .. }
             | Self::TitleChanged { id, .. }
             | Self::NavigatedAway { id } => *id,
         }
+    }
+}
+
+/// The kind of rendering surface, distinguishing page webviews from surface webviews.
+///
+/// Under [GAP] G15, surface webviews (rendering shell-supplied app surfaces) are
+/// strictly confined with a deny-all request-gating hook, preventing them from
+/// originating outbound network traffic. Page webviews route requests through
+/// the FR-008 content-blocking pipeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
+pub enum SurfaceKind {
+    /// A regular web page surface navigating addresses, governed by FR-008 blocking.
+    #[default]
+    Page,
+    /// An app or shell surface, subject to [GAP] G15 deny-all request gating.
+    AppSurface,
+}
+
+impl fmt::Display for SurfaceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Page => write!(f, "page"),
+            Self::AppSurface => write!(f, "app-surface"),
+        }
+    }
+}
+
+/// The decision returned by the engine's request-gating hook.
+///
+/// Under [GAP] G15, surface webviews evaluate to [`Deny`](Self::Deny) for any
+/// network request. Page webviews evaluate requests against the FR-008 policy
+/// and site exemptions.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum RequestGateDecision {
+    /// The request is permitted.
+    Allow,
+    /// The request is denied (blocked by content policy or confined under G15).
+    Deny,
+}
+
+impl RequestGateDecision {
+    /// Whether the decision allows the request.
+    pub fn is_allowed(self) -> bool {
+        matches!(self, Self::Allow)
+    }
+
+    /// Whether the decision denies the request.
+    pub fn is_denied(self) -> bool {
+        matches!(self, Self::Deny)
+    }
+}
+
+/// An identifier for a surface hosted from shell-supplied bytes.
+///
+/// Under FR-019a, verification of signed app surface bytes precedes rendering
+/// and caching. The shell hands the verified bytes directly to the engine under
+/// a shell-chosen [`SurfaceIdentity`], ensuring that no custom URL scheme or
+/// protocol vocabulary (e.g. `evreos-app://` or `file://`) leaks into the trait.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct SurfaceIdentity(String);
+
+impl SurfaceIdentity {
+    /// Create a new surface identity.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// The string representation of this surface identity.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for SurfaceIdentity {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for SurfaceIdentity {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for SurfaceIdentity {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for SurfaceIdentity {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A monotonic counter bounding a navigation occasion.
+///
+/// Under FR-018a: "Every change of address the member observes is a navigation,
+/// including one the page performs without fetching a new document."
+/// The navigation epoch increments on every change of address (same-document
+/// navigation included), scoping a member occasion, click-out completion,
+/// and cashback offer control lifetime.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NavigationEpoch(u64);
+
+impl NavigationEpoch {
+    /// The initial navigation epoch for a newly created surface.
+    pub const FIRST: Self = Self(1);
+
+    /// Construct an epoch from a raw counter value.
+    pub const fn new(val: u64) -> Self {
+        Self(val)
+    }
+
+    /// The underlying raw monotonic counter value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The underlying raw monotonic counter value as `u64`.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Return the next sequential epoch.
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for NavigationEpoch {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "epoch:{}", self.0)
+    }
+}
+
+/// An observation emitted by the engine pairing a [`NavigationEvent`] with the
+/// active [`NavigationEpoch`].
+///
+/// Under FR-018a, the navigation epoch increments on every change to the address
+/// the member is on, including same-document navigations.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationObservation {
+    epoch: NavigationEpoch,
+    event: NavigationEvent,
+}
+
+impl NavigationObservation {
+    /// Create a new navigation observation pairing an epoch with an event.
+    pub fn new(epoch: NavigationEpoch, event: NavigationEvent) -> Self {
+        Self { epoch, event }
+    }
+
+    /// The active navigation epoch at the moment this event was observed.
+    pub fn epoch(&self) -> NavigationEpoch {
+        self.epoch
+    }
+
+    /// The underlying navigation event.
+    pub fn event(&self) -> &NavigationEvent {
+        &self.event
+    }
+
+    /// Consume the observation, returning the underlying navigation event.
+    pub fn into_event(self) -> NavigationEvent {
+        self.event
+    }
+}
+
+/// An immutable application identity assigned by the shell.
+///
+/// Under FR-018 and FR-019a, page-adjacent capability grants are keyed to an app.
+/// Messages arriving from an app surface across the message channel are tagged
+/// by the engine seam with the shell-assigned [`AppId`], ensuring that security
+/// checks never rely on an identity the untrusted engine or page script could forge.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct AppId(String);
+
+impl AppId {
+    /// Create a new app identity.
+    pub fn new(id: impl Into<String>) -> Self {
+        Self(id.into())
+    }
+
+    /// The string representation of this app identity.
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for AppId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl From<&str> for AppId {
+    fn from(s: &str) -> Self {
+        Self::new(s)
+    }
+}
+
+impl From<String> for AppId {
+    fn from(s: String) -> Self {
+        Self::new(s)
+    }
+}
+
+impl AsRef<str> for AppId {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+/// A message arriving across the shell-engine message channel, tagged with the shell-assigned app identity.
+///
+/// Under FR-018, every message arriving from an app surface carries the [`AppId`]
+/// the shell assigned to that surface. The engine tags the message at the seam,
+/// preventing the page content or engine from spoofing the sender identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TaggedMessage {
+    app_id: AppId,
+    surface: SurfaceId,
+    payload: String,
+}
+
+impl TaggedMessage {
+    /// Construct a new tagged message.
+    pub fn new(app_id: AppId, surface: SurfaceId, payload: impl Into<String>) -> Self {
+        Self {
+            app_id,
+            surface,
+            payload: payload.into(),
+        }
+    }
+
+    /// The shell-assigned app identity this message originated from.
+    pub fn app_id(&self) -> &AppId {
+        &self.app_id
+    }
+
+    /// The surface that emitted the message.
+    pub fn surface(&self) -> SurfaceId {
+        self.surface
+    }
+
+    /// The message payload string.
+    pub fn payload(&self) -> &str {
+        &self.payload
     }
 }
 
@@ -664,6 +918,112 @@ pub trait Engine {
     /// The list of URLs or resource identifiers that were blocked on `surface` during the current page load.
     fn surface_blocked_items(&self, _surface: SurfaceId) -> Vec<String> {
         Vec::new()
+    }
+
+    // Seam Addition: Host surface from shell-supplied bytes (FR-019a)
+    /// Host content on `surface` from shell-supplied `bytes` under a shell-chosen `identity`.
+    ///
+    /// Under FR-019a, the shell verifies signed app surfaces before rendering or
+    /// writing to cache, supplying the verified bytes directly to the engine without
+    /// leaking custom scheme or protocol vocabulary into the trait.
+    fn host_surface_bytes(
+        &mut self,
+        _surface: SurfaceId,
+        _identity: SurfaceIdentity,
+        _bytes: Vec<u8>,
+    ) -> NavigationId {
+        NavigationId::FIRST
+    }
+
+    /// The [`SurfaceIdentity`] currently hosted on `surface`, if any.
+    fn surface_identity(&self, _surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        None
+    }
+
+    /// The raw bytes currently hosted on `surface`, if any.
+    fn surface_hosted_bytes(&self, _surface: SurfaceId) -> Option<&[u8]> {
+        None
+    }
+
+    // Seam Addition: Navigation observation carrying an epoch (FR-018a)
+    /// Poll the next navigation observation from the engine, if any is ready.
+    ///
+    /// Unlike [`poll_event`](Self::poll_event), this observation carries the [`NavigationEpoch`]
+    /// active at the moment the event occurred.
+    fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.poll_event()
+            .map(|event| NavigationObservation::new(NavigationEpoch::FIRST, event))
+    }
+
+    /// The current [`NavigationEpoch`] of `surface`.
+    ///
+    /// Under FR-018a, the epoch increments on every change to the address,
+    /// including same-document navigations.
+    fn surface_navigation_epoch(&self, _surface: SurfaceId) -> NavigationEpoch {
+        NavigationEpoch::FIRST
+    }
+
+    /// Perform a same-document navigation on `surface` to `address` (e.g. fragment identifier or history API).
+    ///
+    /// Under FR-018a, this updates the address without full document re-render and increments the navigation epoch.
+    fn navigate_same_document(&mut self, _surface: SurfaceId, _address: &str) -> NavigationId {
+        NavigationId::FIRST
+    }
+
+    // Seam Addition: Message channel tagged with shell-assigned app identity (FR-018)
+    /// Assign an immutable [`AppId`] to `surface`.
+    ///
+    /// Under FR-018, messages originating from this surface will be tagged with
+    /// this shell-assigned identity, preventing page script or the engine from
+    /// forging an identity to bypass per-app grant checks.
+    fn set_surface_app_id(&mut self, _surface: SurfaceId, _app_id: AppId) {}
+
+    /// The shell-assigned [`AppId`] of `surface`, if assigned.
+    fn surface_app_id(&self, _surface: SurfaceId) -> Option<&AppId> {
+        None
+    }
+
+    /// Send a message from the shell to `surface`.
+    fn send_message_to_surface(&mut self, _surface: SurfaceId, _message: &str) {}
+
+    /// Poll the next incoming tagged message from an app surface, if any.
+    fn poll_message(&mut self) -> Option<TaggedMessage> {
+        None
+    }
+
+    /// Simulate or deliver an incoming message originating from `surface`.
+    ///
+    /// The engine tags this message with the shell-assigned [`AppId`] of `surface`.
+    fn post_message_from_surface(&mut self, _surface: SurfaceId, _message: &str) {}
+
+    // Seam Addition 4: Request-gating hook ([GAP] G15 / FR-008)
+    /// Create an addressable rendering surface with the specified data store and surface kind.
+    fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
+        let id = self.create_surface(store);
+        self.set_surface_kind(id, kind);
+        id
+    }
+
+    /// Set the [`SurfaceKind`] for `surface`.
+    fn set_surface_kind(&mut self, _surface: SurfaceId, _kind: SurfaceKind) {}
+
+    /// The [`SurfaceKind`] of `surface`, if it exists.
+    fn surface_kind(&self, _surface: SurfaceId) -> Option<SurfaceKind> {
+        Some(SurfaceKind::Page)
+    }
+
+    /// Evaluate the request-gating hook for a request originating on `surface`.
+    ///
+    /// Under [GAP] G15, requests from surface webviews ([`SurfaceKind::AppSurface`])
+    /// are unconditionally denied (`Deny`), confining app surfaces from originating
+    /// network traffic. Requests from page webviews ([`SurfaceKind::Page`]) are
+    /// evaluated through the FR-008 content-blocking pipeline.
+    fn gate_request(&self, _surface: SurfaceId, _url: &str) -> RequestGateDecision {
+        RequestGateDecision::Allow
     }
 }
 
@@ -968,5 +1328,63 @@ mod tests {
         assert_ne!(host1.context_id(), host2.context_id());
         assert!(engine1_a.shares_context_with(&engine1_b));
         assert!(!engine1_a.shares_context_with(&engine2));
+    }
+
+    #[test]
+    fn navigation_epoch_and_observation_types() {
+        let epoch1 = NavigationEpoch::FIRST;
+        assert_eq!(epoch1.get(), 1);
+        assert_eq!(epoch1.as_u64(), 1);
+        let epoch2 = epoch1.next();
+        assert_eq!(epoch2.get(), 2);
+        assert_eq!(epoch1.to_string(), "epoch:1");
+
+        let event = NavigationEvent::SameDocumentNavigated {
+            id: NavigationId::FIRST,
+            address: "https://example.test/#section".into(),
+        };
+        assert_eq!(event.id(), NavigationId::FIRST);
+
+        let obs = NavigationObservation::new(epoch2, event.clone());
+        assert_eq!(obs.epoch(), epoch2);
+        assert_eq!(obs.event(), &event);
+        assert_eq!(obs.into_event(), event);
+    }
+
+    #[test]
+    fn surface_identity_type() {
+        let ident = SurfaceIdentity::new("app.home.v1");
+        assert_eq!(ident.as_str(), "app.home.v1");
+        assert_eq!(ident.to_string(), "app.home.v1");
+        let ident2: SurfaceIdentity = "app.home.v1".into();
+        assert_eq!(ident, ident2);
+        assert_eq!(ident.as_ref(), "app.home.v1");
+    }
+
+    #[test]
+    fn app_id_and_tagged_message_types() {
+        let app_id = AppId::new("app.wallet.v1");
+        assert_eq!(app_id.as_str(), "app.wallet.v1");
+        assert_eq!(app_id.to_string(), "app.wallet.v1");
+        let app_id2: AppId = "app.wallet.v1".into();
+        assert_eq!(app_id, app_id2);
+        assert_eq!(app_id.as_ref(), "app.wallet.v1");
+
+        let msg = TaggedMessage::new(app_id.clone(), SurfaceId::FIRST, "{\"balance\":100}");
+        assert_eq!(msg.app_id(), &app_id);
+        assert_eq!(msg.surface(), SurfaceId::FIRST);
+        assert_eq!(msg.payload(), "{\"balance\":100}");
+    }
+
+    #[test]
+    fn surface_kind_and_request_gate_decision_types() {
+        assert_eq!(SurfaceKind::default(), SurfaceKind::Page);
+        assert_eq!(SurfaceKind::Page.to_string(), "page");
+        assert_eq!(SurfaceKind::AppSurface.to_string(), "app-surface");
+
+        assert!(RequestGateDecision::Allow.is_allowed());
+        assert!(!RequestGateDecision::Allow.is_denied());
+        assert!(RequestGateDecision::Deny.is_denied());
+        assert!(!RequestGateDecision::Deny.is_allowed());
     }
 }

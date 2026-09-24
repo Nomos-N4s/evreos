@@ -15,10 +15,14 @@
 //! 9. Suspend and resume lose no state the shell can observe.
 //! 10. A non-persistent store leaves nothing behind when its surface closes.
 //! 11. The per-surface blocked count is observable to the shell, isolated across surfaces, reset on re-navigation, and honors site exemptions and policy replacement.
+//! 12. A navigation observation carries an epoch that increments on every change of address, same-document navigation included, defining an FR-018a navigation and bounding an occasion.
+//! 13. Hosting a surface from shell-supplied bytes under a shell-chosen identity ensures no scheme or protocol vocabulary enters the trait and FR-019a verification precedes rendering and caching.
+//! 14. A message channel delivers incoming messages tagged with the shell-assigned app identity, ensuring an FR-018 per-app grant is never checked against a forged identity.
+//! 15. A request-gating hook enforces deny-all confinement for surface webviews ([GAP] G15) and evaluates page webviews through the FR-008 content-blocking pipeline.
 
 use super::{
-    CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent, Request,
-    SurfaceState,
+    AppId, CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
+    NavigationEvent, Request, RequestGateDecision, SurfaceIdentity, SurfaceKind, SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -43,6 +47,10 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_suspend_and_resume_preserve_surface_state(&make);
     test_non_persistent_store_leaves_nothing_on_close(&make);
     test_surface_blocked_count_observable(&make);
+    test_navigation_epoch_increments_on_every_address_change(&make);
+    test_host_surface_from_bytes_under_shell_identity(&make);
+    test_message_channel_tagged_with_shell_assigned_app_identity(&make);
+    test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pages(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -652,6 +660,236 @@ pub fn test_surface_blocked_count_observable<E: Engine>(make: &impl Fn() -> E) {
         engine.surface_blocked_count(s1),
         0,
         "Navigating to clean page must reset surface blocked count to 0"
+    );
+}
+
+/// Invariant 12: A navigation observation carries an epoch that increments on every change of
+/// address, including same-document navigations, defining an FR-018a navigation and bounding
+/// an occasion.
+pub fn test_navigation_epoch_increments_on_every_address_change<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+    let surface = engine.create_surface(DataStoreSelector::Persistent);
+    let initial_epoch = engine.surface_navigation_epoch(surface);
+    assert_eq!(initial_epoch, NavigationEpoch::FIRST);
+
+    // Initial navigation to success page
+    let req = Request::new("https://success.test/");
+    let nav_id1 = engine.start_surface_navigation(surface, &req);
+    let mut obs1 = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        obs1.push(obs);
+    }
+    let epoch_after_nav = engine.surface_navigation_epoch(surface);
+    assert!(
+        epoch_after_nav.as_u64() > initial_epoch.as_u64(),
+        "Epoch must increment when regular navigation commits"
+    );
+
+    let committed_obs = obs1
+        .iter()
+        .find(|obs| matches!(obs.event(), NavigationEvent::Committed { id, .. } if *id == nav_id1));
+    assert!(committed_obs.is_some(), "Must emit Committed observation");
+    assert_eq!(
+        committed_obs.unwrap().epoch(),
+        epoch_after_nav,
+        "Committed observation must carry epoch active at commit"
+    );
+
+    // Same-document navigation (FR-018a)
+    let nav_id2 = engine.navigate_same_document(surface, "https://success.test/#section2");
+    let epoch_after_same_doc = engine.surface_navigation_epoch(surface);
+    assert!(
+        epoch_after_same_doc.as_u64() > epoch_after_nav.as_u64(),
+        "Epoch must increment on same-document navigation"
+    );
+
+    let mut obs2 = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        obs2.push(obs);
+    }
+    let same_doc_obs = obs2
+        .iter()
+        .find(|obs| matches!(obs.event(), NavigationEvent::SameDocumentNavigated { id, address } if *id == nav_id2 && address == "https://success.test/#section2"));
+    assert!(
+        same_doc_obs.is_some(),
+        "Must emit SameDocumentNavigated observation"
+    );
+    assert_eq!(
+        same_doc_obs.unwrap().epoch(),
+        epoch_after_same_doc,
+        "SameDocumentNavigated observation must carry incremented epoch"
+    );
+}
+
+/// Invariant 13: Hosting a surface from shell-supplied bytes under a shell-chosen identity
+/// ensures no scheme or protocol vocabulary enters the trait, allowing FR-019a's verification
+/// to precede rendering and caching.
+pub fn test_host_surface_from_bytes_under_shell_identity<E: Engine>(make: &impl Fn() -> E) {
+    let mut engine = make();
+    let surface = engine.create_surface(DataStoreSelector::Persistent);
+    let identity = SurfaceIdentity::new("app://verified-app");
+    let payload = b"<!DOCTYPE html><html><body>Verified Content</body></html>".to_vec();
+
+    let nav_id = engine.host_surface_bytes(surface, identity.clone(), payload.clone());
+
+    assert_eq!(
+        engine.surface_identity(surface),
+        Some(&identity),
+        "surface_identity must return shell-chosen identity"
+    );
+    assert_eq!(
+        engine.surface_hosted_bytes(surface),
+        Some(&payload[..]),
+        "surface_hosted_bytes must return shell-supplied bytes"
+    );
+
+    let mut observations = Vec::new();
+    while let Some(obs) = engine.poll_observation() {
+        observations.push(obs);
+    }
+
+    assert!(
+        !observations.is_empty(),
+        "host_surface_bytes must emit navigation observations"
+    );
+    let has_started = observations.iter().any(|obs| {
+        matches!(obs.event(), NavigationEvent::Started { id, address } if *id == nav_id && address == identity.as_str())
+    });
+    let has_committed = observations.iter().any(|obs| {
+        matches!(obs.event(), NavigationEvent::Committed { id, address } if *id == nav_id && address == identity.as_str())
+    });
+    let has_succeeded = observations
+        .iter()
+        .any(|obs| matches!(obs.event(), NavigationEvent::Succeeded { id } if *id == nav_id));
+
+    assert!(
+        has_started,
+        "Must emit Started observation for hosted surface"
+    );
+    assert!(
+        has_committed,
+        "Must emit Committed observation for hosted surface"
+    );
+    assert!(
+        has_succeeded,
+        "Must emit Succeeded observation for hosted surface"
+    );
+}
+
+/// Invariant 14: A message channel delivers incoming messages tagged with the shell-assigned
+/// app identity, ensuring an FR-018 per-app grant is never checked against an identity the
+/// engine or webview could forge.
+pub fn test_message_channel_tagged_with_shell_assigned_app_identity<E: Engine>(
+    make: &impl Fn() -> E,
+) {
+    let mut engine = make();
+    let surface1 =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+    let surface2 =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+
+    let app_id1 = AppId::new("ledger-app-v1");
+    let app_id2 = AppId::new("settings-app-v1");
+
+    engine.set_surface_app_id(surface1, app_id1.clone());
+    engine.set_surface_app_id(surface2, app_id2.clone());
+
+    assert_eq!(engine.surface_app_id(surface1), Some(&app_id1));
+    assert_eq!(engine.surface_app_id(surface2), Some(&app_id2));
+
+    // Send outgoing message from shell to surface
+    engine.send_message_to_surface(surface1, "{\"rpc\":\"balance\"}");
+
+    // Simulate incoming message originating from surface1
+    engine.post_message_from_surface(surface1, "{\"result\":100}");
+    // Simulate incoming message originating from surface2
+    engine.post_message_from_surface(surface2, "{\"theme\":\"dark\"}");
+
+    let msg1 = engine
+        .poll_message()
+        .expect("Expected message from surface1");
+    assert_eq!(msg1.surface(), surface1);
+    assert_eq!(
+        msg1.app_id(),
+        &app_id1,
+        "Message must be tagged with shell-assigned AppId"
+    );
+    assert_eq!(msg1.payload(), "{\"result\":100}");
+
+    let msg2 = engine
+        .poll_message()
+        .expect("Expected message from surface2");
+    assert_eq!(msg2.surface(), surface2);
+    assert_eq!(
+        msg2.app_id(),
+        &app_id2,
+        "Message must be tagged with shell-assigned AppId"
+    );
+    assert_eq!(msg2.payload(), "{\"theme\":\"dark\"}");
+
+    assert!(
+        engine.poll_message().is_none(),
+        "No more messages should be queued"
+    );
+}
+
+/// Invariant 15: The request-gating hook enforces deny-all confinement for surface webviews
+/// ([`SurfaceKind::AppSurface`]) per [GAP] G15, while page webviews ([`SurfaceKind::Page`])
+/// evaluate requests through the FR-008 content-blocking pipeline.
+pub fn test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pages<E: Engine>(
+    make: &impl Fn() -> E,
+) {
+    let mut engine = make();
+
+    // 1. Surface webview ([GAP] G15: Deny-all)
+    let app_surface =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+    assert_eq!(
+        engine.surface_kind(app_surface),
+        Some(SurfaceKind::AppSurface)
+    );
+
+    // Outbound requests must be unconditionally denied for surface webviews
+    assert_eq!(
+        engine.gate_request(app_surface, "https://api.external.com/telemetry"),
+        RequestGateDecision::Deny,
+        "Surface webview must deny arbitrary outbound traffic under G15"
+    );
+    assert_eq!(
+        engine.gate_request(app_surface, "https://allowed.example.com/asset.js"),
+        RequestGateDecision::Deny,
+        "Surface webview must deny traffic even to allowed sites under G15"
+    );
+
+    // 2. Page webview (FR-008 pipeline)
+    let page_surface =
+        engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::Page);
+    assert_eq!(engine.surface_kind(page_surface), Some(SurfaceKind::Page));
+
+    // Install content-blocking policy
+    let policy = CompiledPolicy::from_rules("adblock", ["tracker.ad.test", "banner.ad.test"]);
+    engine.install_policy(policy);
+
+    // Allowed page request
+    assert_eq!(
+        engine.gate_request(page_surface, "https://news.test/article"),
+        RequestGateDecision::Allow,
+        "Regular content on page webview should be allowed"
+    );
+
+    // Blocked page request matching policy
+    assert_eq!(
+        engine.gate_request(page_surface, "https://tracker.ad.test/pixel.gif"),
+        RequestGateDecision::Deny,
+        "Policy-matching tracker on page webview should be denied"
+    );
+
+    // Exemption bypasses policy on page webviews
+    engine.exempt_site("tracker.ad.test");
+    assert_eq!(
+        engine.gate_request(page_surface, "https://tracker.ad.test/pixel.gif"),
+        RequestGateDecision::Allow,
+        "Exempted site on page webview should be allowed"
     );
 }
 

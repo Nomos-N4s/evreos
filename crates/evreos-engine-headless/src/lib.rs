@@ -20,8 +20,9 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEvent,
-    NavigationId, Page, Request, SurfaceId, SurfaceState,
+    AppId, CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError,
+    NavigationEpoch, NavigationEvent, NavigationId, NavigationObservation, Page, Request,
+    RequestGateDecision, SurfaceId, SurfaceIdentity, SurfaceKind, SurfaceState, TaggedMessage,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -77,7 +78,12 @@ struct SharedHostContext {
 struct HeadlessSurface {
     _id: SurfaceId,
     store: DataStoreSelector,
+    kind: SurfaceKind,
     state: SurfaceState,
+    epoch: NavigationEpoch,
+    identity: Option<SurfaceIdentity>,
+    hosted_bytes: Option<Vec<u8>>,
+    app_id: Option<AppId>,
     current: Option<Page>,
     current_nav: Option<NavigationId>,
     loads: Vec<String>,
@@ -286,7 +292,7 @@ impl EngineHost for HeadlessHost {
 pub struct HeadlessEngine {
     context_id: ContextId,
     responses: HashMap<String, Response>,
-    queue: VecDeque<NavigationEvent>,
+    queue: VecDeque<NavigationObservation>,
     next_id: Option<NavigationId>,
     next_surface_id: Option<SurfaceId>,
     active_surface: Option<SurfaceId>,
@@ -297,6 +303,8 @@ pub struct HeadlessEngine {
     subresources: HashMap<String, Vec<String>>,
     policy: Option<CompiledPolicy>,
     exemptions: HashSet<String>,
+    messages: VecDeque<TaggedMessage>,
+    outgoing_messages: Vec<(SurfaceId, String)>,
 }
 
 fn normalize_site(site: &str) -> &str {
@@ -334,6 +342,8 @@ impl HeadlessEngine {
             subresources: HashMap::new(),
             policy: None,
             exemptions: HashSet::new(),
+            messages: VecDeque::new(),
+            outgoing_messages: Vec::new(),
         }
     }
 
@@ -352,6 +362,8 @@ impl HeadlessEngine {
             subresources: HashMap::new(),
             policy: None,
             exemptions: HashSet::new(),
+            messages: VecDeque::new(),
+            outgoing_messages: Vec::new(),
         }
     }
 
@@ -454,8 +466,15 @@ impl HeadlessEngine {
         let surface = self.ensure_active_surface();
         let addr = address.into();
         let id = self.mint();
-        self.queue
-            .push_back(NavigationEvent::Started { id, address: addr });
+        let epoch = self
+            .surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST);
+        self.queue.push_back(NavigationObservation::new(
+            epoch,
+            NavigationEvent::Started { id, address: addr },
+        ));
         self.process_surface_steps(surface, id, steps);
         self
     }
@@ -621,6 +640,15 @@ impl HeadlessEngine {
 
     /// Create an addressable rendering surface with the specified data store.
     pub fn create_surface(&mut self, store: DataStoreSelector) -> SurfaceId {
+        self.create_surface_with_kind(store, SurfaceKind::Page)
+    }
+
+    /// Create an addressable rendering surface with the specified data store and surface kind.
+    pub fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
         let id = self.next_surface_id.unwrap_or(SurfaceId::FIRST);
         self.next_surface_id = Some(id.next());
         self.surfaces.insert(
@@ -628,7 +656,12 @@ impl HeadlessEngine {
             HeadlessSurface {
                 _id: id,
                 store,
+                kind,
                 state: SurfaceState::Inactive,
+                epoch: NavigationEpoch::FIRST,
+                identity: None,
+                hosted_bytes: None,
+                app_id: None,
                 current: None,
                 current_nav: None,
                 loads: Vec::new(),
@@ -638,6 +671,38 @@ impl HeadlessEngine {
             },
         );
         id
+    }
+
+    /// Set the [`SurfaceKind`] for `surface`.
+    pub fn set_surface_kind(&mut self, surface: SurfaceId, kind: SurfaceKind) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.kind = kind;
+        }
+    }
+
+    /// The [`SurfaceKind`] of `surface`, if it exists.
+    pub fn surface_kind(&self, surface: SurfaceId) -> Option<SurfaceKind> {
+        self.surfaces.get(&surface).map(|s| s.kind)
+    }
+
+    /// Evaluate the request-gating hook for a request originating on `surface`.
+    pub fn gate_request(&self, surface: SurfaceId, url: &str) -> RequestGateDecision {
+        if let Some(s) = self.surfaces.get(&surface) {
+            if s.kind == SurfaceKind::AppSurface {
+                // [GAP] G15: Deny-all for surface webviews
+                return RequestGateDecision::Deny;
+            }
+        }
+        // FR-008 pipeline for page webviews
+        if self.is_site_exempt(url) {
+            return RequestGateDecision::Allow;
+        }
+        if let Some(policy) = self.active_policy() {
+            if policy.matches(url) {
+                return RequestGateDecision::Deny;
+            }
+        }
+        RequestGateDecision::Allow
     }
 
     /// Activate `surface`, bringing it to the foreground.
@@ -801,10 +866,19 @@ impl HeadlessEngine {
 
         let id = self.mint();
 
-        self.queue.push_back(NavigationEvent::Started {
-            id,
-            address: address.clone(),
-        });
+        let epoch = self
+            .surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST);
+
+        self.queue.push_back(NavigationObservation::new(
+            epoch,
+            NavigationEvent::Started {
+                id,
+                address: address.clone(),
+            },
+        ));
 
         let response = self
             .responses
@@ -864,45 +938,195 @@ impl HeadlessEngine {
         steps: impl IntoIterator<Item = ScriptStep>,
     ) {
         for step in steps {
+            let mut epoch = self
+                .surfaces
+                .get(&surface)
+                .map(|s| s.epoch)
+                .unwrap_or(NavigationEpoch::FIRST);
             match step {
                 ScriptStep::Redirect { address } => {
-                    self.queue
-                        .push_back(NavigationEvent::Redirected { id, address });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Redirected { id, address },
+                    ));
                 }
                 ScriptStep::Commit { address } => {
-                    self.queue.push_back(NavigationEvent::Committed {
-                        id,
-                        address: address.clone(),
-                    });
                     if let Some(s) = self.surfaces.get_mut(&surface) {
-                        s.current = Some(Page::new(address, ""));
+                        s.epoch = s.epoch.next();
+                        epoch = s.epoch;
+                        s.current = Some(Page::new(address.clone(), ""));
                         s.current_nav = Some(id);
                     }
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Committed { id, address },
+                    ));
                 }
                 ScriptStep::Title { title } => {
-                    self.queue.push_back(NavigationEvent::TitleChanged {
-                        id,
-                        title: title.clone(),
-                    });
                     if let Some(s) = self.surfaces.get_mut(&surface) {
                         if s.current_nav == Some(id) {
                             if let Some(page) = &s.current {
-                                s.current = Some(Page::new(page.address().to_owned(), title));
+                                s.current =
+                                    Some(Page::new(page.address().to_owned(), title.clone()));
                             }
                         }
                     }
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::TitleChanged { id, title },
+                    ));
                 }
                 ScriptStep::Succeed => {
-                    self.queue.push_back(NavigationEvent::Succeeded { id });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Succeeded { id },
+                    ));
                 }
                 ScriptStep::Fail(error) => {
-                    self.queue.push_back(NavigationEvent::Failed { id, error });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::Failed { id, error },
+                    ));
                 }
                 ScriptStep::NavigateAway => {
-                    self.queue.push_back(NavigationEvent::NavigatedAway { id });
+                    self.queue.push_back(NavigationObservation::new(
+                        epoch,
+                        NavigationEvent::NavigatedAway { id },
+                    ));
                 }
             }
         }
+    }
+
+    /// The current [`NavigationEpoch`] of `surface`.
+    pub fn surface_navigation_epoch(&self, surface: SurfaceId) -> NavigationEpoch {
+        self.surfaces
+            .get(&surface)
+            .map(|s| s.epoch)
+            .unwrap_or(NavigationEpoch::FIRST)
+    }
+
+    /// Perform a same-document navigation on `surface` to `address`.
+    pub fn navigate_same_document(
+        &mut self,
+        surface: SurfaceId,
+        address: impl Into<String>,
+    ) -> NavigationId {
+        let id = self.mint();
+        let addr = address.into();
+        let mut new_epoch = NavigationEpoch::FIRST;
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.epoch = s.epoch.next();
+            new_epoch = s.epoch;
+            let title = s
+                .current
+                .as_ref()
+                .map(|p| p.title().to_string())
+                .unwrap_or_default();
+            s.current = Some(Page::new(addr.clone(), title));
+            s.loads.push(addr.clone());
+        }
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::SameDocumentNavigated { id, address: addr },
+        ));
+        id
+    }
+
+    /// Poll the next navigation observation from the engine, if any is ready.
+    pub fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.queue.pop_front()
+    }
+
+    /// Host content on `surface` from shell-supplied bytes under `identity`.
+    pub fn host_surface_bytes(
+        &mut self,
+        surface: SurfaceId,
+        identity: SurfaceIdentity,
+        bytes: Vec<u8>,
+    ) -> NavigationId {
+        let id = self.mint();
+        let mut new_epoch = NavigationEpoch::FIRST;
+        let ident_str = identity.as_str().to_string();
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.kind = SurfaceKind::AppSurface;
+            s.identity = Some(identity);
+            s.hosted_bytes = Some(bytes);
+            s.epoch = s.epoch.next();
+            new_epoch = s.epoch;
+            s.current = Some(Page::new(ident_str.clone(), ""));
+            s.loads.push(ident_str.clone());
+        }
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Started {
+                id,
+                address: ident_str.clone(),
+            },
+        ));
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Committed {
+                id,
+                address: ident_str,
+            },
+        ));
+        self.queue.push_back(NavigationObservation::new(
+            new_epoch,
+            NavigationEvent::Succeeded { id },
+        ));
+        id
+    }
+
+    /// The [`SurfaceIdentity`] currently hosted on `surface`, if any.
+    pub fn surface_identity(&self, surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        self.surfaces
+            .get(&surface)
+            .and_then(|s| s.identity.as_ref())
+    }
+
+    /// The raw bytes currently hosted on `surface`, if any.
+    pub fn surface_hosted_bytes(&self, surface: SurfaceId) -> Option<&[u8]> {
+        self.surfaces
+            .get(&surface)
+            .and_then(|s| s.hosted_bytes.as_deref())
+    }
+
+    /// Assign an immutable [`AppId`] to `surface`.
+    pub fn set_surface_app_id(&mut self, surface: SurfaceId, app_id: AppId) {
+        if let Some(s) = self.surfaces.get_mut(&surface) {
+            s.app_id = Some(app_id);
+        }
+    }
+
+    /// The shell-assigned [`AppId`] of `surface`, if assigned.
+    pub fn surface_app_id(&self, surface: SurfaceId) -> Option<&AppId> {
+        self.surfaces.get(&surface).and_then(|s| s.app_id.as_ref())
+    }
+
+    /// Send a message from the shell to `surface`.
+    pub fn send_message_to_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.outgoing_messages.push((surface, message.to_string()));
+    }
+
+    /// Messages sent from the shell to surfaces.
+    pub fn outgoing_messages(&self) -> &[(SurfaceId, String)] {
+        &self.outgoing_messages
+    }
+
+    /// Poll the next incoming tagged message from an app surface, if any.
+    pub fn poll_message(&mut self) -> Option<TaggedMessage> {
+        self.messages.pop_front()
+    }
+
+    /// Simulate an incoming message originating from `surface`, tagged with its assigned `AppId`.
+    pub fn post_message_from_surface(&mut self, surface: SurfaceId, payload: impl Into<String>) {
+        let app_id = self
+            .surface_app_id(surface)
+            .cloned()
+            .unwrap_or_else(|| AppId::new("unassigned"));
+        self.messages
+            .push_back(TaggedMessage::new(app_id, surface, payload));
     }
 }
 
@@ -921,7 +1145,76 @@ impl Engine for HeadlessEngine {
     }
 
     fn poll_event(&mut self) -> Option<NavigationEvent> {
-        self.queue.pop_front()
+        self.queue.pop_front().map(|obs| obs.into_event())
+    }
+
+    fn poll_observation(&mut self) -> Option<NavigationObservation> {
+        self.poll_observation()
+    }
+
+    fn host_surface_bytes(
+        &mut self,
+        surface: SurfaceId,
+        identity: SurfaceIdentity,
+        bytes: Vec<u8>,
+    ) -> NavigationId {
+        self.host_surface_bytes(surface, identity, bytes)
+    }
+
+    fn surface_identity(&self, surface: SurfaceId) -> Option<&SurfaceIdentity> {
+        self.surface_identity(surface)
+    }
+
+    fn surface_hosted_bytes(&self, surface: SurfaceId) -> Option<&[u8]> {
+        self.surface_hosted_bytes(surface)
+    }
+
+    fn surface_navigation_epoch(&self, surface: SurfaceId) -> NavigationEpoch {
+        self.surface_navigation_epoch(surface)
+    }
+
+    fn navigate_same_document(&mut self, surface: SurfaceId, address: &str) -> NavigationId {
+        self.navigate_same_document(surface, address)
+    }
+
+    fn set_surface_app_id(&mut self, surface: SurfaceId, app_id: AppId) {
+        self.set_surface_app_id(surface, app_id);
+    }
+
+    fn surface_app_id(&self, surface: SurfaceId) -> Option<&AppId> {
+        self.surface_app_id(surface)
+    }
+
+    fn send_message_to_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.send_message_to_surface(surface, message);
+    }
+
+    fn poll_message(&mut self) -> Option<TaggedMessage> {
+        self.poll_message()
+    }
+
+    fn post_message_from_surface(&mut self, surface: SurfaceId, message: &str) {
+        self.post_message_from_surface(surface, message);
+    }
+
+    fn create_surface_with_kind(
+        &mut self,
+        store: DataStoreSelector,
+        kind: SurfaceKind,
+    ) -> SurfaceId {
+        self.create_surface_with_kind(store, kind)
+    }
+
+    fn set_surface_kind(&mut self, surface: SurfaceId, kind: SurfaceKind) {
+        self.set_surface_kind(surface, kind);
+    }
+
+    fn surface_kind(&self, surface: SurfaceId) -> Option<SurfaceKind> {
+        self.surface_kind(surface)
+    }
+
+    fn gate_request(&self, surface: SurfaceId, url: &str) -> RequestGateDecision {
+        self.gate_request(surface, url)
     }
 
     fn current(&self) -> Option<&Page> {
@@ -1554,5 +1847,165 @@ mod tests {
         // Re-navigating s1 to site-b resets s1's count
         let _ = engine.start_surface_navigation(s1, &Request::new("https://site-b.test/"));
         assert_eq!(engine.surface_blocked_count(s1), 0);
+    }
+
+    #[test]
+    fn navigation_epoch_increments_on_regular_and_same_document_navigation() {
+        let mut engine = HeadlessEngine::new().with_page("https://example.test/", "Home");
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        assert_eq!(
+            engine.surface_navigation_epoch(surface),
+            NavigationEpoch::FIRST
+        );
+
+        // Regular navigation
+        let nav1 = engine.start_surface_navigation(surface, &Request::new("https://example.test/"));
+        let obs1 = engine.poll_observation().expect("Started obs");
+        assert_eq!(obs1.epoch(), NavigationEpoch::FIRST); // Started before commit
+        assert_eq!(
+            obs1.event(),
+            &NavigationEvent::Started {
+                id: nav1,
+                address: "https://example.test/".into(),
+            }
+        );
+
+        let obs2 = engine.poll_observation().expect("Committed obs");
+        let expected_epoch = NavigationEpoch::FIRST.next();
+        assert_eq!(obs2.epoch(), expected_epoch);
+        assert_eq!(engine.surface_navigation_epoch(surface), expected_epoch);
+
+        let _ = engine.poll_observation(); // TitleChanged
+        let _ = engine.poll_observation(); // Succeeded
+
+        // Same document navigation
+        let nav2 = engine.navigate_same_document(surface, "https://example.test/#section");
+        let next_epoch = expected_epoch.next();
+        assert_eq!(engine.surface_navigation_epoch(surface), next_epoch);
+
+        let obs3 = engine
+            .poll_observation()
+            .expect("SameDocumentNavigated obs");
+        assert_eq!(obs3.epoch(), next_epoch);
+        assert_eq!(
+            obs3.event(),
+            &NavigationEvent::SameDocumentNavigated {
+                id: nav2,
+                address: "https://example.test/#section".into(),
+            }
+        );
+
+        // Confirm poll_event returns unwrapped NavigationEvent
+        let _ = engine.navigate_same_document(surface, "https://example.test/#another");
+        let ev = engine
+            .poll_event()
+            .expect("poll_event returns unwrapped event");
+        assert!(matches!(ev, NavigationEvent::SameDocumentNavigated { .. }));
+    }
+
+    #[test]
+    fn hosted_surface_from_shell_supplied_bytes() {
+        let mut engine = HeadlessEngine::new();
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        let identity = SurfaceIdentity::new("app://local-ledger");
+        let html_bytes = b"<!DOCTYPE html><html><body>Ledger UI</body></html>".to_vec();
+
+        let nav_id = engine.host_surface_bytes(surface, identity.clone(), html_bytes.clone());
+
+        assert_eq!(engine.surface_identity(surface), Some(&identity));
+        assert_eq!(engine.surface_hosted_bytes(surface), Some(&html_bytes[..]));
+        assert_eq!(
+            engine.surface_current(surface).map(|p| p.address()),
+            Some("app://local-ledger")
+        );
+
+        let mut events = Vec::new();
+        while let Some(obs) = engine.poll_observation() {
+            events.push(obs);
+        }
+
+        assert_eq!(events.len(), 3);
+        assert_eq!(
+            events[0].event(),
+            &NavigationEvent::Started {
+                id: nav_id,
+                address: "app://local-ledger".into(),
+            }
+        );
+        assert_eq!(
+            events[1].event(),
+            &NavigationEvent::Committed {
+                id: nav_id,
+                address: "app://local-ledger".into(),
+            }
+        );
+        assert_eq!(
+            events[2].event(),
+            &NavigationEvent::Succeeded { id: nav_id }
+        );
+    }
+
+    #[test]
+    fn tagged_message_channel_with_shell_assigned_app_id() {
+        let mut engine = HeadlessEngine::new();
+        let surface = engine.create_surface(DataStoreSelector::Persistent);
+        let app_id = AppId::new("app.system.ledger");
+
+        engine.set_surface_app_id(surface, app_id.clone());
+        assert_eq!(engine.surface_app_id(surface), Some(&app_id));
+
+        // Shell sends message to surface
+        engine.send_message_to_surface(surface, "{\"command\":\"get_balance\"}");
+        assert_eq!(
+            engine.outgoing_messages(),
+            &[(surface, "{\"command\":\"get_balance\"}".to_string())]
+        );
+
+        // Surface posts message back to shell
+        engine.post_message_from_surface(surface, "{\"balance\":42}");
+        let received = engine.poll_message().expect("Tagged message expected");
+        assert_eq!(received.surface(), surface);
+        assert_eq!(received.app_id(), &app_id);
+        assert_eq!(received.payload(), "{\"balance\":42}");
+        assert!(engine.poll_message().is_none());
+    }
+
+    #[test]
+    fn request_gating_hook_confinement_and_policy() {
+        let mut engine = HeadlessEngine::new();
+        let app_surface =
+            engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::AppSurface);
+        let page_surface =
+            engine.create_surface_with_kind(DataStoreSelector::Persistent, SurfaceKind::Page);
+
+        // [GAP] G15: App surfaces are strictly denied all network traffic
+        assert_eq!(
+            engine.gate_request(app_surface, "https://google.com"),
+            RequestGateDecision::Deny
+        );
+        assert_eq!(
+            engine.gate_request(app_surface, "https://example.com/api"),
+            RequestGateDecision::Deny
+        );
+
+        // Page surfaces apply the FR-008 content blocking pipeline
+        let policy = CompiledPolicy::from_rules("tracker-policy", ["tracker.js", "telemetry"]);
+        engine.install_policy(policy);
+
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/tracker.js"),
+            RequestGateDecision::Deny
+        );
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/app.js"),
+            RequestGateDecision::Allow
+        );
+
+        // Site exemption
+        engine.exempt_site("example.com");
+        assert_eq!(
+            engine.gate_request(page_surface, "https://example.com/tracker.js"),
+            RequestGateDecision::Allow
+        );
     }
 }
