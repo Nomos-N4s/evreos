@@ -1,9 +1,9 @@
 use evreos_engine::LoadError;
-use evreos_engine::conformance::conformance_suite;
-use evreos_engine_headless::HeadlessEngine;
+use evreos_engine::conformance::{conformance_host_suite, conformance_suite};
+use evreos_engine_headless::{HeadlessEngine, HeadlessHost};
 
-fn make_configured_headless_engine() -> HeadlessEngine {
-    HeadlessEngine::new()
+fn make_configured_headless_host() -> HeadlessHost {
+    HeadlessHost::new()
         .with_failure(
             "https://unresolvable.test/",
             LoadError::Unresolvable {
@@ -38,7 +38,16 @@ fn make_configured_headless_engine() -> HeadlessEngine {
         .with_hanging_load("https://hanging.test/")
 }
 
+fn make_configured_headless_engine() -> HeadlessEngine {
+    make_configured_headless_host().create_engine()
+}
+
 #[test]
 fn headless_engine_passes_conformance_battery() {
     conformance_suite(make_configured_headless_engine);
+}
+
+#[test]
+fn headless_host_passes_conformance_battery() {
+    conformance_host_suite(make_configured_headless_host);
 }

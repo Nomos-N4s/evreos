@@ -10,8 +10,9 @@
 //! 4. Event ordering and `NavigationId` correlation are strictly maintained.
 //! 5. A load that never resolves emits `Started` but no outcome event and leaves `current()` unchanged.
 //! 6. `LoadError::Intercepted` is produced from a shell-supplied/scripted classification rather than synthesised from a platform status.
+//! 7. Instances minted from one host share a context and instances from two hosts do not.
 
-use super::{Engine, LoadError, NavigationEvent, Request};
+use super::{Engine, EngineHost, LoadError, NavigationEvent, Request};
 
 /// Run the full conformance test battery against an engine instance factory.
 ///
@@ -302,4 +303,64 @@ pub fn test_intercepted_from_shell_classification<E: Engine>(make: &impl Fn() ->
         );
         assert_eq!(error.address(), url, "Error address mismatch for {url}");
     }
+}
+
+/// Invariant 7: Instances minted from one host share a platform context and instances from two hosts do not.
+///
+/// Under ADR-0001 accepted costs and SC-004 memory constraints, environment/context sharing
+/// must be explicit at the seam. An [`EngineHost`] owns the shared platform context, and all
+/// [`Engine`] instances minted from that host must share the host's [`ContextId`]
+/// (`shares_context_with` is true). Instances minted from two distinct hosts must have
+/// distinct context IDs and not share context.
+pub fn test_instances_minted_from_one_host_share_context<H: EngineHost>(
+    make_host: &impl Fn() -> H,
+) {
+    let mut host1 = make_host();
+    let engine1_a = host1.create_engine();
+    let engine1_b = host1.create_engine();
+
+    let mut host2 = make_host();
+    let engine2 = host2.create_engine();
+
+    assert_eq!(
+        engine1_a.context_id(),
+        engine1_b.context_id(),
+        "Instances minted from the same host must share a context ID"
+    );
+    assert_eq!(
+        engine1_a.context_id(),
+        host1.context_id(),
+        "Instance context ID must match the host that minted it"
+    );
+    assert_ne!(
+        engine1_a.context_id(),
+        engine2.context_id(),
+        "Instances minted from two different hosts must not share a context ID"
+    );
+    assert_ne!(
+        host1.context_id(),
+        host2.context_id(),
+        "Two distinct hosts must have distinct context IDs"
+    );
+    assert!(
+        engine1_a.shares_context_with(&engine1_b),
+        "Instances minted from the same host must return true for shares_context_with"
+    );
+    assert!(
+        !engine1_a.shares_context_with(&engine2),
+        "Instances minted from different hosts must return false for shares_context_with"
+    );
+}
+
+/// Run the host conformance test battery asserting that instances minted from one host
+/// share a context and instances from two hosts do not.
+pub fn conformance_host_suite<H: EngineHost>(make_host: impl Fn() -> H) {
+    test_instances_minted_from_one_host_share_context(&make_host);
+}
+
+/// Run the full conformance test battery for both engine navigation invariants and host
+/// context sharing using an [`EngineHost`] factory.
+pub fn conformance_suite_for_host<H: EngineHost>(make_host: impl Fn() -> H) {
+    conformance_suite(|| make_host().create_engine());
+    test_instances_minted_from_one_host_share_context(&make_host);
 }
