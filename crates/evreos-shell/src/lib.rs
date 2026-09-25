@@ -26,7 +26,8 @@ pub use log::{
 };
 pub use omnibox::{Omnibox, OmniboxAction, SubmittedSearch};
 pub use permissions::{
-    Capability, PermissionDecision, PermissionError, SitePermission, WindowScope,
+    Capability, PermissionDecision, PermissionError, PermissionPromptRequest, PermissionStore,
+    PromptOutcome, PromptResponse, PromptResult, SitePermission, WindowScope,
 };
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use site_key::{SiteKey, SiteKeyError};
