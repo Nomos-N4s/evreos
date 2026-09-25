@@ -82,7 +82,12 @@ def mentions(problems, *fragments):
 
 
 def run_check(*args):
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
 
 
 # --- the repository itself ----------------------------------------------------
