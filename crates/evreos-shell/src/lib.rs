@@ -21,7 +21,8 @@ pub use log::{
 };
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use store::{
-    BookmarkStore, DownloadStore, HistoryEntry, HistoryEntryId, HistoryError, HistorySource,
+    Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,
+    DownloadStore, FolderId, HistoryEntry, HistoryEntryId, HistoryError, HistorySource,
     HistoryStore, StoreRegistry, WindowKind,
 };
 pub use work::{
