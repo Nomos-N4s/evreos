@@ -11,6 +11,7 @@
   <img src="https://img.shields.io/badge/Budgets-Enforced%20in%20CI-brightgreen" alt="Budgets Enforced">
   <img src="https://img.shields.io/badge/Methodology-Spec--Driven%20Development-purple" alt="Spec-Kit">
   <img src="https://img.shields.io/badge/License-Proprietary-red" alt="License">
+  <a href="https://linear.app/xcoder-es/project/Evreos"><img src="https://img.shields.io/badge/Linear-Phase%203%3A%20US1%20MVP-5E6AD2?logo=linear&logoColor=white" alt="Linear Status"></a>
 </p>
 
 ---
@@ -71,18 +72,23 @@ The following practices are excluded permanently by constitutional mandate:
 
 ## Current State of `main`
 
-The repository is currently at **Milestone M0 (Foundational Architecture & Architectural Seams)**.
+The repository has completed **Milestone M0 (Foundational Architecture & Architectural Seams)** and has entered **Phase 3 / Milestone M1 (User Story 1 — Private Browsing MVP)**.
 
 ### What is Live and Proved on `main`:
 
 - **The `Engine` Trait and Event Loop** ([`crates/evreos-engine`](crates/evreos-engine)): An asynchronous, platform-agnostic rendering interface defining navigation requests, page handles, and a discrete `NavigationEvent` stream with typed `LoadError` variants (DNS, TLS/certificate, network unreachable, protocol/policy).
 - **Headless In-Memory Engine** ([`crates/evreos-engine-headless`](crates/evreos-engine-headless)): A second, scriptable `Engine` implementation operating without any operating system webview. Proves the rendering seam from day one and drives automated CI unit testing.
-- **Native Browser Shell** ([`crates/evreos-shell`](crates/evreos-shell)): A generic desktop executable proving both the `Engine` seam and brand seam.
+- **Native Browser Windowing & Event Loop** ([`crates/evreos-shell`](crates/evreos-shell)): Window management and event dispatching driven natively via `winit`, allocating child views and processing input and engine events on the platform UI thread.
+- **Asynchronous Worker Pool** ([`crates/evreos-shell`](crates/evreos-shell)): Bounded concurrency pool executing background tasks without unbounded growth, delivering typed results strictly on the UI thread without pool poisoning or crash escalation.
+- **Typed Error Resolution & Log Projections** ([`crates/evreos-shell`](crates/evreos-shell)): Closed `ShellError` enum resolving cause and recovery actions dynamically against `evreos-i18n` language catalogues, with a strict `LogProjection` stripped of addresses, page titles, search terms, and credentials.
+- **Zero-Leak Logging Facility** ([`crates/evreos-shell`](crates/evreos-shell)): Typed structured logger with no free-form messages, paired with a `Sensitive<T>` wrapper preventing secrets from ever reaching disk by construction (FR-023).
+- **Member Profile & Store Registry** ([`crates/evreos-shell`](crates/evreos-shell)): Strongly typed profile configuration separating language and place (FR-035), with bounded UI scaling (100%–200%), default-off telemetry, and atomic local persistence.
+- **Browsing History Store** ([`crates/evreos-shell`](crates/evreos-shell)): Local history store supporting review, search, and cascade deletion of entries and time ranges with no undo logs, journals, or secondary indexes. Full isolation guarantees private window navigations leave zero trace (FR-007, FR-007a).
 - **Egress Chokepoint & Purpose Enum** ([`crates/evreos-net`](crates/evreos-net)): The single typed front door for all network requests (`request(Purpose, Endpoint)`). Categorizes traffic into history-bearing vs. non-history requests and restricts money payloads to validated code newtypes and integer minor units.
 - **Internationalization Engine** ([`crates/evreos-i18n`](crates/evreos-i18n)): Language catalogues for German (`de`), Greek (`el`), and English (`en`) with compile-time interpolation and strict separation from geographic place codes.
 - **Brand Seam & Validation** ([`brands/`](brands/)): Decoupled configuration supporting `evreos.toml` (default real brand) and `fixture.toml` (fictional brand validated in CI). Gated by compiler checks that prevent `unset` sentinels in release binaries.
 - **Accessibility Spike Host** ([`tests/spikes/n6-chrome-accessibility`](tests/spikes/n6-chrome-accessibility)): AccessKit and winit test host investigating platform accessibility trees and screen reader integration.
-- **Constitutional CI Gates**: Full automated verification suites enforcing budget compliance, crate safety policies, brand containment, and commit hygiene.
+- **Constitutional CI Gates**: Full automated verification suites enforcing budget compliance, crate safety policies, brand containment, egress chokepoints, and commit hygiene.
 
 ---
 
@@ -304,9 +310,9 @@ python3 scripts/check-commit-hygiene.py --range main..HEAD
 
 Development is organized across six milestones as specified in [`specs/001-evreos-v1/tasks.md`](specs/001-evreos-v1/tasks.md):
 
-- [x] **Milestone M0 — Foundational Architecture & Seams**: Proof of `Engine` trait, headless implementation, brand seam, egress chokepoint, i18n catalogues, and automated budget verification.
+- [x] **Milestone M0 — Foundational Architecture & Seams**: Proof of `Engine` trait, headless engine, brand seam, egress chokepoint, i18n catalogues, windowing event loop, worker pool, error catalogue resolution, zero-leak logging, profile entity, and automated budget verification.
 - [ ] **Milestone M1 — Browser Engine Integration**: Implement `evreos-engine-webview` for WebView2 (Windows Tier 1) and WKWebView (macOS Tier 2); pass the cross-platform conformance battery.
-- [ ] **Milestone M2 — Core Private Browsing**: Native tabs, URL/search omnibox, private browsing sessions, download management, and built-in ad/tracker blocking.
+- [ ] **Milestone M2 — Core Private Browsing (Phase 3 MVP in progress)**: Local persistent data stores (history, bookmarks, downloads), native tabs, omnibox suggestions, private browsing sessions, and built-in ad/tracker blocking.
 - [ ] **Milestone M3 — Shell Polish & Accessibility**: WCAG 2.1 AA keyboard navigation, screen reader support, UI scaling up to 200%, and international IME.
 - [ ] **Milestone M4 — Super-App Surfaces**: Dynamic, cryptographically signed app surfaces; ledger-derived Apivo money views and claim-code redemption.
 - [ ] **Milestone M5 — Release Hardening & Verification**: Long-term memory soak testing, hardware-rig latency benchmarking, MSIX/DMG installer packaging, and final security audit.
