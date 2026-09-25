@@ -15,7 +15,9 @@ pub mod history;
 
 pub use bookmarks::BookmarkStore;
 pub use downloads::DownloadStore;
-pub use history::HistoryStore;
+pub use history::{
+    HistoryEntry, HistoryEntryId, HistoryError, HistorySource, HistoryStore, WindowKind,
+};
 
 use std::path::{Path, PathBuf};
 
