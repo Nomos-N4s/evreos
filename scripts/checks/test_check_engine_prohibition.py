@@ -1386,7 +1386,7 @@ for label, name, body, caught in (
     with tempfile.TemporaryDirectory() as tmp:
         root = Path(tmp)
         path = root / name
-        path.write_text(body)
+        path.write_text(body, encoding="utf-8")
         found = []
         engine.check_toolchain_file(root, path, found)
         check(f"toolchain, {label}", bool(found) is caught)

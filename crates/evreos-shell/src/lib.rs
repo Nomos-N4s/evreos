@@ -4,10 +4,12 @@
 
 #![forbid(unsafe_code)]
 
+pub mod app;
 pub mod brand;
 pub mod error;
 pub mod log;
 
+pub use app::{App, AppWindow, AppWindowId};
 pub use error::{ErrorKind, LogProjection, MemberFacingError, ShellError};
 pub use log::{
     Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,

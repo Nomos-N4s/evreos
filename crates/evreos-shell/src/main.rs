@@ -20,7 +20,9 @@ pub use evreos_shell::error;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use evreos_engine::{Engine, LoadError, NavigationEvent, NavigationId, Request};
+#[cfg(test)]
+use evreos_engine::{Engine, Request};
+use evreos_engine::{LoadError, NavigationEvent, NavigationId};
 use evreos_engine_headless::HeadlessEngine;
 
 /// Source of monotonic time for navigation timeout tracking.
@@ -267,6 +269,7 @@ pub fn format_load_error(error: &LoadError) -> String {
 ///
 /// Generic over [`Engine`] and [`Clock`]. Drains event stream, tracks in-flight
 /// navigation, displays actual loaded address, and applies timeout policy.
+#[cfg(test)]
 fn navigate<E: Engine, C: Clock>(
     engine: &mut E,
     tracker: &mut NavigationTracker<C>,
@@ -285,68 +288,39 @@ fn navigate<E: Engine, C: Clock>(
     tracker.display_status(id)
 }
 
-fn main() {
-    let mut engine = HeadlessEngine::new()
-        .with_page("https://example.invalid/", "Example")
-        .with_redirect(
-            "https://redirect.invalid/",
-            "https://example.invalid/destination",
-            "Redirect Target",
-        )
-        .with_failure(
-            "https://expired.invalid/",
-            LoadError::Certificate {
-                address: "https://expired.invalid/".into(),
-                detail: "the certificate expired".into(),
-            },
-        )
-        .with_hanging_load("https://hanging.invalid/");
-
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let brand = brand::brand();
-    println!("brand: {}", brand.product_name);
-    // Composed and printed, never sent: FR-003a's submitted search is the one
-    // point at which typed terms leave the machine, and this proof has no
-    // member and no submission. What it shows is the seam -- the receiver
-    // comes from the brand file, the query from the terms alone.
-    let search = brand::search_request(brand, "example terms");
-    println!(
-        "a submitted search would go to {} carrying only {}",
-        search.endpoint, search.query
-    );
+    let engine = HeadlessEngine::new();
+    let mut app = evreos_shell::app::App::with_title(engine, brand.product_name.clone());
 
-    println!("engine: {}", engine.name());
+    #[cfg(any(windows, target_os = "macos"))]
+    {
+        if std::env::var("EVREOS_HEADLESS").is_ok() {
+            let win_id = app.open_window(brand.product_name.clone());
+            println!("{}: opened window {win_id}", brand.product_name);
+            app.close_window(win_id);
+            println!(
+                "{}: closed last window; exiting cleanly",
+                brand.product_name
+            );
+            return Ok(());
+        }
 
-    let mut tracker = NavigationTracker::new(SystemClock);
-
-    for address in [
-        "https://example.invalid/",
-        "https://redirect.invalid/",
-        "https://expired.invalid/",
-        "https://nowhere.invalid/",
-    ] {
-        println!("{}", navigate(&mut engine, &mut tracker, address));
+        app.run()?;
     }
 
-    // Demonstrate hanging load timeout with mock clock
-    let start_time = Instant::now();
-    let mock_clock = MockClock::new(start_time);
-    let mut test_tracker = NavigationTracker::new(mock_clock);
-
-    let hanging_addr = "https://hanging.invalid/";
-    let hanging_id = engine.start_navigation(&Request::new(hanging_addr));
-    test_tracker.start_navigation(hanging_id, hanging_addr.to_owned());
-
-    while let Some(event) = engine.poll_event() {
-        test_tracker.process_event(event);
+    #[cfg(not(any(windows, target_os = "macos")))]
+    {
+        let win_id = app.open_window(brand.product_name.clone());
+        println!("{}: opened window {win_id}", brand.product_name);
+        app.close_window(win_id);
+        println!(
+            "{}: closed last window; exiting cleanly",
+            brand.product_name
+        );
     }
 
-    println!(
-        "Before timeout: {}",
-        test_tracker.display_status(hanging_id)
-    );
-    test_tracker.clock_mut().advance(DEFAULT_NAVIGATION_TIMEOUT);
-    test_tracker.check_timeouts();
-    println!("After timeout: {}", test_tracker.display_status(hanging_id));
+    Ok(())
 }
 
 #[cfg(test)]
