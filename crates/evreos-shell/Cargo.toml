@@ -11,6 +11,9 @@ evreos-engine = { path = "../evreos-engine" }
 evreos-engine-headless = { path = "../evreos-engine-headless" }
 evreos-i18n = { path = "../evreos-i18n" }
 
+[dev-dependencies]
+trybuild = "1.0"
+
 [features]
 # Principle VIII: the brand is selected at build time -- the real brand,
 # brands/evreos.toml, by default, and brands/fixture.toml under this feature,
