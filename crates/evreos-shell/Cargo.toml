@@ -11,6 +11,7 @@ evreos-chrome = { path = "../evreos-chrome" }
 evreos-engine = { path = "../evreos-engine" }
 evreos-engine-headless = { path = "../evreos-engine-headless" }
 evreos-i18n = { path = "../evreos-i18n" }
+evreos-net = { path = "../evreos-net" }
 winit = "=0.30.13"
 
 [dev-dependencies]

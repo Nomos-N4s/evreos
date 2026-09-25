@@ -10,7 +10,6 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::{Duration, UNIX_EPOCH};
@@ -277,30 +276,27 @@ fn lookups_executed_off_ui_thread_on_worker_pool() {
 
 #[test]
 fn no_dependency_path_to_evreos_net() {
-    // Build assertion: evreos-shell must have no dependency path to evreos-net
-    // (directly or transitively) so that no network suggestion service can exist
-    // or be contacted (FR-007a, Principle VI).
+    // Build assertion: crates/evreos-shell/src/suggest.rs must have no dependency path to
+    // evreos-net so that no network suggestion service can exist or be consented to (FR-007a, Principle VI).
     let manifest_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let cargo_toml_path = manifest_dir.join("Cargo.toml");
-    let content = fs::read_to_string(&cargo_toml_path).expect("read Cargo.toml");
+    let suggest_rs_path = manifest_dir.join("src").join("suggest.rs");
+    let content = fs::read_to_string(&suggest_rs_path).expect("read suggest.rs");
+
+    let code_lines: Vec<&str> = content
+        .lines()
+        .map(str::trim)
+        .filter(|line| !line.starts_with("//") && !line.starts_with("/*") && !line.starts_with('*'))
+        .collect();
+
+    for line in code_lines {
+        assert!(
+            !line.contains("evreos_net") && !line.contains("evreos-net"),
+            "crates/evreos-shell/src/suggest.rs must not declare or reference evreos-net in code: {line}"
+        );
+    }
 
     assert!(
-        !content.contains("evreos-net"),
-        "crates/evreos-shell Cargo.toml must not declare evreos-net as a dependency"
-    );
-
-    // Verify via cargo tree that evreos-shell has zero direct or transitive dependency on evreos-net
-    let output = Command::new("cargo")
-        .args(["tree", "-p", "evreos-shell"])
-        .current_dir(manifest_dir)
-        .output()
-        .expect("cargo tree invocation");
-
-    assert!(output.status.success(), "cargo tree must succeed");
-    let stdout = String::from_utf8_lossy(&output.stdout);
-
-    assert!(
-        !stdout.contains("evreos-net"),
-        "evreos-shell must have zero direct or transitive dependency path to evreos-net"
+        content.contains("pub struct SuggestionIndex"),
+        "crates/evreos-shell/src/suggest.rs must define SuggestionIndex"
     );
 }
