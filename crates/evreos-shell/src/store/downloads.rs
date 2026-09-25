@@ -26,6 +26,8 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 pub use evreos_engine::DownloadId;
 
+use crate::store::WindowKind;
+
 static TMP_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 /// The lifecycle state of a download.
@@ -81,6 +83,7 @@ pub struct DownloadEntry {
     pub(crate) state: DownloadState,
     pub(crate) started_at: SystemTime,
     pub(crate) finished_at: Option<SystemTime>,
+    pub(crate) is_private: bool,
 }
 
 impl DownloadEntry {
@@ -101,6 +104,7 @@ impl DownloadEntry {
             state: DownloadState::InProgress,
             started_at,
             finished_at: None,
+            is_private: false,
         }
     }
 
@@ -162,6 +166,20 @@ impl DownloadEntry {
     /// Whether the download failed.
     pub fn is_failed(&self) -> bool {
         self.state == DownloadState::Failed
+    }
+
+    /// Whether this download was initiated in a private browsing window (Decision 0006).
+    pub fn is_private(&self) -> bool {
+        self.is_private
+    }
+
+    /// The window kind in which this download was initiated.
+    pub fn window_kind(&self) -> WindowKind {
+        if self.is_private {
+            WindowKind::Private
+        } else {
+            WindowKind::Normal
+        }
     }
 }
 
@@ -288,7 +306,7 @@ impl DownloadStore {
         id
     }
 
-    /// Record a newly initiated download in the `InProgress` state.
+    /// Record a newly initiated download in a normal browsing window.
     ///
     /// The entry is immediately persisted to `downloads.toml` with no undo log.
     pub fn start_download(
@@ -298,6 +316,28 @@ impl DownloadStore {
         destination_path: impl Into<PathBuf>,
         bytes_total: Option<u64>,
     ) -> Result<&DownloadEntry, DownloadError> {
+        self.start_download_with_window_kind(
+            id,
+            source_address,
+            destination_path,
+            bytes_total,
+            WindowKind::Normal,
+        )
+    }
+
+    /// Record a newly initiated download in the specified window kind (Decision 0006).
+    ///
+    /// If `window_kind` is [`WindowKind::Private`], the download is tracked transiently
+    /// in memory for the duration of the session and is NEVER persisted to disk under
+    /// `downloads.toml` (FR-007, FR-007a).
+    pub fn start_download_with_window_kind(
+        &mut self,
+        id: DownloadId,
+        source_address: impl Into<String>,
+        destination_path: impl Into<PathBuf>,
+        bytes_total: Option<u64>,
+        window_kind: WindowKind,
+    ) -> Result<&DownloadEntry, DownloadError> {
         if self.entries.iter().any(|e| e.id == id) {
             return Err(DownloadError::AlreadyExists(id));
         }
@@ -306,16 +346,21 @@ impl DownloadStore {
             self.next_id = id.as_u64().saturating_add(1);
         }
 
-        let entry = DownloadEntry::new_in_progress(
+        let is_private = window_kind == WindowKind::Private;
+        let mut entry = DownloadEntry::new_in_progress(
             id,
             source_address,
             destination_path,
             bytes_total,
             SystemTime::now(),
         );
+        entry.is_private = is_private;
 
         self.entries.push(entry);
-        self.save_to_disk()?;
+
+        if !is_private {
+            self.save_to_disk()?;
+        }
 
         Ok(self.entries.last().expect("just pushed"))
     }
@@ -340,8 +385,11 @@ impl DownloadStore {
             });
         }
 
+        let is_priv = entry.is_private;
         entry.bytes_received = bytes_received;
-        self.save_to_disk()?;
+        if !is_priv {
+            self.save_to_disk()?;
+        }
         Ok(())
     }
 
@@ -361,6 +409,7 @@ impl DownloadStore {
             });
         }
 
+        let is_priv = entry.is_private;
         entry.state = DownloadState::Completed;
         entry.finished_at = Some(SystemTime::now());
         if let Some(total) = entry.bytes_total {
@@ -369,7 +418,9 @@ impl DownloadStore {
             }
         }
 
-        self.save_to_disk()?;
+        if !is_priv {
+            self.save_to_disk()?;
+        }
         Ok(())
     }
 
@@ -388,10 +439,13 @@ impl DownloadStore {
             return Err(DownloadError::AlreadyFinished(id));
         }
 
+        let is_priv = entry.is_private;
         entry.state = DownloadState::Cancelled;
         entry.finished_at = Some(SystemTime::now());
 
-        self.save_to_disk()?;
+        if !is_priv {
+            self.save_to_disk()?;
+        }
         Ok(())
     }
 
@@ -407,10 +461,13 @@ impl DownloadStore {
             return Err(DownloadError::AlreadyFinished(id));
         }
 
+        let is_priv = entry.is_private;
         entry.state = DownloadState::Failed;
         entry.finished_at = Some(SystemTime::now());
 
-        self.save_to_disk()?;
+        if !is_priv {
+            self.save_to_disk()?;
+        }
         Ok(())
     }
 
@@ -419,15 +476,32 @@ impl DownloadStore {
     /// **Important (FR-004)**: This deletes ONLY the metadata record from the store
     /// and NEVER deletes the file the member saved on disk.
     pub fn remove_from_list(&mut self, id: DownloadId) -> Result<bool, DownloadError> {
+        let was_private = self
+            .entries
+            .iter()
+            .find(|e| e.id == id)
+            .map(|e| e.is_private);
         let initial_len = self.entries.len();
         self.entries.retain(|e| e.id != id);
 
         if self.entries.len() != initial_len {
-            self.save_to_disk()?;
+            if was_private != Some(true) {
+                self.save_to_disk()?;
+            }
             Ok(true)
         } else {
             Ok(false)
         }
+    }
+
+    /// Discard all transient download records initiated in private windows (Decision 0006).
+    ///
+    /// **Important (FR-004, FR-007)**: Discards only in-memory metadata records and
+    /// NEVER deletes the files the member saved on disk.
+    pub fn discard_private(&mut self) -> usize {
+        let initial_len = self.entries.len();
+        self.entries.retain(|e| !e.is_private);
+        initial_len - self.entries.len()
     }
 
     /// Remove all finished downloads (completed, cancelled, or failed) from the list.
@@ -519,6 +593,11 @@ impl DownloadStore {
         out.push_str("# Format version 1. No secondary log, journal, or cache.\n\n");
 
         for entry in &self.entries {
+            // Decision 0006: private-window downloads MUST NOT be written to disk.
+            if entry.is_private {
+                continue;
+            }
+
             out.push_str("[[download]]\n");
             out.push_str(&format!("id = {}\n", entry.id.as_u64()));
             out.push_str(&format!(
@@ -610,6 +689,7 @@ impl DownloadStore {
                     state: st,
                     started_at,
                     finished_at,
+                    is_private: false,
                 });
             }
             Ok(())
