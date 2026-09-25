@@ -107,7 +107,7 @@ pub fn planned_search_request(
 /// Percent-encode `terms` for a query value: unreserved bytes pass, everything
 /// else is `%XX` over the UTF-8 encoding. Hand-rolled because the release path
 /// takes no dependency for twelve lines of stdlib.
-fn percent_encode(terms: &str) -> String {
+pub fn percent_encode(terms: &str) -> String {
     let mut out = String::with_capacity(terms.len());
     for byte in terms.bytes() {
         match byte {
