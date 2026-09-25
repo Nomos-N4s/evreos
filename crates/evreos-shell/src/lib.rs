@@ -10,6 +10,7 @@ pub mod error;
 pub mod log;
 pub mod profile;
 pub mod store;
+pub mod suggest;
 pub mod work;
 
 pub use app::{App, AppWindow, AppWindowId};
@@ -25,6 +26,7 @@ pub use store::{
     DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore, FolderId, HistoryEntry,
     HistoryEntryId, HistoryError, HistorySource, HistoryStore, StoreRegistry, WindowKind,
 };
+pub use suggest::{OpenTab, Suggestion, SuggestionIndex, SuggestionSource};
 pub use work::{
     DEFAULT_MAX_QUEUE_CAPACITY, DEFAULT_WORKER_THREADS, JobId, JobOutcome, JobResult, PoolError,
     WorkerPool,
