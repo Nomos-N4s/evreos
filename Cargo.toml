@@ -4,6 +4,7 @@
 [workspace]
 resolver = "3"
 members = [
+    "crates/evreos-chrome",
     "crates/evreos-engine",
     "crates/evreos-engine-headless",
     "crates/evreos-i18n",

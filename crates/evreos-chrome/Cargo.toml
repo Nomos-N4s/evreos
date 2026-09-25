@@ -1,0 +1,16 @@
+[package]
+name = "evreos-chrome"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+accesskit = "=0.25.0"
+accesskit_winit = "=0.34.0"
+evreos-engine = { path = "../evreos-engine" }
+winit = "=0.30.13"
+
+[lints]
+workspace = true

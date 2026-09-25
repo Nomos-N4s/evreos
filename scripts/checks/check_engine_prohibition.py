@@ -413,7 +413,9 @@ def cargo_metadata(root):
     """
     command = ["cargo", "metadata", "--format-version", "1", "--all-features", "--locked"]
     try:
-        completed = subprocess.run(command, cwd=root, capture_output=True, text=True)
+        completed = subprocess.run(
+            command, cwd=root, capture_output=True, text=True, encoding="utf-8"
+        )
     except FileNotFoundError:
         raise CheckError("cargo not found; the DEPENDENCY clause reads `cargo metadata`") from None
     if completed.returncode != 0:

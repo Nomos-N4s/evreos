@@ -886,6 +886,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "evreos-chrome"
+version = "0.0.0"
+dependencies = [
+ "accesskit",
+ "accesskit_winit",
+ "evreos-engine",
+ "winit",
+]
+
+[[package]]
 name = "evreos-engine"
 version = "0.0.0"
 
@@ -908,10 +918,12 @@ version = "0.0.0"
 name = "evreos-shell"
 version = "0.0.0"
 dependencies = [
+ "evreos-chrome",
  "evreos-engine",
  "evreos-engine-headless",
  "evreos-i18n",
  "trybuild",
+ "winit",
 ]
 
 [[package]]
