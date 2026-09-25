@@ -7,6 +7,7 @@
 pub mod app;
 pub mod brand;
 pub mod error;
+pub mod error_presentation;
 pub mod log;
 pub mod omnibox;
 pub mod permissions;
@@ -22,6 +23,10 @@ pub mod work;
 
 pub use app::{App, AppWindow, AppWindowId, mint_window_id};
 pub use error::{ErrorKind, LogProjection, MemberFacingError, ShellError};
+pub use error_presentation::{
+    ErrorPresentation, TimeoutPresentation, render_error, render_load_error, render_timeout,
+    timeout_as_shell_error,
+};
 pub use log::{
     Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,
     PageTitle, Record, RecordBuilder, SearchTerm, Sensitive, Token, emit, log_directory,
