@@ -105,6 +105,7 @@ and the amendment cites the record that carries the founder's reasons.
 | [0004](0004-interim-spike-hardware.md) | Interim hardware for the chrome spikes | Decided | 2026-09-05 | T015 and T016; Principle X's ordering evidence; ADR-0002's reopen conditions |
 | [0005](0005-intercepted-navigation.md) | Intercepted navigation classification | Open | 2026-09-24 | FR-015, SC-009, Principle VI, FR-007a; T021, T022, T083, T099 |
 | [0006](0006-private-window-downloads.md) | Private-window downloads record retention | Decided | 2026-09-25 | FR-007, FR-004, FR-007a, SC-001; T044, T052, T081 |
+| [0007](0007-site-key.md) | Site key definition for permissions and blocking exceptions | Decided | 2026-09-26 | FR-006, FR-008; T048, T049, T069 |
 
 The next free number is the one after the last row.
 
