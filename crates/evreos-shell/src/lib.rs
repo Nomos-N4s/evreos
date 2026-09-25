@@ -10,6 +10,7 @@ pub mod error;
 pub mod log;
 pub mod omnibox;
 pub mod profile;
+pub mod search_provider;
 pub mod store;
 pub mod suggest;
 pub mod work;
