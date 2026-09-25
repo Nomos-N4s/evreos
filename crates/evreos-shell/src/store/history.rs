@@ -182,7 +182,7 @@ impl From<io::Error> for HistoryError {
 ///
 /// Stores entries locally under the profile directory without any secondary
 /// log, journal, or remote egress.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HistoryStore {
     root: PathBuf,
     entries: Vec<HistoryEntry>,

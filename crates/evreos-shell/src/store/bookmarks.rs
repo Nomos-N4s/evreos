@@ -310,7 +310,7 @@ impl From<io::Error> for BookmarkError {
 }
 
 /// The persistent bookmark and folder store.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct BookmarkStore {
     root: PathBuf,
     folders: Vec<BookmarkFolder>,
