@@ -9,6 +9,7 @@ pub mod brand;
 pub mod error;
 pub mod log;
 pub mod omnibox;
+pub mod permissions;
 pub mod profile;
 pub mod search_provider;
 pub mod site_key;
@@ -24,6 +25,9 @@ pub use log::{
     log_file_path,
 };
 pub use omnibox::{Omnibox, OmniboxAction, SubmittedSearch};
+pub use permissions::{
+    Capability, PermissionDecision, PermissionError, SitePermission, WindowScope,
+};
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use site_key::{SiteKey, SiteKeyError};
 pub use store::{
