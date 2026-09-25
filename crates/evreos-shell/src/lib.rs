@@ -21,7 +21,7 @@ pub use log::{
     PageTitle, Record, RecordBuilder, SearchTerm, Sensitive, Token, emit, log_directory,
     log_file_path,
 };
-pub use omnibox::Omnibox;
+pub use omnibox::{Omnibox, OmniboxAction, SubmittedSearch};
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,

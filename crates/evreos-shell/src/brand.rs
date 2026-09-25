@@ -51,6 +51,7 @@ pub fn brand() -> &'static Brand {
 /// them: changing the provider — by the member, or by brand configuration
 /// under FR-042 — changes which service receives the query and MUST NOT change
 /// what the query carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
     /// The service that receives the query: the brand's search endpoint,
     /// verbatim.
