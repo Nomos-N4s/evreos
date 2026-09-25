@@ -19,10 +19,12 @@
 //! 13. Hosting a surface from shell-supplied bytes under a shell-chosen identity ensures no scheme or protocol vocabulary enters the trait and FR-019a verification precedes rendering and caching.
 //! 14. A message channel delivers incoming messages tagged with the shell-assigned app identity, ensuring an FR-018 per-app grant is never checked against a forged identity.
 //! 15. A request-gating hook enforces deny-all confinement for surface webviews ([GAP] G15) and evaluates page webviews through the FR-008 content-blocking pipeline.
+//! 16. The download surface enforces a two-way handshake where no transfer begins before acceptance, a rejected token writes nothing to disk and yields no later event, Finished names the shell-chosen path, a cancelled download emits Cancelled and never Finished, and no post-acceptance event carries an ID the shell did not supply.
 
 use super::{
-    AppId, CompiledPolicy, DataStoreSelector, Engine, EngineHost, LoadError, NavigationEpoch,
-    NavigationEvent, Request, RequestGateDecision, SurfaceIdentity, SurfaceKind, SurfaceState,
+    AppId, CompiledPolicy, DataStoreSelector, DownloadEvent, DownloadId, Engine, EngineHost,
+    LoadError, NavigationEpoch, NavigationEvent, Request, RequestGateDecision, SurfaceIdentity,
+    SurfaceKind, SurfaceState,
 };
 
 /// Run the full conformance test battery against an engine instance factory.
@@ -36,6 +38,9 @@ use super::{
 /// - `https://redirect-source.test/` -> Redirects to `https://redirect-target.test/` and succeeds
 /// - `https://hanging.test/` -> Starts and never emits an outcome event
 /// - `https://blocked-content.test/` -> Page with subresources matching test blocking policies
+/// - `https://download.test/` -> Download with suggested name "test-download.bin"
+/// - `https://reject-download.test/` -> Download with suggested name "reject-download.bin"
+/// - `https://cancel-download.test/` -> Download with suggested name "cancel-download.bin"
 pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_four_causes_distinguishable(&make);
     test_failed_load_never_becomes_current_page(&make);
@@ -51,6 +56,7 @@ pub fn conformance_suite<E: Engine>(make: impl Fn() -> E) {
     test_host_surface_from_bytes_under_shell_identity(&make);
     test_message_channel_tagged_with_shell_assigned_app_identity(&make);
     test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pages(&make);
+    test_download_handshake_and_lifecycle(&make);
 }
 
 /// Invariant 1: The four causes of `LoadError` are distinguishable and match expected failure variants.
@@ -891,6 +897,167 @@ pub fn test_request_gating_hook_denies_surface_webviews_and_applies_policy_to_pa
         RequestGateDecision::Allow,
         "Exempted site on page webview should be allowed"
     );
+}
+
+/// Invariant 16: The download surface enforces a two-way handshake where no transfer begins
+/// before `accept_download`, a rejected token writes nothing to disk and yields no later event,
+/// `Finished` names the path the shell chose rather than the runtime's default directory,
+/// a cancelled download emits `Cancelled` and never `Finished`, and no post-acceptance event
+/// carries an ID the shell did not supply.
+pub fn test_download_handshake_and_lifecycle<E: Engine>(make: &impl Fn() -> E) {
+    let temp_dir = std::env::temp_dir();
+
+    // 1. Clause 1 & Clause 3 & Clause 5: No transfer begins before accept; Finished names shell path; post-acceptance events carry shell ID.
+    {
+        let mut engine = make();
+        let target_path = temp_dir.join("conformance_dl_finish.bin");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let req = Request::new("https://download.test/");
+        let _nav_id = engine.start_navigation(&req);
+
+        // Download event must be Requested
+        let req_event = engine
+            .poll_download_event()
+            .expect("Engine must emit DownloadEvent::Requested on download URL");
+        assert!(
+            req_event.is_requested(),
+            "Expected Requested event, got {req_event:?}"
+        );
+        let token = req_event
+            .token()
+            .expect("Requested event must carry DownloadToken");
+
+        // Clause 1: No transfer begins before accept_download
+        assert!(
+            engine.poll_download_event().is_none(),
+            "No transfer events should be emitted before accept_download"
+        );
+        assert!(
+            !target_path.exists(),
+            "Destination file must not exist before accept_download"
+        );
+
+        // Accept with shell-assigned ID and chosen destination
+        let shell_id = DownloadId::new(501);
+        engine.accept_download(token, shell_id, target_path.clone());
+
+        // Drain events
+        let mut events = Vec::new();
+        while let Some(e) = engine.poll_download_event() {
+            events.push(e);
+        }
+
+        assert!(
+            !events.is_empty(),
+            "Expected post-acceptance events after accept_download"
+        );
+
+        // Clause 5: No post-acceptance event carries an ID the shell did not supply
+        for event in &events {
+            assert_eq!(
+                event.id(),
+                Some(shell_id),
+                "Post-acceptance event {event:?} must carry the shell-supplied DownloadId"
+            );
+        }
+
+        // Clause 3: Finished names the path the shell chose
+        let finished_event = events
+            .iter()
+            .find(|e| e.is_finished())
+            .expect("Expected Finished event for accepted download");
+        if let DownloadEvent::Finished { id, path } = finished_event {
+            assert_eq!(*id, shell_id);
+            assert_eq!(
+                path, &target_path,
+                "Finished event must name the shell-chosen path"
+            );
+        }
+
+        assert!(
+            target_path.exists(),
+            "Destination file must exist on disk after completion"
+        );
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    // 2. Clause 2: A rejected token writes nothing to disk and never yields a later event.
+    {
+        let mut engine = make();
+        let target_path = temp_dir.join("conformance_dl_reject.bin");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let req = Request::new("https://reject-download.test/");
+        let _nav_id = engine.start_navigation(&req);
+
+        let req_event = engine
+            .poll_download_event()
+            .expect("Engine must emit DownloadEvent::Requested on reject test URL");
+        let token = req_event.token().expect("Requested event must carry token");
+
+        // Reject
+        engine.reject_download(token);
+
+        // Never yields a later event
+        assert!(
+            engine.poll_download_event().is_none(),
+            "Rejected download must never yield a later event"
+        );
+        // Writes nothing to disk
+        assert!(
+            !target_path.exists(),
+            "Rejected download must write nothing to disk"
+        );
+    }
+
+    // 3. Clause 4: A cancelled download emits Cancelled and never Finished.
+    {
+        let mut engine = make();
+        let target_path = temp_dir.join("conformance_dl_cancel.bin");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let req = Request::new("https://cancel-download.test/");
+        let _nav_id = engine.start_navigation(&req);
+
+        let req_event = engine
+            .poll_download_event()
+            .expect("Engine must emit DownloadEvent::Requested on cancel test URL");
+        let token = req_event.token().expect("Requested event must carry token");
+
+        let shell_id = DownloadId::new(502);
+        engine.accept_download(token, shell_id, target_path.clone());
+        engine.cancel_download(shell_id);
+
+        let mut events = Vec::new();
+        while let Some(e) = engine.poll_download_event() {
+            events.push(e);
+        }
+
+        // Emits Cancelled
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, DownloadEvent::Cancelled { id } if *id == shell_id)),
+            "Cancelled download must emit Cancelled event"
+        );
+        // Never Finished
+        assert!(
+            !events.iter().any(|e| e.is_finished()),
+            "Cancelled download must never emit Finished event"
+        );
+        // Does not leave finished file on disk
+        assert!(
+            !target_path.exists(),
+            "Cancelled download must not leave a completed file on disk"
+        );
+    }
 }
 
 /// Invariant 7: Instances minted from one host share a platform context and instances from two hosts do not.

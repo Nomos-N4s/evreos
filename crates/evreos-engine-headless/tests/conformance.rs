@@ -45,6 +45,17 @@ fn make_configured_headless_host() -> HeadlessHost {
                 "https://blocked-content.test/content.css",
             ],
         )
+        .with_download("https://download.test/", "test-download.bin", Some(1024))
+        .with_download(
+            "https://reject-download.test/",
+            "reject-download.bin",
+            Some(512),
+        )
+        .with_download(
+            "https://cancel-download.test/",
+            "cancel-download.bin",
+            Some(2048),
+        )
 }
 
 fn make_configured_headless_engine() -> HeadlessEngine {

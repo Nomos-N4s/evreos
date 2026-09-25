@@ -16,13 +16,15 @@
 
 use std::cell::RefCell;
 use std::collections::{HashMap, HashSet, VecDeque};
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use evreos_engine::{
-    AppId, CompiledPolicy, ContextId, DataStoreSelector, Engine, EngineHost, LoadError,
-    NavigationEpoch, NavigationEvent, NavigationId, NavigationObservation, Page, Request,
-    RequestGateDecision, SurfaceId, SurfaceIdentity, SurfaceKind, SurfaceState, TaggedMessage,
+    AppId, CompiledPolicy, ContextId, DataStoreSelector, DownloadEvent, DownloadId, DownloadToken,
+    Engine, EngineEvent, EngineHost, LoadError, NavigationEpoch, NavigationEvent, NavigationId,
+    NavigationObservation, Page, Request, RequestGateDecision, SurfaceId, SurfaceIdentity,
+    SurfaceKind, SurfaceState, TaggedMessage,
 };
 
 static NEXT_CONTEXT_ID: AtomicU64 = AtomicU64::new(0);
@@ -34,6 +36,58 @@ fn next_headless_context_id() -> ContextId {
         id = id.next();
     }
     id
+}
+
+static NEXT_DOWNLOAD_TOKEN: AtomicU64 = AtomicU64::new(1);
+
+fn next_headless_download_token() -> DownloadToken {
+    let n = NEXT_DOWNLOAD_TOKEN.fetch_add(1, Ordering::Relaxed);
+    DownloadToken::new(n)
+}
+
+/// An individual step in a scripted download sequence following acceptance.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DownloadStep {
+    /// Emit a `Progress` event with `received_bytes`.
+    Progress { received_bytes: u64 },
+    /// Emit a `Finished` event writing `payload` (or default bytes) to the destination.
+    Finish { payload: Option<Vec<u8>> },
+    /// Emit a `Failed` event with `cause`.
+    Fail { cause: String },
+}
+
+impl DownloadStep {
+    /// Step that emits progress.
+    pub fn progress(received_bytes: u64) -> Self {
+        Self::Progress { received_bytes }
+    }
+
+    /// Step that finishes with default payload.
+    pub fn finish() -> Self {
+        Self::Finish { payload: None }
+    }
+
+    /// Step that finishes writing custom payload.
+    pub fn finish_with_payload(payload: impl Into<Vec<u8>>) -> Self {
+        Self::Finish {
+            payload: Some(payload.into()),
+        }
+    }
+
+    /// Step that fails with a cause.
+    pub fn fail(cause: impl Into<String>) -> Self {
+        Self::Fail {
+            cause: cause.into(),
+        }
+    }
+}
+
+/// Scripted configuration for an address that triggers a download.
+#[derive(Debug, Clone)]
+pub struct HeadlessDownloadScript {
+    pub suggested_name: String,
+    pub total_bytes: Option<u64>,
+    pub steps: Vec<DownloadStep>,
 }
 
 /// An individual step in a scripted navigation sequence.
@@ -72,6 +126,7 @@ struct SharedHostContext {
     subresources: RefCell<HashMap<String, Vec<String>>>,
     policy: RefCell<Option<CompiledPolicy>>,
     exemptions: RefCell<HashSet<String>>,
+    downloads: RefCell<HashMap<String, HeadlessDownloadScript>>,
 }
 
 #[derive(Debug, Clone)]
@@ -119,6 +174,7 @@ impl HeadlessHost {
                 subresources: RefCell::new(HashMap::new()),
                 policy: RefCell::new(None),
                 exemptions: RefCell::new(HashSet::new()),
+                downloads: RefCell::new(HashMap::new()),
             }),
         }
     }
@@ -246,6 +302,35 @@ impl HeadlessHost {
         self
     }
 
+    /// Script `address` to announce a download with `suggested_name` and optional `total_bytes`.
+    pub fn with_download(
+        self,
+        address: impl Into<String>,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+    ) -> Self {
+        self.with_download_sequence(address, suggested_name, total_bytes, [])
+    }
+
+    /// Script `address` to announce a download with `suggested_name`, `total_bytes`, and post-acceptance `steps`.
+    pub fn with_download_sequence(
+        self,
+        address: impl Into<String>,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+        steps: impl IntoIterator<Item = DownloadStep>,
+    ) -> Self {
+        self.context.downloads.borrow_mut().insert(
+            address.into(),
+            HeadlessDownloadScript {
+                suggested_name: suggested_name.into(),
+                total_bytes,
+                steps: steps.into_iter().collect(),
+            },
+        );
+        self
+    }
+
     /// Mint an engine instance sharing this host's platform context.
     pub fn create_engine(&mut self) -> HeadlessEngine {
         HeadlessEngine::from_shared_context(Rc::clone(&self.context))
@@ -272,6 +357,18 @@ impl EngineHost for HeadlessHost {
     fn create_engine(&mut self) -> Self::Engine {
         self.create_engine()
     }
+}
+
+#[derive(Debug, Clone)]
+struct ActiveDownload {
+    _token: DownloadToken,
+    _suggested_name: String,
+    total_bytes: Option<u64>,
+    steps: Vec<DownloadStep>,
+    accepted_id: Option<DownloadId>,
+    destination: Option<PathBuf>,
+    is_rejected: bool,
+    is_cancelled: bool,
 }
 
 /// An engine that answers from a script.
@@ -305,6 +402,9 @@ pub struct HeadlessEngine {
     exemptions: HashSet<String>,
     messages: VecDeque<TaggedMessage>,
     outgoing_messages: Vec<(SurfaceId, String)>,
+    downloads: HashMap<String, HeadlessDownloadScript>,
+    download_events: VecDeque<DownloadEvent>,
+    active_downloads: HashMap<DownloadToken, ActiveDownload>,
 }
 
 fn normalize_site(site: &str) -> &str {
@@ -344,6 +444,9 @@ impl HeadlessEngine {
             exemptions: HashSet::new(),
             messages: VecDeque::new(),
             outgoing_messages: Vec::new(),
+            downloads: HashMap::new(),
+            download_events: VecDeque::new(),
+            active_downloads: HashMap::new(),
         }
     }
 
@@ -364,6 +467,9 @@ impl HeadlessEngine {
             exemptions: HashSet::new(),
             messages: VecDeque::new(),
             outgoing_messages: Vec::new(),
+            downloads: HashMap::new(),
+            download_events: VecDeque::new(),
+            active_downloads: HashMap::new(),
         }
     }
 
@@ -899,6 +1005,19 @@ impl HeadlessEngine {
                 }
             });
 
+        let dl_script = self.downloads.get(&address).cloned().or_else(|| {
+            self.context
+                .as_ref()
+                .and_then(|c| c.downloads.borrow().get(&address).cloned())
+        });
+
+        if let Some(script) = dl_script {
+            self.trigger_download_sequence(script.suggested_name, script.total_bytes, script.steps);
+            if response.is_none() {
+                return id;
+            }
+        }
+
         match response {
             Some(Response::Page { title }) => {
                 self.process_surface_steps(
@@ -1128,6 +1247,176 @@ impl HeadlessEngine {
         self.messages
             .push_back(TaggedMessage::new(app_id, surface, payload));
     }
+
+    /// Script `address` to announce a download with `suggested_name` and optional `total_bytes`.
+    pub fn with_download(
+        self,
+        address: impl Into<String>,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+    ) -> Self {
+        self.with_download_sequence(address, suggested_name, total_bytes, [])
+    }
+
+    /// Script `address` to announce a download with `suggested_name`, `total_bytes`, and post-acceptance `steps`.
+    pub fn with_download_sequence(
+        mut self,
+        address: impl Into<String>,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+        steps: impl IntoIterator<Item = DownloadStep>,
+    ) -> Self {
+        self.downloads.insert(
+            address.into(),
+            HeadlessDownloadScript {
+                suggested_name: suggested_name.into(),
+                total_bytes,
+                steps: steps.into_iter().collect(),
+            },
+        );
+        self
+    }
+
+    /// Announce an incoming download directly, minting a token and emitting `Requested`.
+    pub fn trigger_download(
+        &mut self,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+    ) -> DownloadToken {
+        self.trigger_download_sequence(suggested_name, total_bytes, [])
+    }
+
+    /// Announce an incoming download directly with custom post-acceptance steps.
+    pub fn trigger_download_sequence(
+        &mut self,
+        suggested_name: impl Into<String>,
+        total_bytes: Option<u64>,
+        steps: impl IntoIterator<Item = DownloadStep>,
+    ) -> DownloadToken {
+        let token = next_headless_download_token();
+        let name = suggested_name.into();
+        let download = ActiveDownload {
+            _token: token,
+            _suggested_name: name.clone(),
+            total_bytes,
+            steps: steps.into_iter().collect(),
+            accepted_id: None,
+            destination: None,
+            is_rejected: false,
+            is_cancelled: false,
+        };
+        self.active_downloads.insert(token, download);
+        self.download_events.push_back(DownloadEvent::Requested {
+            token,
+            suggested_name: name,
+            total_bytes,
+        });
+        token
+    }
+
+    /// Accept an announced download, specifying its shell-assigned [`DownloadId`] and destination.
+    pub fn accept_download(&mut self, token: DownloadToken, id: DownloadId, destination: PathBuf) {
+        if let Some(dl) = self.active_downloads.get_mut(&token) {
+            if dl.is_rejected || dl.accepted_id.is_some() {
+                return;
+            }
+            dl.accepted_id = Some(id);
+            dl.destination = Some(destination.clone());
+
+            let steps = if dl.steps.is_empty() {
+                let bytes = dl.total_bytes.unwrap_or(1024);
+                vec![
+                    DownloadStep::Progress {
+                        received_bytes: bytes,
+                    },
+                    DownloadStep::Finish { payload: None },
+                ]
+            } else {
+                dl.steps.clone()
+            };
+
+            for step in steps {
+                if dl.is_cancelled {
+                    break;
+                }
+                match step {
+                    DownloadStep::Progress { received_bytes } => {
+                        self.download_events
+                            .push_back(DownloadEvent::Progress { id, received_bytes });
+                    }
+                    DownloadStep::Finish { payload } => {
+                        let content = payload.unwrap_or_else(|| b"download content\n".to_vec());
+                        if let Some(parent) = destination.parent() {
+                            let _ = std::fs::create_dir_all(parent);
+                        }
+                        let _ = std::fs::write(&destination, content);
+                        self.download_events.push_back(DownloadEvent::Finished {
+                            id,
+                            path: destination.clone(),
+                        });
+                    }
+                    DownloadStep::Fail { cause } => {
+                        self.download_events
+                            .push_back(DownloadEvent::Failed { id, cause });
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reject an announced download.
+    pub fn reject_download(&mut self, token: DownloadToken) {
+        if let Some(dl) = self.active_downloads.get_mut(&token) {
+            dl.is_rejected = true;
+            self.download_events.retain(|e| match e {
+                DownloadEvent::Requested { token: t, .. } => t != &token,
+                _ => true,
+            });
+        }
+    }
+
+    /// Cancel an in-progress, previously accepted download.
+    pub fn cancel_download(&mut self, id: DownloadId) {
+        let mut dest_to_clean = None;
+        for dl in self.active_downloads.values_mut() {
+            if dl.accepted_id == Some(id) {
+                dl.is_cancelled = true;
+                if let Some(dest) = &dl.destination {
+                    dest_to_clean = Some(dest.clone());
+                }
+            }
+        }
+        self.download_events.retain(|e| match e {
+            DownloadEvent::Finished { id: eid, .. } => eid != &id,
+            _ => true,
+        });
+        self.download_events
+            .push_back(DownloadEvent::Cancelled { id });
+        if let Some(dest) = dest_to_clean {
+            let _ = std::fs::remove_file(dest);
+        }
+    }
+
+    /// Poll the next pending download event from the engine.
+    pub fn poll_download_event(&mut self) -> Option<DownloadEvent> {
+        self.download_events.pop_front()
+    }
+
+    /// Synonym for [`poll_download_event`](Self::poll_download_event).
+    pub fn poll_download(&mut self) -> Option<DownloadEvent> {
+        self.poll_download_event()
+    }
+
+    /// Poll the next unified engine event, draining navigation events before download events.
+    pub fn poll_engine_event(&mut self) -> Option<EngineEvent> {
+        if let Some(event) = self.poll_event() {
+            return Some(EngineEvent::Navigation(event));
+        }
+        if let Some(dl) = self.poll_download_event() {
+            return Some(EngineEvent::Download(dl));
+        }
+        None
+    }
 }
 
 impl Engine for HeadlessEngine {
@@ -1291,6 +1580,30 @@ impl Engine for HeadlessEngine {
 
     fn surface_blocked_items(&self, surface: SurfaceId) -> Vec<String> {
         self.surface_blocked_items(surface)
+    }
+
+    fn accept_download(&mut self, token: DownloadToken, id: DownloadId, destination: PathBuf) {
+        self.accept_download(token, id, destination);
+    }
+
+    fn reject_download(&mut self, token: DownloadToken) {
+        self.reject_download(token);
+    }
+
+    fn cancel_download(&mut self, id: DownloadId) {
+        self.cancel_download(id);
+    }
+
+    fn poll_download_event(&mut self) -> Option<DownloadEvent> {
+        self.poll_download_event()
+    }
+
+    fn poll_download(&mut self) -> Option<DownloadEvent> {
+        self.poll_download()
+    }
+
+    fn poll_engine_event(&mut self) -> Option<EngineEvent> {
+        self.poll_engine_event()
     }
 }
 
@@ -2007,5 +2320,145 @@ mod tests {
             engine.gate_request(page_surface, "https://example.com/tracker.js"),
             RequestGateDecision::Allow
         );
+    }
+
+    #[test]
+    fn download_accept_lifecycle_writes_to_disk() {
+        let temp_dir = std::env::temp_dir();
+        let target_path = temp_dir.join("evreos_test_download_accept.txt");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let mut engine = HeadlessEngine::new();
+        let token = engine.trigger_download_sequence(
+            "test.txt",
+            Some(100),
+            [
+                DownloadStep::progress(50),
+                DownloadStep::finish_with_payload(b"hello download".to_vec()),
+            ],
+        );
+
+        let req = engine.poll_download_event().expect("expected Requested");
+        assert_eq!(req.token(), Some(token));
+        assert!(req.is_requested());
+
+        // Before accept, no file exists
+        assert!(!target_path.exists());
+
+        let dl_id = DownloadId::new(42);
+        engine.accept_download(token, dl_id, target_path.clone());
+
+        let prog = engine.poll_download_event().expect("expected Progress");
+        assert_eq!(prog.id(), Some(dl_id));
+        if let DownloadEvent::Progress { received_bytes, .. } = prog {
+            assert_eq!(received_bytes, 50);
+        }
+
+        let fin = engine.poll_download_event().expect("expected Finished");
+        assert_eq!(fin.id(), Some(dl_id));
+        assert!(fin.is_finished());
+        if let DownloadEvent::Finished { path, .. } = fin {
+            assert_eq!(path, target_path);
+        }
+
+        assert!(engine.poll_download_event().is_none());
+        assert!(target_path.exists());
+        let content = std::fs::read(&target_path).expect("read downloaded file");
+        assert_eq!(content, b"hello download");
+
+        let _ = std::fs::remove_file(&target_path);
+    }
+
+    #[test]
+    fn download_reject_writes_nothing_and_emits_no_further_events() {
+        let temp_dir = std::env::temp_dir();
+        let target_path = temp_dir.join("evreos_test_download_reject.txt");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let mut engine = HeadlessEngine::new();
+        let token = engine.trigger_download("rejected.txt", Some(500));
+
+        let req = engine.poll_download_event().expect("expected Requested");
+        assert_eq!(req.token(), Some(token));
+
+        engine.reject_download(token);
+
+        assert_eq!(engine.poll_download_event(), None);
+        assert!(!target_path.exists());
+    }
+
+    #[test]
+    fn download_cancel_emits_cancelled_and_never_finished() {
+        let temp_dir = std::env::temp_dir();
+        let target_path = temp_dir.join("evreos_test_download_cancel.txt");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let mut engine = HeadlessEngine::new();
+        let token = engine.trigger_download("cancel_test.txt", Some(200));
+
+        let req = engine.poll_download_event().expect("expected Requested");
+        assert_eq!(req.token(), Some(token));
+
+        let dl_id = DownloadId::new(99);
+        engine.accept_download(token, dl_id, target_path.clone());
+        engine.cancel_download(dl_id);
+
+        let mut events = Vec::new();
+        while let Some(e) = engine.poll_download_event() {
+            events.push(e);
+        }
+
+        assert!(
+            events
+                .iter()
+                .any(|e| matches!(e, DownloadEvent::Cancelled { id } if *id == dl_id))
+        );
+        assert!(
+            !events
+                .iter()
+                .any(|e| matches!(e, DownloadEvent::Finished { .. }))
+        );
+        assert!(!target_path.exists());
+    }
+
+    #[test]
+    fn download_via_address_navigation() {
+        let temp_dir = std::env::temp_dir();
+        let target_path = temp_dir.join("evreos_test_nav_download.zip");
+        if target_path.exists() {
+            let _ = std::fs::remove_file(&target_path);
+        }
+
+        let mut host = HeadlessHost::new().with_download(
+            "https://dl.example.test/file.zip",
+            "file.zip",
+            Some(4096),
+        );
+        let mut engine = host.create_engine();
+
+        let req = Request::new("https://dl.example.test/file.zip");
+        let _nav_id = engine.start_navigation(&req);
+
+        let dl_event = engine.poll_download_event().expect("expected Requested");
+        assert!(dl_event.is_requested());
+        let token = dl_event.token().expect("token exists");
+
+        let dl_id = DownloadId::new(123);
+        engine.accept_download(token, dl_id, target_path.clone());
+
+        let prog = engine.poll_download_event().expect("expected Progress");
+        assert_eq!(prog.id(), Some(dl_id));
+
+        let fin = engine.poll_download_event().expect("expected Finished");
+        assert_eq!(fin.id(), Some(dl_id));
+
+        assert!(target_path.exists());
+        let _ = std::fs::remove_file(&target_path);
     }
 }
