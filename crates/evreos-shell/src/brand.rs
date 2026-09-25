@@ -51,6 +51,7 @@ pub fn brand() -> &'static Brand {
 /// them: changing the provider — by the member, or by brand configuration
 /// under FR-042 — changes which service receives the query and MUST NOT change
 /// what the query carries.
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SearchRequest {
     /// The service that receives the query: the brand's search endpoint,
     /// verbatim.
@@ -58,6 +59,19 @@ pub struct SearchRequest {
     /// What the request carries: the terms the member submitted, encoded, and
     /// nothing else — no address, no history, no identifier Evreos assigns.
     pub query: String,
+}
+
+impl Brand {
+    /// Resolve the search endpoint for egress requests through `evreos-net`.
+    ///
+    /// Resolves the search endpoint defined in brand configuration into a typed
+    /// [`evreos_net::Endpoint`].
+    pub fn search_endpoint(&self) -> evreos_net::Endpoint {
+        let resolved = evreos_net::BrandResolved::declared_in_brand_configuration(
+            self.search_endpoint.clone(),
+        );
+        evreos_net::Endpoint::resolve(resolved)
+    }
 }
 
 /// Compose the FR-003a submitted search for `terms` against `brand`.
@@ -71,6 +85,23 @@ pub fn search_request(brand: &Brand, terms: &str) -> SearchRequest {
         endpoint: brand.search_endpoint.clone(),
         query: format!("q={}", percent_encode(terms)),
     }
+}
+
+/// Create a planned submitted search request through `evreos-net` for `terms` against `brand`.
+///
+/// Binds the [`evreos_net::PlannedRequest`] typed on [`evreos_net::HistoryBearing::SubmittedSearch`]
+/// and the [`SearchRequest`] carrying only the submitted terms.
+pub fn planned_search_request(
+    brand: &Brand,
+    terms: &str,
+) -> (evreos_net::PlannedRequest, SearchRequest) {
+    let endpoint = brand.search_endpoint();
+    let planned = evreos_net::request(
+        evreos_net::Purpose::HistoryBearing(evreos_net::HistoryBearing::SubmittedSearch),
+        endpoint,
+    );
+    let search = search_request(brand, terms);
+    (planned, search)
 }
 
 /// Percent-encode `terms` for a query value: unreserved bytes pass, everything

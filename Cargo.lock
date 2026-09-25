@@ -922,6 +922,7 @@ dependencies = [
  "evreos-engine",
  "evreos-engine-headless",
  "evreos-i18n",
+ "evreos-net",
  "trybuild",
  "winit",
 ]
