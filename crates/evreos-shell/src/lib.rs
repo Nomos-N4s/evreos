@@ -8,6 +8,7 @@ pub mod app;
 pub mod brand;
 pub mod error;
 pub mod error_presentation;
+pub mod handoff;
 pub mod log;
 pub mod omnibox;
 pub mod permissions;
@@ -27,6 +28,10 @@ pub use error_presentation::{
     ErrorPresentation, TimeoutPresentation, render_error, render_load_error, render_timeout,
     timeout_as_shell_error,
 };
+pub use handoff::{
+    HandOffBrowser, HandOffError, HandOffExecutor, HandOffOffer, HandOffReason,
+    MockHandOffExecutor, detect_password_input,
+};
 pub use log::{
     Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,
     PageTitle, Record, RecordBuilder, SearchTerm, Sensitive, Token, emit, log_directory,
@@ -38,7 +43,7 @@ pub use permissions::{
     PromptOutcome, PromptResponse, PromptResult, SitePermission, WindowScope,
 };
 pub use private::{PrivateSession, PrivateWindow, record_history_safely};
-pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
+pub use profile::{Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use session::{
     SessionError, SessionSnapshot, SessionStore, SessionTab, SessionWindow, parse_session_file,
     serialize_session,
