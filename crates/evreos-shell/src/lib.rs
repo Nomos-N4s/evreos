@@ -12,13 +12,14 @@ pub mod omnibox;
 pub mod permissions;
 pub mod profile;
 pub mod search_provider;
+pub mod session;
 pub mod site_key;
 pub mod store;
 pub mod suggest;
 pub mod tabs;
 pub mod work;
 
-pub use app::{App, AppWindow, AppWindowId};
+pub use app::{App, AppWindow, AppWindowId, mint_window_id};
 pub use error::{ErrorKind, LogProjection, MemberFacingError, ShellError};
 pub use log::{
     Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,
@@ -31,6 +32,10 @@ pub use permissions::{
     PromptOutcome, PromptResponse, PromptResult, SitePermission, WindowScope,
 };
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
+pub use session::{
+    SessionError, SessionSnapshot, SessionStore, SessionTab, SessionWindow, parse_session_file,
+    serialize_session,
+};
 pub use site_key::{SiteKey, SiteKeyError};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,

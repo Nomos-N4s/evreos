@@ -45,7 +45,7 @@ impl fmt::Display for AppWindowId {
 
 static NEXT_WINDOW_ID: AtomicU64 = AtomicU64::new(1);
 
-fn mint_window_id() -> AppWindowId {
+pub fn mint_window_id() -> AppWindowId {
     AppWindowId(NEXT_WINDOW_ID.fetch_add(1, Ordering::Relaxed))
 }
 
