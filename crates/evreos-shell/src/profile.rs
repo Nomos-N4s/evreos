@@ -64,40 +64,7 @@ impl ThemePreference {
     }
 }
 
-/// Search provider configuration.
-///
-/// Holds the provider name and the search endpoint resolved from brand configuration.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SearchProviderSetting {
-    /// Human-readable provider identifier.
-    pub provider: String,
-    /// Search endpoint URL template.
-    pub endpoint: String,
-}
-
-impl SearchProviderSetting {
-    /// Create a search provider setting with provider name and endpoint.
-    pub fn new(provider: impl Into<String>, endpoint: impl Into<String>) -> Self {
-        Self {
-            provider: provider.into(),
-            endpoint: endpoint.into(),
-        }
-    }
-
-    /// Default privacy-preserving provider resolved against brand configuration.
-    pub fn default_provider() -> Self {
-        Self {
-            provider: "DuckDuckGo".to_string(),
-            endpoint: crate::brand::brand().search_endpoint.clone(),
-        }
-    }
-}
-
-impl Default for SearchProviderSetting {
-    fn default() -> Self {
-        Self::default_provider()
-    }
-}
+pub use crate::search_provider::SearchProviderSetting;
 
 /// Hand-off browser selection.
 ///
