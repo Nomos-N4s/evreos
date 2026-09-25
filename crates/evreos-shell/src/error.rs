@@ -353,6 +353,239 @@ fn extract_host(address: &str) -> &str {
 mod tests {
     use super::*;
 
+    fn all_variants(address: &str) -> [ShellError; 4] {
+        [
+            ShellError::Unresolvable {
+                address: address.to_owned(),
+            },
+            ShellError::Certificate {
+                address: address.to_owned(),
+                detail: "certificate has expired".to_owned(),
+            },
+            ShellError::Intercepted {
+                address: address.to_owned(),
+            },
+            ShellError::AuthenticationRequired {
+                address: address.to_owned(),
+            },
+        ]
+    }
+
+    #[test]
+    fn every_variant_resolves_to_both_keys_in_all_languages() {
+        let address = "https://example.invalid/";
+        let variants = all_variants(address);
+
+        for error in &variants {
+            for language in Language::ALL {
+                let cause = error.render_cause(language);
+                assert!(
+                    cause.is_ok(),
+                    "cause for {:?} failed to resolve in {}: {:?}",
+                    error.kind(),
+                    language.subtag(),
+                    cause
+                );
+                let cause_text = cause.unwrap();
+                assert!(
+                    !cause_text.trim().is_empty(),
+                    "cause for {:?} resolved to empty text in {}",
+                    error.kind(),
+                    language.subtag()
+                );
+
+                let next_step = error.render_next_step(language);
+                assert!(
+                    next_step.is_ok(),
+                    "next step for {:?} failed to resolve in {}: {:?}",
+                    error.kind(),
+                    language.subtag(),
+                    next_step
+                );
+                let next_step_text = next_step.unwrap();
+                assert!(
+                    !next_step_text.trim().is_empty(),
+                    "next step for {:?} resolved to empty text in {}",
+                    error.kind(),
+                    language.subtag()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn member_facing_rendering_names_cause_and_offers_next_step() {
+        let host = "subdomain.example.invalid";
+        let address = format!("https://{host}/path");
+        let variants = all_variants(&address);
+
+        for error in &variants {
+            for language in Language::ALL {
+                let rendered = error
+                    .render(language)
+                    .unwrap_or_else(|e| panic!("failed rendering {error:?} in {language:?}: {e}"));
+
+                // Names the problem
+                assert!(
+                    !rendered.cause().is_empty(),
+                    "empty cause in {}",
+                    language.subtag()
+                );
+                // Offers a next step
+                assert!(
+                    !rendered.next_step().is_empty(),
+                    "empty next step in {}",
+                    language.subtag()
+                );
+
+                // For English, verify specific content requirements
+                if language == Language::En {
+                    match error {
+                        ShellError::Unresolvable { .. } => {
+                            assert!(
+                                rendered.cause().contains(&address),
+                                "Unresolvable cause must name address: {}",
+                                rendered.cause()
+                            );
+                            assert!(
+                                rendered.next_step().contains("spelling"),
+                                "Unresolvable next step must advise spelling: {}",
+                                rendered.next_step()
+                            );
+                        }
+                        ShellError::Certificate { .. } => {
+                            assert!(
+                                rendered.cause().contains(host),
+                                "Certificate cause must name host: {}",
+                                rendered.cause()
+                            );
+                            assert!(
+                                rendered.next_step().contains("Go back"),
+                                "Certificate next step must advise going back: {}",
+                                rendered.next_step()
+                            );
+                        }
+                        ShellError::Intercepted { .. } => {
+                            assert!(
+                                rendered.cause().contains(host),
+                                "Intercepted cause must name host: {}",
+                                rendered.cause()
+                            );
+                            assert!(
+                                rendered.next_step().contains("Sign in"),
+                                "Intercepted next step must advise sign in or switch network: {}",
+                                rendered.next_step()
+                            );
+                        }
+                        ShellError::AuthenticationRequired { .. } => {
+                            assert!(
+                                rendered.cause().contains(host),
+                                "Authentication cause must name host: {}",
+                                rendered.cause()
+                            );
+                            assert!(
+                                rendered.next_step().contains("Sign in"),
+                                "Authentication next step must advise sign in: {}",
+                                rendered.next_step()
+                            );
+                        }
+                    }
+                }
+
+                // Check presentation format joins both
+                let presentation = rendered.presentation();
+                assert!(presentation.contains(rendered.cause()));
+                assert!(presentation.contains(rendered.next_step()));
+            }
+        }
+    }
+
+    #[test]
+    fn log_projection_is_strictly_free_of_address_page_title_search_term_and_credential() {
+        let sensitive_address = "https://sensitive.finance.bank.invalid:8443/accounts/private";
+        let sensitive_title = "My Secret Financial Portfolio";
+        let sensitive_search_term = "confidential tax records 2026";
+        let sensitive_credential = "super_secret_bearer_token_xyz123";
+
+        let sensitive_url_with_credentials = format!(
+            "https://user:{sensitive_credential}@sensitive.finance.bank.invalid:8443/search?q={sensitive_search_term}"
+        );
+
+        let variants = [
+            ShellError::Unresolvable {
+                address: sensitive_url_with_credentials.clone(),
+            },
+            ShellError::Certificate {
+                address: sensitive_url_with_credentials.clone(),
+                detail: format!("{sensitive_title} - cert failed for {sensitive_address}"),
+            },
+            ShellError::Intercepted {
+                address: sensitive_url_with_credentials.clone(),
+            },
+            ShellError::AuthenticationRequired {
+                address: sensitive_url_with_credentials,
+            },
+        ];
+
+        let sensitive_tokens = [
+            sensitive_address,
+            "sensitive.finance.bank.invalid",
+            "accounts/private",
+            sensitive_title,
+            sensitive_search_term,
+            sensitive_credential,
+            "super_secret",
+            "confidential",
+        ];
+
+        for error in &variants {
+            let projection = error.log_projection();
+            let debug_repr = format!("{projection:?}");
+            let display_repr = format!("{projection}");
+            let code = projection.code();
+            let cause_key = projection.cause_key();
+            let next_step_key = projection.next_step_key();
+
+            for token in sensitive_tokens {
+                assert!(
+                    !debug_repr.contains(token),
+                    "Debug representation of log projection for {:?} contained sensitive token {:?}: {}",
+                    error.kind(),
+                    token,
+                    debug_repr
+                );
+                assert!(
+                    !display_repr.contains(token),
+                    "Display representation of log projection for {:?} contained sensitive token {:?}: {}",
+                    error.kind(),
+                    token,
+                    display_repr
+                );
+                assert!(
+                    !code.contains(token),
+                    "Code for {:?} contained sensitive token {:?}: {}",
+                    error.kind(),
+                    token,
+                    code
+                );
+                assert!(
+                    !cause_key.contains(token),
+                    "Cause key for {:?} contained sensitive token {:?}: {}",
+                    error.kind(),
+                    token,
+                    cause_key
+                );
+                assert!(
+                    !next_step_key.contains(token),
+                    "Next step key for {:?} contained sensitive token {:?}: {}",
+                    error.kind(),
+                    token,
+                    next_step_key
+                );
+            }
+        }
+    }
+
     #[test]
     fn load_error_conversions() {
         let cases = [
