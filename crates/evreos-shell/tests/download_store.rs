@@ -12,6 +12,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread;
 use std::time::Duration;
 
+use evreos_shell::WindowKind;
 use evreos_shell::store::downloads::{DownloadError, DownloadId, DownloadState, DownloadStore};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
@@ -332,6 +333,115 @@ fn list_ordered_by_time_descending() {
     assert_eq!(ordered[0].id(), id3);
     assert_eq!(ordered[1].id(), id2);
     assert_eq!(ordered[2].id(), id1);
+
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn private_window_download_leaves_no_record_on_disk_while_file_survives() {
+    let dir = unique_temp_dir();
+    let downloads_dir = dir.join("downloads");
+    fs::create_dir_all(&downloads_dir).unwrap();
+
+    let normal_id = DownloadId::new(501);
+    let normal_dest = downloads_dir.join("public.zip");
+    let normal_content = b"normal public file contents";
+    fs::write(&normal_dest, normal_content).unwrap();
+
+    let priv_id = DownloadId::new(502);
+    let priv_dest = downloads_dir.join("tax_return.pdf");
+    let priv_content = b"sensitive member financial document";
+    fs::write(&priv_dest, priv_content).unwrap();
+
+    {
+        let mut store = DownloadStore::open(&dir);
+
+        // Start normal download
+        store
+            .start_download(
+                normal_id,
+                "https://example.org/public.zip",
+                &normal_dest,
+                Some(normal_content.len() as u64),
+            )
+            .expect("start normal");
+        store.complete_download(normal_id).expect("complete normal");
+
+        // Start private window download (Decision 0006)
+        store
+            .start_download_with_window_kind(
+                priv_id,
+                "https://secure.irs.example/tax_return.pdf",
+                &priv_dest,
+                Some(priv_content.len() as u64),
+                WindowKind::Private,
+            )
+            .expect("start private");
+
+        // Verify in-memory tracking during active session
+        let priv_entry = store.get(priv_id).expect("tracked in memory");
+        assert!(priv_entry.is_private());
+        assert_eq!(priv_entry.window_kind(), WindowKind::Private);
+        assert_eq!(priv_entry.destination_path(), priv_dest.as_path());
+        assert!(priv_entry.is_in_progress());
+
+        store
+            .update_progress(priv_id, priv_content.len() as u64)
+            .expect("update private progress");
+        store
+            .complete_download(priv_id)
+            .expect("complete private download");
+
+        assert_eq!(store.count(), 2);
+
+        // Inspect downloads.toml on disk: Decision 0006 strictly excludes private records
+        let disk_content = fs::read_to_string(store.file_path()).expect("read downloads.toml");
+        assert!(
+            disk_content.contains("public.zip"),
+            "normal download must be present on disk"
+        );
+        assert!(
+            !disk_content.contains("tax_return.pdf"),
+            "private download destination must NOT be in downloads.toml"
+        );
+        assert!(
+            !disk_content.contains("https://secure.irs.example"),
+            "private download source address must NOT be in downloads.toml"
+        );
+        assert!(
+            !disk_content.contains("502"),
+            "private download id must NOT be in downloads.toml"
+        );
+
+        // Simulate private window closure via discard_private (Decision 0006)
+        let discarded = store.discard_private();
+        assert_eq!(discarded, 1);
+        assert_eq!(store.count(), 1);
+        assert!(store.get(priv_id).is_none());
+        assert!(store.get(normal_id).is_some());
+
+        // Assert member's saved file on disk is preserved intact!
+        assert!(
+            priv_dest.exists(),
+            "private file saved by member must not be deleted on window close"
+        );
+        assert_eq!(fs::read(&priv_dest).unwrap(), priv_content);
+    }
+
+    // Reopen store from disk (restart): assert zero private trace persists
+    {
+        let store = DownloadStore::open(&dir);
+        assert_eq!(store.count(), 1);
+        assert!(store.get(priv_id).is_none());
+        assert!(store.get(normal_id).is_some());
+
+        // File remains intact across restart
+        assert!(
+            priv_dest.exists(),
+            "private file saved by member must survive restart"
+        );
+        assert_eq!(fs::read(&priv_dest).unwrap(), priv_content);
+    }
 
     let _ = fs::remove_dir_all(&dir);
 }
