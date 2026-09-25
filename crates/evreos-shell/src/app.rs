@@ -17,6 +17,7 @@ use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::thread::{self, ThreadId};
 
+use crate::store::WindowKind;
 use evreos_chrome::{ChromeSurface, DefaultChrome};
 use evreos_engine::{DataStoreSelector, Engine, NavigationEvent, SurfaceId};
 use winit::application::ApplicationHandler;
@@ -57,6 +58,7 @@ pub struct AppWindow {
     winit_window: Option<Window>,
     chrome: Box<dyn ChromeSurface>,
     is_closed: bool,
+    kind: WindowKind,
 }
 
 impl AppWindow {
@@ -82,6 +84,21 @@ impl AppWindow {
 
     pub fn is_closed(&self) -> bool {
         self.is_closed
+    }
+
+    pub fn kind(&self) -> WindowKind {
+        self.kind
+    }
+
+    pub fn is_private(&self) -> bool {
+        self.kind == WindowKind::Private
+    }
+
+    pub fn data_store(&self) -> DataStoreSelector {
+        match self.kind {
+            WindowKind::Normal => DataStoreSelector::Persistent,
+            WindowKind::Private => DataStoreSelector::NonPersistent,
+        }
     }
 }
 
@@ -184,10 +201,53 @@ impl<E: Engine> App<E> {
             winit_window: None,
             chrome,
             is_closed: false,
+            kind: WindowKind::Normal,
         };
 
         self.windows.insert(id, window);
         id
+    }
+
+    /// Open a private browsing window with default chrome.
+    ///
+    /// Under FR-007, selects [`DataStoreSelector::NonPersistent`] on the engine seam.
+    pub fn open_private_window(&mut self, title: impl Into<String>) -> AppWindowId {
+        self.open_private_window_with_chrome(title, Box::new(DefaultChrome::new()))
+    }
+
+    /// Open a private browsing window with a custom chrome surface.
+    ///
+    /// Under FR-007, selects [`DataStoreSelector::NonPersistent`] on the engine seam.
+    pub fn open_private_window_with_chrome(
+        &mut self,
+        title: impl Into<String>,
+        chrome: Box<dyn ChromeSurface>,
+    ) -> AppWindowId {
+        self.assert_ui_thread();
+        let id = mint_window_id();
+        let surface_id = self.engine.create_surface(DataStoreSelector::NonPersistent);
+        self.active_child_views += 1;
+
+        let window = AppWindow {
+            id,
+            title: title.into(),
+            surface_id,
+            winit_window: None,
+            chrome,
+            is_closed: false,
+            kind: WindowKind::Private,
+        };
+
+        self.windows.insert(id, window);
+        id
+    }
+
+    /// Whether the specified window is a private browsing window.
+    pub fn is_private_window(&self, id: AppWindowId) -> bool {
+        self.windows
+            .get(&id)
+            .map(|w| w.is_private())
+            .unwrap_or(false)
     }
 
     /// Create an application window backed by a real `winit` window.
@@ -217,6 +277,7 @@ impl<E: Engine> App<E> {
             winit_window: Some(winit_win),
             chrome,
             is_closed: false,
+            kind: WindowKind::Normal,
         };
 
         self.winit_map.insert(winit_id, id);

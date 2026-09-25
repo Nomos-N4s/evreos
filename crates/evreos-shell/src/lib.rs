@@ -10,6 +10,7 @@ pub mod error;
 pub mod log;
 pub mod omnibox;
 pub mod permissions;
+pub mod private;
 pub mod profile;
 pub mod search_provider;
 pub mod session;
@@ -31,6 +32,7 @@ pub use permissions::{
     Capability, PermissionDecision, PermissionError, PermissionPromptRequest, PermissionStore,
     PromptOutcome, PromptResponse, PromptResult, SitePermission, WindowScope,
 };
+pub use private::{PrivateSession, PrivateWindow, record_history_safely};
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use session::{
     SessionError, SessionSnapshot, SessionStore, SessionTab, SessionWindow, parse_session_file,
