@@ -83,7 +83,12 @@ def denylist(root, names=("reqwest", "hyper", "tokio", "socket2")):
 
 
 def run_check(*args):
-    return subprocess.run([sys.executable, str(SCRIPT), *args], capture_output=True, text=True)
+    return subprocess.run(
+        [sys.executable, str(SCRIPT), *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+    )
 
 
 # --- the deny-list ------------------------------------------------------------
