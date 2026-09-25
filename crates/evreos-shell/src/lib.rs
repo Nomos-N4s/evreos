@@ -8,6 +8,8 @@ pub mod app;
 pub mod brand;
 pub mod error;
 pub mod log;
+pub mod profile;
+pub mod store;
 pub mod work;
 
 pub use app::{App, AppWindow, AppWindowId};
@@ -17,6 +19,8 @@ pub use log::{
     PageTitle, Record, RecordBuilder, SearchTerm, Sensitive, Token, emit, log_directory,
     log_file_path,
 };
+pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
+pub use store::{BookmarkStore, DownloadStore, HistoryStore, StoreRegistry};
 pub use work::{
     DEFAULT_MAX_QUEUE_CAPACITY, DEFAULT_WORKER_THREADS, JobId, JobOutcome, JobResult, PoolError,
     WorkerPool,
