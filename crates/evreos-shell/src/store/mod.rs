@@ -13,7 +13,9 @@ pub mod bookmarks;
 pub mod downloads;
 pub mod history;
 
-pub use bookmarks::BookmarkStore;
+pub use bookmarks::{
+    Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore, FolderId,
+};
 pub use downloads::DownloadStore;
 pub use history::{
     HistoryEntry, HistoryEntryId, HistoryError, HistorySource, HistoryStore, WindowKind,
