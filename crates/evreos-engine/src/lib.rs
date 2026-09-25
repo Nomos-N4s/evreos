@@ -26,6 +26,7 @@
 pub mod conformance;
 
 use core::fmt;
+use std::path::PathBuf;
 
 /// What the shell asks an engine to render.
 ///
@@ -742,6 +743,207 @@ impl TaggedMessage {
     }
 }
 
+/// An opaque token minted by the engine when a download is announced.
+///
+/// Under FR-004 and the download handshake contract, the runtime announces
+/// an incoming download before any bytes are written to disk. The engine mints
+/// a `DownloadToken` and emits [`DownloadEvent::Requested`]. The shell uses
+/// this token to either accept the transfer with a chosen destination and
+/// [`DownloadId`] via [`Engine::accept_download`], or reject it via
+/// [`Engine::reject_download`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct DownloadToken(u64);
+
+impl DownloadToken {
+    /// The first download token an engine mints.
+    pub const FIRST: Self = Self(1);
+
+    /// Construct a download token from a raw value.
+    pub const fn new(val: u64) -> Self {
+        Self(val)
+    }
+
+    /// The underlying raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The underlying raw value as `u64`.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Return the next sequential token.
+    #[must_use]
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for DownloadToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "dl-token-{}", self.0)
+    }
+}
+
+impl From<u64> for DownloadToken {
+    fn from(val: u64) -> Self {
+        Self(val)
+    }
+}
+
+/// An identifier assigned by the shell to an accepted download.
+///
+/// Under FR-004, the shell — not the engine — owns download identifiers and
+/// storage locations. When the shell accepts a transfer via [`Engine::accept_download`],
+/// it provides a `DownloadId`. Every subsequent event for that transfer
+/// carries this identifier.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+pub struct DownloadId(u64);
+
+impl DownloadId {
+    /// The first download identifier.
+    pub const FIRST: Self = Self(1);
+
+    /// Construct a download identifier from a raw value.
+    pub const fn new(val: u64) -> Self {
+        Self(val)
+    }
+
+    /// The underlying raw value.
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+
+    /// The underlying raw value as `u64`.
+    pub const fn as_u64(self) -> u64 {
+        self.0
+    }
+
+    /// Return the next sequential download identifier.
+    #[must_use]
+    pub fn next(self) -> Self {
+        Self(self.0.saturating_add(1))
+    }
+}
+
+impl fmt::Display for DownloadId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "dl-{}", self.0)
+    }
+}
+
+impl From<u64> for DownloadId {
+    fn from(val: u64) -> Self {
+        Self(val)
+    }
+}
+
+/// An event in the download lifecycle handshake.
+///
+/// Under FR-004, downloading web content is a two-way handshake between the
+/// engine and the shell:
+/// 1. The engine announces an incoming download via [`Requested`](Self::Requested),
+///    carrying a [`DownloadToken`], suggested filename, and optional byte size.
+///    No bytes are written to disk before acceptance.
+/// 2. The shell answers exactly once with [`Engine::accept_download`] (supplying a
+///    [`DownloadId`] and destination [`PathBuf`]) or [`Engine::reject_download`].
+/// 3. If accepted, subsequent events ([`Progress`](Self::Progress),
+///    [`Finished`](Self::Finished), [`Failed`](Self::Failed), or
+///    [`Cancelled`](Self::Cancelled)) carry the shell-supplied [`DownloadId`].
+///    If rejected, the engine writes nothing to disk and yields no further events.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DownloadEvent {
+    /// The runtime announced an incoming download originating from page content.
+    Requested {
+        /// The opaque correlation token minted by the engine.
+        token: DownloadToken,
+        /// The filename suggested by headers or the address.
+        suggested_name: String,
+        /// Total expected transfer size in bytes, if declared.
+        total_bytes: Option<u64>,
+    },
+    /// The accepted download has transferred `received_bytes`.
+    Progress {
+        /// The shell-assigned download identifier.
+        id: DownloadId,
+        /// Total bytes transferred so far.
+        received_bytes: u64,
+    },
+    /// The download completed successfully and was written to the shell's destination.
+    Finished {
+        /// The shell-assigned download identifier.
+        id: DownloadId,
+        /// The path where the downloaded file was written.
+        path: PathBuf,
+    },
+    /// The download failed during transfer.
+    Failed {
+        /// The shell-assigned download identifier.
+        id: DownloadId,
+        /// Plain-language cause of failure.
+        cause: String,
+    },
+    /// The download was cancelled by the shell before completion.
+    Cancelled {
+        /// The shell-assigned download identifier.
+        id: DownloadId,
+    },
+}
+
+impl DownloadEvent {
+    /// Return the download token if this is a `Requested` event.
+    pub fn token(&self) -> Option<DownloadToken> {
+        match self {
+            Self::Requested { token, .. } => Some(*token),
+            _ => None,
+        }
+    }
+
+    /// Return the shell-assigned `DownloadId` if this is a post-acceptance event.
+    pub fn id(&self) -> Option<DownloadId> {
+        match self {
+            Self::Requested { .. } => None,
+            Self::Progress { id, .. }
+            | Self::Finished { id, .. }
+            | Self::Failed { id, .. }
+            | Self::Cancelled { id } => Some(*id),
+        }
+    }
+
+    /// Whether this event is a [`Requested`](Self::Requested) event.
+    pub fn is_requested(&self) -> bool {
+        matches!(self, Self::Requested { .. })
+    }
+
+    /// Whether this event is a [`Finished`](Self::Finished) event.
+    pub fn is_finished(&self) -> bool {
+        matches!(self, Self::Finished { .. })
+    }
+
+    /// Whether this event is a [`Cancelled`](Self::Cancelled) event.
+    pub fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Cancelled { .. })
+    }
+
+    /// Whether this event is a [`Failed`](Self::Failed) event.
+    pub fn is_failed(&self) -> bool {
+        matches!(self, Self::Failed { .. })
+    }
+}
+
+/// An engine event combining navigation and download observations.
+///
+/// Delivered on the engine's event stream so the shell can observe both navigation
+/// and download lifecycles.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EngineEvent {
+    /// A navigation lifecycle event.
+    Navigation(NavigationEvent),
+    /// A download lifecycle event.
+    Download(DownloadEvent),
+}
+
 /// What the shell requires of anything that renders web content.
 ///
 /// Implemented by the system-webview backend on each supported platform and by
@@ -1024,6 +1226,49 @@ pub trait Engine {
     /// evaluated through the FR-008 content-blocking pipeline.
     fn gate_request(&self, _surface: SurfaceId, _url: &str) -> RequestGateDecision {
         RequestGateDecision::Allow
+    }
+
+    // Download surface handshake (FR-004)
+
+    /// Accept an announced download, specifying its shell-assigned [`DownloadId`]
+    /// and destination [`PathBuf`].
+    ///
+    /// Must be called at most once in response to a [`DownloadEvent::Requested`]
+    /// event carrying `token`. Once accepted, the engine writes the transfer to
+    /// `destination` and emits subsequent progress, completion, or failure events
+    /// carrying `id`.
+    fn accept_download(&mut self, _token: DownloadToken, _id: DownloadId, _destination: PathBuf) {}
+
+    /// Reject an announced download.
+    ///
+    /// The engine must write nothing to disk and emit no further events for `token`.
+    fn reject_download(&mut self, _token: DownloadToken) {}
+
+    /// Cancel an in-progress, previously accepted download.
+    ///
+    /// The engine emits [`DownloadEvent::Cancelled`] with `id` and never emits
+    /// [`DownloadEvent::Finished`].
+    fn cancel_download(&mut self, _id: DownloadId) {}
+
+    /// Poll the next pending download event from the engine, if any is pending.
+    fn poll_download_event(&mut self) -> Option<DownloadEvent> {
+        None
+    }
+
+    /// Synonym for [`poll_download_event`](Self::poll_download_event).
+    fn poll_download(&mut self) -> Option<DownloadEvent> {
+        self.poll_download_event()
+    }
+
+    /// Poll the next unified engine event, draining navigation events before download events.
+    fn poll_engine_event(&mut self) -> Option<EngineEvent> {
+        if let Some(event) = self.poll_event() {
+            return Some(EngineEvent::Navigation(event));
+        }
+        if let Some(dl) = self.poll_download_event() {
+            return Some(EngineEvent::Download(dl));
+        }
+        None
     }
 }
 
@@ -1386,5 +1631,100 @@ mod tests {
         assert!(!RequestGateDecision::Allow.is_denied());
         assert!(RequestGateDecision::Deny.is_denied());
         assert!(!RequestGateDecision::Deny.is_allowed());
+    }
+
+    #[test]
+    fn download_token_and_id_properties() {
+        let tok1 = DownloadToken::FIRST;
+        let tok2 = tok1.next();
+        assert_ne!(tok1, tok2);
+        assert_eq!(tok1.get(), 1);
+        assert_eq!(tok1.as_u64(), 1);
+        assert_eq!(tok2.get(), 2);
+        assert_eq!(tok1.to_string(), "dl-token-1");
+        assert_eq!(tok2.to_string(), "dl-token-2");
+        assert_eq!(DownloadToken::new(42).get(), 42);
+        assert_eq!(DownloadToken::from(42).get(), 42);
+
+        let id1 = DownloadId::FIRST;
+        let id2 = id1.next();
+        assert_ne!(id1, id2);
+        assert_eq!(id1.get(), 1);
+        assert_eq!(id1.as_u64(), 1);
+        assert_eq!(id2.get(), 2);
+        assert_eq!(id1.to_string(), "dl-1");
+        assert_eq!(id2.to_string(), "dl-2");
+        assert_eq!(DownloadId::new(99).get(), 99);
+        assert_eq!(DownloadId::from(99).get(), 99);
+    }
+
+    #[test]
+    fn download_event_variants_and_accessors() {
+        let tok = DownloadToken::FIRST;
+        let id = DownloadId::FIRST;
+
+        let req = DownloadEvent::Requested {
+            token: tok,
+            suggested_name: "archive.zip".into(),
+            total_bytes: Some(1024),
+        };
+        assert!(req.is_requested());
+        assert!(!req.is_finished());
+        assert!(!req.is_cancelled());
+        assert!(!req.is_failed());
+        assert_eq!(req.token(), Some(tok));
+        assert_eq!(req.id(), None);
+
+        let prog = DownloadEvent::Progress {
+            id,
+            received_bytes: 512,
+        };
+        assert!(!prog.is_requested());
+        assert_eq!(prog.token(), None);
+        assert_eq!(prog.id(), Some(id));
+
+        let fin = DownloadEvent::Finished {
+            id,
+            path: PathBuf::from("/tmp/archive.zip"),
+        };
+        assert!(fin.is_finished());
+        assert_eq!(fin.token(), None);
+        assert_eq!(fin.id(), Some(id));
+
+        let fail = DownloadEvent::Failed {
+            id,
+            cause: "connection reset".into(),
+        };
+        assert!(fail.is_failed());
+        assert_eq!(fail.token(), None);
+        assert_eq!(fail.id(), Some(id));
+
+        let canc = DownloadEvent::Cancelled { id };
+        assert!(canc.is_cancelled());
+        assert_eq!(canc.token(), None);
+        assert_eq!(canc.id(), Some(id));
+    }
+
+    #[test]
+    fn engine_default_download_surface_methods() {
+        let mut engine = ThreadAffine {
+            _pinned: Rc::new(()),
+            context_id: ContextId::FIRST,
+            queue: Vec::new(),
+            next: NavigationId::FIRST,
+        };
+
+        assert_eq!(engine.poll_download_event(), None);
+        assert_eq!(engine.poll_download(), None);
+        assert_eq!(engine.poll_engine_event(), None);
+
+        // Default no-ops should not panic
+        engine.accept_download(
+            DownloadToken::FIRST,
+            DownloadId::FIRST,
+            PathBuf::from("/tmp/test"),
+        );
+        engine.reject_download(DownloadToken::FIRST);
+        engine.cancel_download(DownloadId::FIRST);
     }
 }
