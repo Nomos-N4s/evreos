@@ -11,6 +11,7 @@ pub mod log;
 pub mod omnibox;
 pub mod profile;
 pub mod search_provider;
+pub mod site_key;
 pub mod store;
 pub mod suggest;
 pub mod work;
@@ -24,6 +25,7 @@ pub use log::{
 };
 pub use omnibox::{Omnibox, OmniboxAction, SubmittedSearch};
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
+pub use site_key::{SiteKey, SiteKeyError};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,
     DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore, FolderId, HistoryEntry,
