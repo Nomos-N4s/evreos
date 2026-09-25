@@ -1,0 +1,23 @@
+error[E0277]: the trait bound `Address: LogValue` is not satisfied
+ --> tests/compile_fail/log_address.rs:7:27
+  |
+7 |         .field("address", address)
+  |          -----            ^^^^^^^ the trait `LogValue` is not implemented for `Address`
+  |          |
+  |          required by a bound introduced by this call
+  |
+  = help: the following other types implement trait `LogValue`:
+            &'static str
+            Duration
+            LogProjection
+            bool
+            evreos_shell::ErrorKind
+            i16
+            i32
+            i64
+          and $N others
+note: required by a bound in `RecordBuilder::field`
+ --> src/log.rs
+  |
+  |     pub fn field<V: LogValue>(mut self, name: &'static str, value: V) -> Self {
+  |                     ^^^^^^^^ required by this bound in `RecordBuilder::field`

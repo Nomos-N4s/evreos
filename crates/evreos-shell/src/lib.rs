@@ -6,5 +6,11 @@
 
 pub mod brand;
 pub mod error;
+pub mod log;
 
 pub use error::{ErrorKind, LogProjection, MemberFacingError, ShellError};
+pub use log::{
+    Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,
+    PageTitle, Record, RecordBuilder, SearchTerm, Sensitive, Token, emit, log_directory,
+    log_file_path,
+};
