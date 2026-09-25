@@ -901,6 +901,10 @@ name = "evreos-i18n"
 version = "0.0.0"
 
 [[package]]
+name = "evreos-net"
+version = "0.0.0"
+
+[[package]]
 name = "evreos-shell"
 version = "0.0.0"
 dependencies = [
