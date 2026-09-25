@@ -20,7 +20,10 @@ pub use log::{
     log_file_path,
 };
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
-pub use store::{BookmarkStore, DownloadStore, HistoryStore, StoreRegistry};
+pub use store::{
+    BookmarkStore, DownloadStore, HistoryEntry, HistoryEntryId, HistoryError, HistorySource,
+    HistoryStore, StoreRegistry, WindowKind,
+};
 pub use work::{
     DEFAULT_MAX_QUEUE_CAPACITY, DEFAULT_WORKER_THREADS, JobId, JobOutcome, JobResult, PoolError,
     WorkerPool,
