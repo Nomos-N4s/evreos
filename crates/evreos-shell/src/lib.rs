@@ -22,8 +22,8 @@ pub use log::{
 pub use profile::{HandOffBrowser, Profile, ProfileError, SearchProviderSetting, ThemePreference};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,
-    DownloadStore, FolderId, HistoryEntry, HistoryEntryId, HistoryError, HistorySource,
-    HistoryStore, StoreRegistry, WindowKind,
+    DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore, FolderId, HistoryEntry,
+    HistoryEntryId, HistoryError, HistorySource, HistoryStore, StoreRegistry, WindowKind,
 };
 pub use work::{
     DEFAULT_MAX_QUEUE_CAPACITY, DEFAULT_WORKER_THREADS, JobId, JobOutcome, JobResult, PoolError,
