@@ -14,7 +14,8 @@
 
 #![forbid(unsafe_code)]
 
-mod brand;
+use evreos_shell::brand;
+pub use evreos_shell::error;
 
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
