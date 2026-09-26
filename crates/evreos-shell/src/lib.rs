@@ -36,7 +36,10 @@ pub use handoff::{
     HandOffBrowser, HandOffError, HandOffExecutor, HandOffOffer, HandOffReason,
     MockHandOffExecutor, detect_password_input,
 };
-pub use import::{ImportError, ImportScope, ImportedData, SourceBrowser, SourceProfile};
+pub use import::{
+    ImportCounts, ImportError, ImportFailure, ImportJob, ImportScope, ImportState, ImportedData,
+    SourceBrowser, SourceProfile,
+};
 pub use keymap::{
     ChromeCommand, CommandCategory, Key, KeyShortcut, Keymap, KeymapError, Modifiers,
 };

@@ -1,11 +1,16 @@
 //! FR-012 import: bookmarks and history from Chrome, Firefox and Edge.
 //!
-//! # What is read
+//! # What an import is
 //!
-//! [`read_profile`] reads one profile of a browser the specification's
-//! Assumptions name into [`ImportedData`]: its bookmark trees and its history
-//! rows, and nothing else. Writing them into the member's stores is the
-//! import's next step, which this module does not take yet.
+//! An [`ImportJob`] reads one profile of one of the three browsers the
+//! specification's Assumptions name, and writes what it read into the
+//! member's own stores as **ordinary rows marked as imported**: every history
+//! row carries [`HistorySource::Imported`] and every bookmark
+//! [`BookmarkSource::Imported`], each naming the browser, and from the moment
+//! they exist they are the member's history in exactly the sense FR-007a
+//! defines — class L, local, never transmitted, deleted by the same deletion
+//! as any other row (data-model §1.13). The job's state, scope and counts are
+//! that section's fields.
 //!
 //! # What an import never touches
 //!
@@ -30,6 +35,15 @@
 //! the copy is verified rather than trusted — [`snapshot`] states the
 //! protocol, and `docs/measurements/import-profile-read.md` records the
 //! measurement it rests on. The copy is never written to disk.
+//!
+//! # Threads
+//!
+//! Reading a store of tens of megabytes is work SC-006 forbids on the UI
+//! thread, so the job splits in two: [`ImportJob::start_reading`] hands out a
+//! [`ReadRequest`] that is `Send` and runs on the shell worker pool, and
+//! [`ImportJob::finish`] writes its result into the stores on the thread that
+//! owns them. [`ImportJob::run`] does both in sequence for a caller with no
+//! UI thread to protect.
 
 #![forbid(unsafe_code)]
 
@@ -39,11 +53,18 @@ pub mod json;
 pub mod snapshot;
 pub mod sqlite;
 
+use std::collections::HashSet;
 use std::fmt;
 use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+use evreos_i18n::{Language, catalogue};
+
+use crate::store::{
+    BookmarkError, BookmarkSource, BookmarkStore, FolderId, HistoryError, HistorySource,
+    NewHistoryEntry, StoreRegistry, WindowKind,
+};
 use snapshot::{Disk, FileSource, Snapshot, SnapshotError, SnapshotPolicy, StoreFiles};
 
 /// The browsers an import reads, closed as the specification's Assumptions
@@ -124,6 +145,41 @@ impl ImportScope {
     };
 }
 
+/// Rows written by one job.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ImportCounts {
+    /// Bookmark rows written.
+    pub bookmarks_imported: usize,
+    /// History rows written.
+    pub history_imported: usize,
+}
+
+/// Why a job failed, as its state records it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportFailure {
+    /// The profile directory is gone.
+    ProfileMissing,
+    /// The browser kept writing through every attempt to copy a store.
+    SourceBusy,
+    /// A store is not in a format this reader understands.
+    Unreadable,
+    /// Evreos's own stores could not be written; nothing was imported.
+    WriteFailed,
+}
+
+/// Where a job is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ImportState {
+    /// Created, not started.
+    Pending,
+    /// Reading the source profile.
+    Reading,
+    /// Every row written.
+    Written,
+    /// Stopped, having written nothing.
+    Failed(ImportFailure),
+}
+
 /// Why an import failed. No variant carries an address, a title or any other
 /// value read from the source profile, so an error can be logged as it is.
 #[derive(Debug)]
@@ -152,9 +208,27 @@ pub enum ImportError {
         /// The underlying error.
         error: io::Error,
     },
+    /// The bookmark store refused the write.
+    Bookmarks(BookmarkError),
+    /// The history store refused the write.
+    History(HistoryError),
+    /// A folder name did not resolve from the catalogue.
+    Catalogue(String),
 }
 
 impl ImportError {
+    /// The failure a job's state records for this error.
+    pub fn failure(&self) -> ImportFailure {
+        match self {
+            Self::ProfileMissing => ImportFailure::ProfileMissing,
+            Self::SourceBusy { .. } => ImportFailure::SourceBusy,
+            Self::Unreadable { .. } | Self::Io { .. } => ImportFailure::Unreadable,
+            Self::Bookmarks(_) | Self::History(_) | Self::Catalogue(_) => {
+                ImportFailure::WriteFailed
+            }
+        }
+    }
+
     fn from_snapshot(store: &'static str, error: SnapshotError) -> Self {
         match error {
             SnapshotError::Busy { attempts } => Self::SourceBusy { store, attempts },
@@ -185,6 +259,9 @@ impl fmt::Display for ImportError {
             ),
             Self::Unreadable { store, reason } => write!(f, "{store} is unreadable: {reason}"),
             Self::Io { store, error } => write!(f, "{store} could not be read: {error}"),
+            Self::Bookmarks(error) => write!(f, "{error}"),
+            Self::History(error) => write!(f, "{error}"),
+            Self::Catalogue(key) => write!(f, "catalogue key {key} did not resolve"),
         }
     }
 }
@@ -210,6 +287,15 @@ pub enum RootKind {
 impl RootKind {
     /// The order the root folders are written in.
     pub const ALL: [RootKind; 4] = [Self::Toolbar, Self::Menu, Self::Other, Self::Mobile];
+
+    fn catalogue_key(self) -> &'static str {
+        match self {
+            Self::Toolbar => "import.root.toolbar",
+            Self::Menu => "import.root.menu",
+            Self::Other => "import.root.other",
+            Self::Mobile => "import.root.mobile",
+        }
+    }
 }
 
 /// A bookmark or folder read from a source profile.
@@ -283,6 +369,22 @@ impl ImportedData {
     }
 }
 
+/// Read one profile, off the UI thread.
+#[derive(Debug, Clone)]
+pub struct ReadRequest {
+    profile: SourceProfile,
+    scope: ImportScope,
+    policy: SnapshotPolicy,
+}
+
+impl ReadRequest {
+    /// Read the profile. This is the half of an import that may take
+    /// seconds, and the half that belongs on the worker pool.
+    pub fn execute(self) -> Result<ImportedData, ImportError> {
+        read_profile_with(&self.profile, self.scope, self.policy, &mut Disk)
+    }
+}
+
 /// Read `profile` with the default copy policy.
 pub fn read_profile(
     profile: &SourceProfile,
@@ -332,6 +434,213 @@ fn copy_store(
         Err(SnapshotError::Absent) => Ok(None),
         Err(error) => Err(ImportError::from_snapshot(store, error)),
     }
+}
+
+/// One import of one profile, with the state data-model §1.13 gives it.
+#[derive(Debug, Clone)]
+pub struct ImportJob {
+    profile: SourceProfile,
+    scope: ImportScope,
+    policy: SnapshotPolicy,
+    state: ImportState,
+    counts: ImportCounts,
+}
+
+impl ImportJob {
+    /// A pending job.
+    pub fn new(profile: SourceProfile, scope: ImportScope) -> Self {
+        Self {
+            profile,
+            scope,
+            policy: SnapshotPolicy::default(),
+            state: ImportState::Pending,
+            counts: ImportCounts::default(),
+        }
+    }
+
+    /// Replace the copy policy.
+    pub fn with_policy(mut self, policy: SnapshotPolicy) -> Self {
+        self.policy = policy;
+        self
+    }
+
+    /// The browser being imported from.
+    pub fn source_browser(&self) -> SourceBrowser {
+        self.profile.browser
+    }
+
+    /// What is being imported.
+    pub fn scope(&self) -> ImportScope {
+        self.scope
+    }
+
+    /// Where the job is.
+    pub fn state(&self) -> ImportState {
+        self.state
+    }
+
+    /// Rows written; zero until the job is [`ImportState::Written`].
+    pub fn counts(&self) -> ImportCounts {
+        self.counts
+    }
+
+    /// Mark the job reading and hand out the read, for the worker pool.
+    pub fn start_reading(&mut self) -> ReadRequest {
+        self.state = ImportState::Reading;
+        ReadRequest {
+            profile: self.profile.clone(),
+            scope: self.scope,
+            policy: self.policy,
+        }
+    }
+
+    /// Write a finished read into `stores`, on the thread that owns them.
+    ///
+    /// Folder names resolve in `language`; rows whose own timestamp is
+    /// missing are dated `now`. Either every row is written or none is.
+    pub fn finish(
+        &mut self,
+        read: Result<ImportedData, ImportError>,
+        stores: &mut StoreRegistry,
+        language: Language,
+        now: SystemTime,
+    ) -> Result<ImportCounts, ImportError> {
+        let result = read.and_then(|data| write_imported(&data, stores, language, now));
+        match &result {
+            Ok(counts) => {
+                self.counts = *counts;
+                self.state = ImportState::Written;
+            }
+            Err(error) => self.state = ImportState::Failed(error.failure()),
+        }
+        result
+    }
+
+    /// Read and write in sequence, on this thread.
+    pub fn run(
+        &mut self,
+        stores: &mut StoreRegistry,
+        language: Language,
+    ) -> Result<ImportCounts, ImportError> {
+        let read = self.start_reading().execute();
+        self.finish(read, stores, language, SystemTime::now())
+    }
+}
+
+/// Write `data` into `stores` as rows marked imported.
+///
+/// Bookmarks go into one new folder at the top of the member's tree, named
+/// for the browser they came from, holding one folder per non-empty source
+/// root; a second import of the same profile makes a second such folder, as
+/// the source browsers' own importers do. History rows already present — the
+/// same address at the same instant, as a repeated import produces — are not
+/// written twice. Each store takes its rows in one write or none of them, and
+/// when the history write fails the bookmark folder this import created is
+/// removed again, so a failed import leaves no rows behind.
+pub fn write_imported(
+    data: &ImportedData,
+    stores: &mut StoreRegistry,
+    language: Language,
+    now: SystemTime,
+) -> Result<ImportCounts, ImportError> {
+    let browser = data.browser.name();
+    let messages = catalogue(language);
+    let resolve = |key: &str, arguments: &[(&str, &str)]| {
+        messages
+            .resolve(key, arguments)
+            .map_err(|_| ImportError::Catalogue(key.to_string()))
+    };
+
+    let mut top_folder = None;
+    if !data.roots.is_empty() {
+        let top_name = resolve("import.folder", &[("browser", browser)])?;
+        let mut root_names = Vec::new();
+        for root in &data.roots {
+            root_names.push(resolve(root.kind.catalogue_key(), &[])?);
+        }
+        let folder = stores
+            .bookmarks_mut()
+            .batch(|store| {
+                let top = store.create_folder(FolderId::ROOT, top_name)?;
+                for (root, name) in data.roots.iter().zip(root_names) {
+                    let folder = store.create_folder(top, name)?;
+                    write_nodes(store, folder, &root.children, browser, now)?;
+                }
+                Ok(top)
+            })
+            .map_err(ImportError::Bookmarks)?;
+        top_folder = Some(folder);
+    }
+
+    let history = stores.history_mut();
+    let mut seen: HashSet<(String, u128)> = history
+        .entries()
+        .iter()
+        .map(|entry| (entry.address.clone(), millis(entry.visited_at)))
+        .collect();
+    let fresh: Vec<NewHistoryEntry> = data
+        .history
+        .iter()
+        .filter(|visit| seen.insert((visit.address.clone(), millis(visit.visited_at))))
+        .map(|visit| NewHistoryEntry {
+            address: visit.address.clone(),
+            title: visit.title.clone(),
+            visited_at: visit.visited_at,
+            source: HistorySource::imported(browser),
+        })
+        .collect();
+    let written = match history.record_batch(fresh, WindowKind::Normal) {
+        Ok(ids) => ids.len(),
+        Err(error) => {
+            // Undo the bookmark half, so a failed import leaves nothing.
+            if let Some(folder) = top_folder {
+                let _ = stores.bookmarks_mut().delete_folder(folder);
+            }
+            return Err(ImportError::History(error));
+        }
+    };
+
+    Ok(ImportCounts {
+        bookmarks_imported: data.bookmark_count(),
+        history_imported: written,
+    })
+}
+
+fn write_nodes(
+    store: &mut BookmarkStore,
+    parent: FolderId,
+    nodes: &[ImportedNode],
+    browser: &str,
+    now: SystemTime,
+) -> Result<(), BookmarkError> {
+    for node in nodes {
+        match node {
+            ImportedNode::Folder { title, children } => {
+                let folder = store.create_folder(parent, title.clone())?;
+                write_nodes(store, folder, children, browser, now)?;
+            }
+            ImportedNode::Bookmark {
+                title,
+                address,
+                added_at,
+            } => {
+                store.create_bookmark_with_details(
+                    parent,
+                    title.clone(),
+                    address.clone(),
+                    added_at.unwrap_or(now),
+                    BookmarkSource::imported(browser),
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn millis(time: SystemTime) -> u128 {
+    time.duration_since(UNIX_EPOCH)
+        .map(|since| since.as_millis())
+        .unwrap_or(0)
 }
 
 /// The address to import for `raw`, or `None` if it is not one to import.
