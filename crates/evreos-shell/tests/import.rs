@@ -793,16 +793,25 @@ fn imported_data_counts_bookmarks_but_not_folders() {
 fn the_import_has_no_path_to_the_network() {
     // Reading another browser's files is the local computation FR-007a
     // permits; the import must hold no route by which any of it could leave.
-    // Its only reference into the rest of the crate is the stores it writes.
+    // The crate as a whole depends on evreos-net, so what is asserted is the
+    // module's own reach: it names no egress crate, and its only way into the
+    // rest of this crate is the stores it writes. `crate::` and, from
+    // import.rs, `super::` both lead to the crate root, as `super::super::`
+    // does from a submodule, so each is held to the stores alone.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut files = vec![src.join("import.rs")];
+    let mut files = vec![(src.join("import.rs"), true)];
     for entry in fs::read_dir(src.join("import")).unwrap() {
-        files.push(entry.unwrap().path());
+        files.push((entry.unwrap().path(), false));
     }
     assert!(files.len() >= 6, "import.rs and its five modules");
-    for file in files {
+    for (file, at_root) in files {
         let content = fs::read_to_string(&file).unwrap();
         for line in content.lines().map(str::trim) {
+            // The unit-test module that closes each file is not shipped code,
+            // and its `super::` is the module above it, not the crate root.
+            if line == "#[cfg(test)]" {
+                break;
+            }
             if line.starts_with("//") {
                 continue;
             }
@@ -811,12 +820,19 @@ fn the_import_has_no_path_to_the_network() {
                 "{} references the egress crate: {line}",
                 file.display()
             );
-            if let Some(at) = line.find("crate::") {
-                assert!(
-                    line[at..].starts_with("crate::store"),
-                    "{} reaches outside the stores: {line}",
-                    file.display()
-                );
+            let root_paths: &[&str] = if at_root {
+                &["crate::", "super::"]
+            } else {
+                &["crate::", "super::super::"]
+            };
+            for root in root_paths {
+                for (at, _) in line.match_indices(root) {
+                    assert!(
+                        line[at + root.len()..].starts_with("store"),
+                        "{} reaches outside the stores: {line}",
+                        file.display()
+                    );
+                }
             }
         }
     }
