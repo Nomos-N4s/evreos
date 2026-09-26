@@ -106,7 +106,7 @@ Three arms read each store while the browser wrote it:
 - **The SQLite library, on a copy**: copying the files and opening the copy,
   with and without the write-ahead log; and 150 s of repeated single-pass
   copies, each checked with the library's `PRAGMA quick_check`.
-- **The reader this change ships**:
+- **The import's own reader**:
   `crates/evreos-shell/examples/import_probe.rs`, which runs the import's own
   read — `read_profile_with`, the verified copy included — in a loop for 60 s
   and reports attempts, the cause of each retry, and any accepted copy that
@@ -160,7 +160,17 @@ which the reader honours as the format specifies.
 | Chrome `History`, main file | 11,131 | 0 | 0 | 5 |
 | Firefox `places.sqlite`, with log | 5,841 | 0 | 0 | — |
 
-### The reader this change ships, against the live browsers
+### The import's reader, against the live browsers
+
+These runs, and the synthetic ones below, used the reader as this change
+first committed it, before the review rounds on the pull request. The fixes
+since changed neither what a copy must pass to be accepted nor how a
+well-formed store's pages are read. They changed how a store refused at every
+attempt is classified, how malformed input is bounded, and which addresses
+at the edges of the filter are kept; and a refused attempt now reads the files
+once more to fingerprint them, which lengthens only attempts that retry, so
+the slowest times below would be somewhat longer. The tier runs measure the
+reader as it ships.
 
 | 60 s each | Trials | Failed | Accepted copy torn | Attempts (attempts: trials) | Retry causes | Slowest |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -187,7 +197,7 @@ The import verifies it anyway, since the same protocol costs one comparison.
 | Writer transactions, each rewriting all 3,000 rows | 2,372 in 75 s beside the reader, 1,987 in 70 s beside the copies | 2,198 in 75 s, 1,782 in 70 s |
 | SQLite library, single-pass copies | **412 of 14,465 torn**, 9 unreadable | **4 of 2,410 torn** |
 | This reader, one unverified read | **28 of 588 torn**, 1 parse error | **1 of 955 torn** |
-| This reader, verified (shipped) | **0 of 588 torn**; attempts 1: 344, 2: 117, 3: 76, 4: 26, 5: 12, 6: 7, 7: 5, 8: 1; slowest 1,657 ms | **0 of 955 torn**; attempts 1: 832, 2: 101, 3: 19, 4: 2, 5: 1; slowest 407 ms |
+| This reader, verified | **0 of 588 torn**; attempts 1: 344, 2: 117, 3: 76, 4: 26, 5: 12, 6: 7, 7: 5, 8: 1; slowest 1,657 ms | **0 of 955 torn**; attempts 1: 832, 2: 101, 3: 19, 4: 2, 5: 1; slowest 407 ms |
 
 One trial against the rollback writer needed all eight attempts the default
 policy allows. A browser writing that hard would, some of the time, exhaust
