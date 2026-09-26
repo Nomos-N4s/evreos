@@ -42,7 +42,8 @@ its measurement of them here, as the Status above frames it:
    rollback journal was seen hot during five copies. Against a writer that
    rewrites its whole store in every transaction, 412 of 14,465 naive copies
    were torn and 9 more unreadable. The import therefore copies each store
-   into memory **twice over** — read, re-read and compare, with the rollback
+   into memory, **reading it twice** — read, re-read and compare against the
+   one copy held, with the rollback
    journal checked cold before and after — and accepts a copy only when
    nothing moved; the protocol is at
    `crates/evreos-shell/src/import/snapshot.rs`. It accepted no torn copy in
