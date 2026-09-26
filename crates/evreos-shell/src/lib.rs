@@ -15,6 +15,7 @@ pub mod omnibox;
 pub mod permissions;
 pub mod private;
 pub mod profile;
+pub mod scaling;
 pub mod search_provider;
 pub mod session;
 pub mod site_key;
@@ -49,6 +50,10 @@ pub use permissions::{
 };
 pub use private::{PrivateSession, PrivateWindow, record_history_safely};
 pub use profile::{Profile, ProfileError, SearchProviderSetting, ThemePreference};
+pub use scaling::{
+    ChromeSurfaceMetrics, FindInPageState, LayoutClippingError, PageZoom, PerSiteZoomStore,
+    STANDARD_ZOOM_LEVELS, ScalingError, UiScale,
+};
 pub use session::{
     SessionError, SessionSnapshot, SessionStore, SessionTab, SessionWindow, parse_session_file,
     serialize_session,

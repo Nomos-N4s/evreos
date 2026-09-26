@@ -21,6 +21,7 @@ use evreos_engine::{
 };
 
 use crate::app::AppWindowId;
+use crate::scaling::FindInPageState;
 use crate::store::WindowKind;
 use crate::suggest::OpenTab;
 
@@ -426,6 +427,7 @@ pub struct Tab {
     loading_started_at: Option<Instant>,
     in_flight_id: Option<NavigationId>,
     page_zoom: u32,
+    find_state: FindInPageState,
 }
 
 impl Tab {
@@ -449,6 +451,7 @@ impl Tab {
             loading_started_at,
             in_flight_id: None,
             page_zoom: 100,
+            find_state: FindInPageState::new(),
         }
     }
 
@@ -507,6 +510,16 @@ impl Tab {
     /// Set page zoom percentage.
     pub fn set_page_zoom(&mut self, zoom: u32) {
         self.page_zoom = zoom;
+    }
+
+    /// Tab find-in-page state (FR-005).
+    pub fn find_state(&self) -> &FindInPageState {
+        &self.find_state
+    }
+
+    /// Mutable reference to tab find-in-page state (FR-005).
+    pub fn find_state_mut(&mut self) -> &mut FindInPageState {
+        &mut self.find_state
     }
 
     /// Mutual exclusion invariant (FR-015):
