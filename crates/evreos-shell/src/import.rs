@@ -404,7 +404,8 @@ pub enum ImportedNode {
     },
     /// A bookmark.
     Bookmark {
-        /// Its title, or its address when the source gave none.
+        /// Its title; for a Firefox bookmark with none, its place's title;
+        /// and otherwise its address.
         title: String,
         /// Its address, cleaned by [`clean_address`].
         address: String,
