@@ -19,3 +19,12 @@ error.authentication.next_step = Συνδεθείτε για να συνεχίσ
 # FR-016a: the one neutral entry point to the home surface, present in the
 # browser's own menus from first run. A static label, no brand name, no state.
 menu.home_surface = Εφαρμογές
+
+# FR-012: the folders an import files bookmarks under. The browser's name is
+# an argument, never text of this file; the four root names stand for the
+# source browsers' permanent folders, which they store untranslated.
+import.folder = Εισαγμένα από {browser}
+import.root.toolbar = Γραμμή σελιδοδεικτών
+import.root.menu = Μενού σελιδοδεικτών
+import.root.other = Άλλοι σελιδοδείκτες
+import.root.mobile = Σελιδοδείκτες κινητού
