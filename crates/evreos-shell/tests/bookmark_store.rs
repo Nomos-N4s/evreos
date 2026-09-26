@@ -378,3 +378,45 @@ fn a_nested_batch_is_part_of_the_outer_one() {
     assert!(!store.file_path().exists());
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_batch_positions_rows_exactly_as_single_operations_do() {
+    let dir = unique_temp_dir();
+    let mut batched = BookmarkStore::open(&dir.join("batched"));
+    let mut single = BookmarkStore::open(&dir.join("single"));
+    let build = |store: &mut BookmarkStore| -> Result<(), BookmarkError> {
+        let a = store.create_folder(FolderId::ROOT, "A")?;
+        let b = store.create_folder(FolderId::ROOT, "B")?;
+        for n in 0..5 {
+            store.create_bookmark(a, format!("a{n}"), format!("https://a.example/{n}"))?;
+        }
+        let gone = store.create_bookmark(b, "gone", "https://gone.example")?;
+        // A deletion mid-batch drops the batch index; later creates must
+        // still land at the right positions.
+        store.delete_bookmark(gone)?;
+        store.create_bookmark(b, "b0", "https://b.example/0")?;
+        store.create_folder(a, "A1")?;
+        store.create_bookmark(a, "a5", "https://a.example/5")?;
+        Ok(())
+    };
+    batched.batch(build).unwrap();
+    build(&mut single).unwrap();
+    let shape = |store: &BookmarkStore| {
+        let mut rows: Vec<(String, u64, u32)> = store
+            .bookmarks()
+            .iter()
+            .map(|b| (b.title().to_string(), b.parent().as_u64(), b.position()))
+            .collect();
+        rows.extend(store.folders().iter().map(|f| {
+            (
+                f.name().to_string(),
+                f.parent().map_or(0, |p| p.as_u64()),
+                f.position(),
+            )
+        }));
+        rows.sort();
+        rows
+    };
+    assert_eq!(shape(&batched), shape(&single));
+    let _ = fs::remove_dir_all(&dir);
+}

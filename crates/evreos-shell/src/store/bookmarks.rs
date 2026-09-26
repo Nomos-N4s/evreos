@@ -15,7 +15,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::fs;
 use std::io;
@@ -320,6 +320,39 @@ pub struct BookmarkStore {
     /// Set while [`BookmarkStore::batch`] runs, so the operations inside it
     /// persist once at its end rather than once each.
     deferred: bool,
+    /// While a batch runs, the folders and each folder's child counts, so a
+    /// create finds its parent and its position without scanning the store.
+    /// Built from the rows when the batch starts and dropped when it ends,
+    /// so it never outlives them; any operation that moves or removes rows
+    /// drops it early, and the creates fall back to scanning.
+    batch_index: Option<BatchIndex>,
+}
+
+/// Parent lookups and child counts for the creates inside one batch.
+#[derive(Debug, Clone, Default)]
+struct BatchIndex {
+    folders: HashSet<FolderId>,
+    child_folders: HashMap<FolderId, u32>,
+    child_bookmarks: HashMap<FolderId, u32>,
+}
+
+impl BatchIndex {
+    fn build(store: &BookmarkStore) -> Self {
+        let mut index = Self::default();
+        for folder in &store.folders {
+            index.folders.insert(folder.folder_id);
+            if let Some(parent) = folder.parent_folder {
+                *index.child_folders.entry(parent).or_default() += 1;
+            }
+        }
+        for bookmark in &store.bookmarks {
+            *index
+                .child_bookmarks
+                .entry(bookmark.parent_folder)
+                .or_default() += 1;
+        }
+        index
+    }
 }
 
 impl Default for BookmarkStore {
@@ -331,6 +364,7 @@ impl Default for BookmarkStore {
             next_folder_id: 1,
             next_bookmark_id: 1,
             deferred: false,
+            batch_index: None,
         }
     }
 }
@@ -370,6 +404,7 @@ impl BookmarkStore {
             folders,
             bookmarks,
             deferred: false,
+            batch_index: None,
         };
 
         store.validate_tree()?;
@@ -384,6 +419,7 @@ impl BookmarkStore {
             next_folder_id: 1,
             next_bookmark_id: 1,
             deferred: false,
+            batch_index: None,
         }
     }
 
@@ -392,9 +428,12 @@ impl BookmarkStore {
     /// left exactly as it was before the batch began.
     ///
     /// An FR-012 import creates thousands of rows at once, and each
-    /// operation on its own rewrites the whole file. A batch inside a batch
-    /// belongs to the outer one: it neither saves nor rolls back on its own,
-    /// so the outer batch's guarantee covers it.
+    /// operation on its own rewrites the whole file, and on its own finds a
+    /// new row's position by scanning the store; inside a batch a create does
+    /// neither, so a batch of any size costs time in proportion to it.
+    ///
+    /// A batch inside a batch belongs to the outer one: it neither saves nor
+    /// rolls back on its own, so the outer batch's guarantee covers it.
     pub fn batch<T>(
         &mut self,
         operations: impl FnOnce(&mut Self) -> Result<T, BookmarkError>,
@@ -404,14 +443,24 @@ impl BookmarkStore {
         }
         let before = self.clone();
         self.deferred = true;
+        self.batch_index = Some(BatchIndex::build(self));
         let result = operations(self);
         self.deferred = false;
+        self.batch_index = None;
         match result.and_then(|value| self.save_to_disk().map(|()| value)) {
             Ok(value) => Ok(value),
             Err(error) => {
                 *self = before;
                 Err(error)
             }
+        }
+    }
+
+    /// Whether a folder exists, from the batch index when one is live.
+    fn has_folder(&self, id: FolderId) -> bool {
+        match &self.batch_index {
+            Some(index) => index.folders.contains(&id),
+            None => self.folders.iter().any(|f| f.folder_id == id),
         }
     }
 
@@ -476,14 +525,22 @@ impl BookmarkStore {
         parent: FolderId,
         name: impl Into<String>,
     ) -> Result<FolderId, BookmarkError> {
-        if !self.folders.iter().any(|f| f.folder_id == parent) {
+        if !self.has_folder(parent) {
             return Err(BookmarkError::FolderNotFound(parent));
         }
 
         let folder_id = FolderId::new(self.next_folder_id);
         self.next_folder_id += 1;
 
-        let position = self.subfolders(parent).len() as u32;
+        let position = match &mut self.batch_index {
+            Some(index) => {
+                index.folders.insert(folder_id);
+                let count = index.child_folders.entry(parent).or_default();
+                *count += 1;
+                *count - 1
+            }
+            None => self.subfolders(parent).len() as u32,
+        };
         let folder = BookmarkFolder::new(folder_id, parent, name, position);
         self.folders.push(folder);
 
@@ -516,14 +573,21 @@ impl BookmarkStore {
         created_at: SystemTime,
         source: BookmarkSource,
     ) -> Result<BookmarkId, BookmarkError> {
-        if !self.folders.iter().any(|f| f.folder_id == parent) {
+        if !self.has_folder(parent) {
             return Err(BookmarkError::FolderNotFound(parent));
         }
 
         let bookmark_id = BookmarkId::new(self.next_bookmark_id);
         self.next_bookmark_id += 1;
 
-        let position = self.bookmarks_in_folder(parent).len() as u32;
+        let position = match &mut self.batch_index {
+            Some(index) => {
+                let count = index.child_bookmarks.entry(parent).or_default();
+                *count += 1;
+                *count - 1
+            }
+            None => self.bookmarks_in_folder(parent).len() as u32,
+        };
         let bookmark = Bookmark::new(
             bookmark_id,
             parent,
@@ -577,6 +641,8 @@ impl BookmarkStore {
         folder_id: FolderId,
         new_parent: FolderId,
     ) -> Result<(), BookmarkError> {
+        // Rows move or go: the batch index no longer describes them.
+        self.batch_index = None;
         if folder_id.is_root() {
             return Err(BookmarkError::CannotModifyRoot);
         }
@@ -622,6 +688,8 @@ impl BookmarkStore {
         bookmark_id: BookmarkId,
         new_parent: FolderId,
     ) -> Result<(), BookmarkError> {
+        // Rows move or go: the batch index no longer describes them.
+        self.batch_index = None;
         if !self.folders.iter().any(|f| f.folder_id == new_parent) {
             return Err(BookmarkError::FolderNotFound(new_parent));
         }
@@ -644,6 +712,8 @@ impl BookmarkStore {
     ///
     /// Persists immediately to disk with no undo log or journal.
     pub fn delete_bookmark(&mut self, bookmark_id: BookmarkId) -> Result<bool, BookmarkError> {
+        // Rows move or go: the batch index no longer describes them.
+        self.batch_index = None;
         let initial_len = self.bookmarks.len();
         self.bookmarks.retain(|b| b.bookmark_id != bookmark_id);
 
@@ -660,6 +730,8 @@ impl BookmarkStore {
     /// Root folder cannot be deleted.
     /// Deletion erases the folder and all descendants from the store in the same operation.
     pub fn delete_folder(&mut self, folder_id: FolderId) -> Result<usize, BookmarkError> {
+        // Rows move or go: the batch index no longer describes them.
+        self.batch_index = None;
         if folder_id.is_root() {
             return Err(BookmarkError::CannotModifyRoot);
         }
