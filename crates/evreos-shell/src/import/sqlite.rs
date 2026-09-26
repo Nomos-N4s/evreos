@@ -783,7 +783,12 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
         if name.is_empty() {
             return Err(corrupt("a column with no name"));
         }
-        let rest_upper = rest.to_ascii_uppercase();
+        // Collapsed to single spaces, so `PRIMARY  KEY` matches as SQLite reads it.
+        let rest_upper = rest
+            .to_ascii_uppercase()
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         let declared = rest_upper
             .split_whitespace()
             .next()
@@ -973,6 +978,13 @@ mod tests {
             parsed.is_ok() || parsed.is_err(),
             "it returns, whatever it returns"
         );
+    }
+
+    #[test]
+    fn a_rowid_alias_is_found_however_its_words_are_spaced() {
+        let (_, alias) =
+            parse_create_table("CREATE TABLE t(id INTEGER  PRIMARY\tKEY, u TEXT)").unwrap();
+        assert_eq!(alias, Some(0));
     }
 
     #[test]
