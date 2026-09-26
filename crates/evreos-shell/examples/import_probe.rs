@@ -4,8 +4,9 @@
 //! the same code an FR-012 import runs, and reports how the copy-then-read
 //! protocol behaved: how many trials succeeded, how many attempts each took,
 //! what made an attempt retry, and whether any accepted copy read as torn —
-//! a parse error, or fewer history rows or bookmarks than an earlier trial,
-//! which a browser that only adds them cannot produce. Beside it, two unverified arms run the
+//! fewer history rows or bookmarks than an earlier trial, which a browser
+//! that only adds them cannot produce. A copy the parser refuses is not an
+//! accepted copy: it fails the trial, and is counted under failures. Beside it, two unverified arms run the
 //! same trial the ways the measurement compares against: one naive read of
 //! the files with the log applied, and one of the main file alone.
 //!
