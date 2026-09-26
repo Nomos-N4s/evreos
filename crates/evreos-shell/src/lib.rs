@@ -9,6 +9,7 @@ pub mod brand;
 pub mod error;
 pub mod error_presentation;
 pub mod handoff;
+pub mod import;
 pub mod keymap;
 pub mod log;
 pub mod omnibox;
