@@ -74,6 +74,20 @@ impl HistorySource {
     }
 }
 
+/// A history row not yet recorded: everything but the identifier the store
+/// assigns. The unit [`HistoryStore::record_batch`] takes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewHistoryEntry {
+    /// The address.
+    pub address: String,
+    /// The page title.
+    pub title: String,
+    /// When the visit happened.
+    pub visited_at: SystemTime,
+    /// Where the row came from.
+    pub source: HistorySource,
+}
+
 /// Window browsing mode.
 ///
 /// Under FR-007, private window navigations must produce no history entry.
@@ -287,6 +301,46 @@ impl HistoryStore {
 
         self.save_to_disk()?;
         Ok(Some(id))
+    }
+
+    /// Record many entries with one write to disk.
+    ///
+    /// An FR-012 import writes thousands of rows at once, and [`Self::record`]
+    /// rewrites the whole file per row. Either every entry is recorded and
+    /// persisted or, if the write fails, none is kept in memory either. A
+    /// [`WindowKind::Private`] batch records nothing, as a private navigation
+    /// does (FR-007).
+    pub fn record_batch(
+        &mut self,
+        entries: impl IntoIterator<Item = NewHistoryEntry>,
+        window_kind: WindowKind,
+    ) -> Result<Vec<HistoryEntryId>, HistoryError> {
+        if window_kind == WindowKind::Private {
+            return Ok(Vec::new());
+        }
+        let (kept_len, kept_next) = (self.entries.len(), self.next_id);
+        let mut ids = Vec::new();
+        for entry in entries {
+            let id = HistoryEntryId::new(self.next_id);
+            self.next_id += 1;
+            self.entries.push(HistoryEntry::new(
+                id,
+                entry.address,
+                entry.title,
+                entry.visited_at,
+                entry.source,
+            ));
+            ids.push(id);
+        }
+        if ids.is_empty() {
+            return Ok(ids);
+        }
+        if let Err(error) = self.save_to_disk() {
+            self.entries.truncate(kept_len);
+            self.next_id = kept_next;
+            return Err(error);
+        }
+        Ok(ids)
     }
 
     /// Review browsing history entries in reverse chronological order (newest first).

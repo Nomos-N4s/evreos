@@ -62,7 +62,8 @@ pub use site_key::{SiteKey, SiteKeyError};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,
     DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore, FolderId, HistoryEntry,
-    HistoryEntryId, HistoryError, HistorySource, HistoryStore, StoreRegistry, WindowKind,
+    HistoryEntryId, HistoryError, HistorySource, HistoryStore, NewHistoryEntry, StoreRegistry,
+    WindowKind,
 };
 pub use suggest::{OpenTab, Suggestion, SuggestionIndex, SuggestionSource};
 pub use tabs::{
