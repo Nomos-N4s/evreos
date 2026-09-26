@@ -716,7 +716,8 @@ impl BookmarkStore {
 
     /// Delete a single bookmark.
     ///
-    /// Persists immediately to disk with no undo log or journal.
+    /// Persists immediately to disk, or at the end of the batch it runs in,
+    /// with no undo log or journal.
     pub fn delete_bookmark(&mut self, bookmark_id: BookmarkId) -> Result<bool, BookmarkError> {
         // Rows move or go: the batch index no longer describes them.
         self.batch_index = None;
