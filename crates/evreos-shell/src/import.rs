@@ -218,7 +218,8 @@ pub struct ImportCounts {
 pub enum ImportFailure {
     /// The profile directory is gone.
     ProfileMissing,
-    /// The browser kept writing through every attempt to copy a store.
+    /// No attempt got a still copy of a store, and the browser was seen
+    /// writing it.
     SourceBusy,
     /// A store was held mid-write at every attempt without changing: the
     /// browser left it so, most likely by stopping mid-write.
@@ -251,7 +252,8 @@ pub enum ImportState {
 pub enum ImportError {
     /// The profile directory does not exist.
     ProfileMissing,
-    /// The named store never held still long enough to copy; the member can
+    /// No attempt got a still copy of the named store, and it was seen
+    /// changing, so its browser is writing it; the member can
     /// close that browser and try again.
     SourceBusy {
         /// The store's file name.
