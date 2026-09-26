@@ -29,9 +29,18 @@ python3 probe_lib.py /tmp/p/Default/History "select count(*) from urls"
 python3 stress_copy.py /tmp/p/Default/History "select count(*) from urls" 150 main
 ```
 
-and against the synthetic writer:
+and against the synthetic writers, each beside the shipped reader and,
+with a writer of its own, beside single-pass copies through the SQLite
+library:
 
 ```
 python3 synth_writer.py rollback /tmp/s 75 &
 cargo run --release -p evreos-shell --example import_probe -- chrome /tmp/s 60 synthetic
+python3 synth_writer.py rollback /tmp/s2 70 &
+python3 synth_naive.py rollback /tmp/s2 60
+
+python3 synth_writer.py wal /tmp/w 75 &
+cargo run --release -p evreos-shell --example import_probe -- firefox /tmp/w 60 synthetic
+python3 synth_writer.py wal /tmp/w2 70 &
+python3 synth_naive.py wal /tmp/w2 60
 ```
