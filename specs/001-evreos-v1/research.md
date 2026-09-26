@@ -2374,9 +2374,10 @@ specification statement that lands as an amendment there.
   `scripts/check-budgets.py` — and the measuring commit must also write the
   baseline (§9.11(j)). *Status*: the catalogue question is settled at
   `specs/001-evreos-v1/measurements/n10-catalogue-format.md`, for the plain
-  keyed table. The import questions are answered, under their own record
-  rather than this identifier, at `docs/measurements/import-profile-read.md`:
-  no SQLite dependency is taken — the stores are locked against the library
+  keyed table. The import questions have evidence, under their own record
+  rather than this identifier, at `docs/measurements/import-profile-read.md`,
+  taken on a Linux instrument that quickstart A7 does not admit as a result
+  and pending the tier runs: no SQLite dependency is taken — the stores are locked against the library
   while their browsers run, so they are copied and read by an in-tree reader
   — with the tier runs owed there. The third question, the byte and
   millisecond cost of `evreos-engine-webview` and the windowing crate on the
