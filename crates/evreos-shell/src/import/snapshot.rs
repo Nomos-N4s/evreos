@@ -129,7 +129,10 @@ pub enum SnapshotError {
     /// The main file does not exist: the browser has never written this
     /// store, which is not a failure of the import.
     Absent,
-    /// Every attempt found the store moving.
+    /// No attempt got a still copy, and the files were seen changing: the
+    /// store moved between the two reads of an attempt, or differed between
+    /// attempts refused for an open write. Not every attempt need have seen
+    /// it move.
     Busy {
         /// Attempts made.
         attempts: u32,
