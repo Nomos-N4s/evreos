@@ -234,9 +234,12 @@ impl FileSource for Disk {
     }
 }
 
-/// The lengths of the main file and its log and a hash over both: enough to
-/// tell whether a store refused for an open write changed between attempts.
-type Fingerprint = (usize, usize, u64);
+/// The lengths of the main file, its log and its rollback journal and a hash
+/// over all three: enough to tell whether a store refused for an open write
+/// changed between attempts. The journal is in it because a writer holding a
+/// rollback-journal transaction open writes there first and may not touch
+/// the main file until it commits.
+type Fingerprint = (usize, usize, usize, u64);
 
 fn fingerprint(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<Fingerprint> {
     let main = source.read(&files.main)?.unwrap_or_default();
@@ -244,13 +247,17 @@ fn fingerprint(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<F
         Some(path) => source.read(path)?.unwrap_or_default(),
         None => Vec::new(),
     };
+    let journal = match &files.journal {
+        Some(path) => source.read(path)?.unwrap_or_default(),
+        None => Vec::new(),
+    };
     // FNV-1a: a comparison between two reads of one store, not a defence
     // against an adversary, which the parser's own checks are.
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in main.iter().chain(wal.iter()) {
+    for byte in main.iter().chain(wal.iter()).chain(journal.iter()) {
         hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
     }
-    Ok((main.len(), wal.len(), hash))
+    Ok((main.len(), wal.len(), journal.len(), hash))
 }
 
 fn journal_hot(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<bool> {
@@ -428,8 +435,8 @@ mod tests {
         let mut source = Scripted::new(b"torn");
         source.hot = true;
         // The transaction ends before the third attempt: each refused
-        // attempt checks the journal and fingerprints the main file and its
-        // log, three ticks, so the sixth is the second attempt's last.
+        // attempt checks the journal and fingerprints the main file, its log
+        // and its journal, four ticks, so the sixth falls in the second.
         source.writes.push((
             6,
             Box::new(|files, hot| {
@@ -508,6 +515,24 @@ mod tests {
                 tick,
                 Box::new(move |files, _| {
                     files.insert(PathBuf::from("db"), tick.to_le_bytes().to_vec());
+                }),
+            ));
+        }
+        match take(&mut source, &files(), quick()) {
+            Err(SnapshotError::Busy { attempts }) => assert_eq!(attempts, 4),
+            other => panic!("expected Busy, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_writer_changing_only_its_journal_is_busy_not_interrupted() {
+        let mut source = Scripted::new(b"main never changes");
+        source.hot = true;
+        for tick in 1..200 {
+            source.writes.push((
+                tick,
+                Box::new(move |files, _| {
+                    files.insert(PathBuf::from("db-journal"), tick.to_le_bytes().to_vec());
                 }),
             ));
         }
