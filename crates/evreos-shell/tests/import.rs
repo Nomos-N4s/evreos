@@ -789,15 +789,114 @@ fn imported_data_counts_bookmarks_but_not_folders() {
     assert_eq!(folders, 1, "Work, on the bar");
 }
 
+/// A source file's code with its comments and the contents of its string and
+/// character literals removed and all whitespace dropped, so a path can be
+/// matched however it is spaced or split across lines, and text inside a
+/// literal or a comment is never mistaken for code.
+fn bare_code(source: &str) -> String {
+    let chars: Vec<char> = source.chars().collect();
+    let mut out = String::new();
+    let mut i = 0;
+    while i < chars.len() {
+        let ch = chars[i];
+        let next = chars.get(i + 1).copied();
+        if ch == '/' && next == Some('/') {
+            while i < chars.len() && chars[i] != '\n' {
+                i += 1;
+            }
+        } else if ch == '/' && next == Some('*') {
+            let mut depth = 0;
+            while i < chars.len() {
+                if chars[i] == '/' && chars.get(i + 1) == Some(&'*') {
+                    depth += 1;
+                    i += 2;
+                } else if chars[i] == '*' && chars.get(i + 1) == Some(&'/') {
+                    depth -= 1;
+                    i += 2;
+                    if depth == 0 {
+                        break;
+                    }
+                } else {
+                    i += 1;
+                }
+            }
+        } else if ch == 'r'
+            && matches!(next, Some('"' | '#'))
+            && !out.ends_with(|c: char| c.is_alphanumeric() || c == '_')
+        {
+            // A raw string: r"…", r#"…"#, with as many hashes as it opens with.
+            let mut hashes = 0;
+            i += 1;
+            while chars.get(i) == Some(&'#') {
+                hashes += 1;
+                i += 1;
+            }
+            if chars.get(i) != Some(&'"') {
+                out.push('r');
+                out.extend(std::iter::repeat_n('#', hashes));
+                continue;
+            }
+            i += 1;
+            while i < chars.len() {
+                if chars[i] == '"' && (1..=hashes).all(|k| chars.get(i + k) == Some(&'#')) {
+                    i += 1 + hashes;
+                    break;
+                }
+                i += 1;
+            }
+            out.push_str("\"\"");
+        } else if ch == '"' {
+            i += 1;
+            while i < chars.len() && chars[i] != '"' {
+                i += if chars[i] == '\\' { 2 } else { 1 };
+            }
+            i += 1;
+            out.push_str("\"\"");
+        } else if ch == '\'' && next == Some('\\') {
+            // Past the quote, the backslash and the escaped character, which
+            // may itself be a quote; `\u{…}` runs on to the closing one.
+            i += 3;
+            while i < chars.len() && chars[i] != '\'' {
+                i += 1;
+            }
+            i += 1;
+            out.push_str("\'\'");
+        } else if ch == '\'' && chars.get(i + 2) == Some(&'\'') {
+            i += 3;
+            out.push_str("\'\'");
+        } else {
+            if !ch.is_whitespace() {
+                out.push(ch);
+            }
+            i += 1;
+        }
+    }
+    out
+}
+
+#[test]
+fn bare_code_drops_comments_literals_and_whitespace() {
+    let source = "use crate :: /* x */ store; // crate::tabs\n\
+                  let a = \"crate::tabs\"; let b = r#\"std::net\"#; let c = '\\'';\n\
+                  let d = 'x'; fn f<'a>() {}";
+    assert_eq!(
+        bare_code(source),
+        "usecrate::store;leta=\"\";letb=\"\";letc='';letd='';fnf<'a>(){}"
+    );
+}
+
 #[test]
 fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // Reading another browser's files is the local computation FR-007a
     // permits; the import must hold no route by which any of it could leave.
     // The crate as a whole depends on evreos-net, so what is asserted is the
-    // module's own reach: it names no egress crate, and its only way into the
-    // rest of this crate is the stores it writes. `crate::` and, from
-    // import.rs, `super::` both lead to the crate root, as `super::super::`
-    // does from a submodule, so each is held to the stores alone.
+    // module's own reach: it names no egress crate and no part of the
+    // standard library that opens a socket or starts a process, and its only
+    // way into the rest of this crate is the stores it writes. `crate::` and,
+    // from import.rs, `super::` both lead to the crate root, as
+    // `super::super::` does from a submodule, so each is held to the stores
+    // alone. Paths are matched with comments, literals and whitespace
+    // removed, so neither spacing nor a line break hides one.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = vec![(src.join("import.rs"), true)];
     for entry in fs::read_dir(src.join("import")).unwrap() {
@@ -805,34 +904,48 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     }
     assert!(files.len() >= 6, "import.rs and its five modules");
     for (file, at_root) in files {
-        let content = fs::read_to_string(&file).unwrap();
-        for line in content.lines().map(str::trim) {
-            // The unit-test module that closes each file is not shipped code,
-            // and its `super::` is the module above it, not the crate root.
-            if line == "#[cfg(test)]" {
-                break;
+        let code = bare_code(&fs::read_to_string(&file).unwrap());
+        // The unit-test module that closes each file is not shipped code,
+        // and its `super::` is the module above it, not the crate root. Only
+        // that module is set aside: any other test-only item is checked.
+        let shipped = match code.find("#[cfg(test)]modtests{") {
+            Some(at) => {
+                assert!(
+                    code.ends_with('}') && !code[at..].contains("#[cfg(test)]modtests{}"),
+                    "{}: the test module is not the file's last item",
+                    file.display()
+                );
+                &code[..at]
             }
-            if line.starts_with("//") {
-                continue;
-            }
+            None => &code[..],
+        };
+        for forbidden in [
+            "evreos_net",
+            "std::net",
+            "std::process",
+            "std::os",
+            "std::{",
+            "externcrate",
+        ] {
             assert!(
-                !line.contains("evreos_net") && !line.contains("evreos-net"),
-                "{} references the egress crate: {line}",
+                !shipped.contains(forbidden),
+                "{} names {forbidden}",
                 file.display()
             );
-            let root_paths: &[&str] = if at_root {
-                &["crate::", "super::"]
-            } else {
-                &["crate::", "super::super::"]
-            };
-            for root in root_paths {
-                for (at, _) in line.match_indices(root) {
-                    assert!(
-                        line[at + root.len()..].starts_with("store"),
-                        "{} reaches outside the stores: {line}",
-                        file.display()
-                    );
-                }
+        }
+        let root_paths: &[&str] = if at_root {
+            &["crate::", "super::"]
+        } else {
+            &["crate::", "super::super::"]
+        };
+        for root in root_paths {
+            for (at, _) in shipped.match_indices(root) {
+                assert!(
+                    shipped[at + root.len()..].starts_with("store"),
+                    "{} reaches outside the stores: {}",
+                    file.display(),
+                    &shipped[at..(at + 60).min(shipped.len())]
+                );
             }
         }
     }
