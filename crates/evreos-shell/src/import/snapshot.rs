@@ -234,6 +234,25 @@ impl FileSource for Disk {
     }
 }
 
+/// The lengths of the main file and its log and a hash over both: enough to
+/// tell whether a store refused for an open write changed between attempts.
+type Fingerprint = (usize, usize, u64);
+
+fn fingerprint(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<Fingerprint> {
+    let main = source.read(&files.main)?.unwrap_or_default();
+    let wal = match &files.wal {
+        Some(path) => source.read(path)?.unwrap_or_default(),
+        None => Vec::new(),
+    };
+    // FNV-1a: a comparison between two reads of one store, not a defence
+    // against an adversary, which the parser's own checks are.
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in main.iter().chain(wal.iter()) {
+        hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+    }
+    Ok((main.len(), wal.len(), hash))
+}
+
 fn journal_hot(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<bool> {
     match &files.journal {
         Some(path) => source.journal_hot(path),
@@ -250,12 +269,20 @@ pub fn take(
     let attempts = policy.attempts.max(1);
     let mut backoff = policy.first_backoff;
     let mut moved = false;
+    // What the files held at the last attempt refused for an open write, so
+    // that a store refused every time can still be told moving from still.
+    let mut held: Option<Fingerprint> = None;
     for attempt in 1..=attempts {
         if attempt > 1 {
             source.pause(backoff);
             backoff = (backoff * 2).min(policy.max_backoff);
         }
         if journal_hot(source, files)? {
+            let now = fingerprint(source, files)?;
+            if held.is_some_and(|before| before != now) {
+                moved = true;
+            }
+            held = Some(now);
             continue;
         }
         let Some(main) = source.read(&files.main)? else {
@@ -400,9 +427,11 @@ mod tests {
     fn a_hot_journal_is_never_copied_through() {
         let mut source = Scripted::new(b"torn");
         source.hot = true;
-        // The transaction ends before the third attempt.
+        // The transaction ends before the third attempt: each refused
+        // attempt checks the journal and fingerprints the main file and its
+        // log, three ticks, so the sixth is the second attempt's last.
         source.writes.push((
-            3,
+            6,
             Box::new(|files, hot| {
                 files.insert(PathBuf::from("db"), b"committed".to_vec());
                 *hot = false;
@@ -467,6 +496,24 @@ mod tests {
         match take(&mut source, &files(), quick()) {
             Err(SnapshotError::Interrupted { attempts }) => assert_eq!(attempts, 4),
             other => panic!("expected Interrupted, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_writer_holding_every_check_hot_while_writing_is_busy_not_interrupted() {
+        let mut source = Scripted::new(b"0");
+        source.hot = true;
+        for tick in 1..200 {
+            source.writes.push((
+                tick,
+                Box::new(move |files, _| {
+                    files.insert(PathBuf::from("db"), tick.to_le_bytes().to_vec());
+                }),
+            ));
+        }
+        match take(&mut source, &files(), quick()) {
+            Err(SnapshotError::Busy { attempts }) => assert_eq!(attempts, 4),
+            other => panic!("expected Busy, got {other:?}"),
         }
     }
 
