@@ -815,6 +815,16 @@ impl BookmarkStore {
         }
 
         let folder_ids: HashSet<FolderId> = self.folders.iter().map(|f| f.folder_id).collect();
+        let parents: HashMap<FolderId, Option<FolderId>> = self
+            .folders
+            .iter()
+            .map(|f| (f.folder_id, f.parent_folder))
+            .collect();
+        // Folders already proved to reach the root. Each walk up stops at
+        // the first of them, so the whole check touches each folder a
+        // bounded number of times however deep or wide the tree is.
+        let mut connected: HashSet<FolderId> = HashSet::new();
+        connected.insert(root.folder_id);
 
         // Check folder parents and cycle freedom
         for folder in &self.folders {
@@ -837,24 +847,15 @@ impl BookmarkStore {
             }
 
             // Cycle check
-            let mut visited = HashSet::new();
-            visited.insert(folder.folder_id);
+            let mut path = vec![folder.folder_id];
+            let mut on_path: HashSet<FolderId> = HashSet::from([folder.folder_id]);
             let mut current = parent;
-            loop {
-                if current.is_root() {
-                    break;
-                }
-                if visited.contains(&current) {
+            while !connected.contains(&current) {
+                if !on_path.insert(current) {
                     return Err(BookmarkError::CycleDetected(current));
                 }
-                visited.insert(current);
-                let parent_of_current = self
-                    .folders
-                    .iter()
-                    .find(|f| f.folder_id == current)
-                    .and_then(|f| f.parent_folder);
-
-                match parent_of_current {
+                path.push(current);
+                match parents.get(&current).copied().flatten() {
                     Some(next) => current = next,
                     None => {
                         return Err(BookmarkError::TreeInvariantViolation(format!(
@@ -863,6 +864,7 @@ impl BookmarkStore {
                     }
                 }
             }
+            connected.extend(path);
         }
 
         // Check bookmarks
