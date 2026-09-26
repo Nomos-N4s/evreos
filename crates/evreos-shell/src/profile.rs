@@ -64,50 +64,8 @@ impl ThemePreference {
     }
 }
 
+pub use crate::handoff::HandOffBrowser;
 pub use crate::search_provider::SearchProviderSetting;
-
-/// Hand-off browser selection.
-///
-/// Configures which external browser application receives hand-offs.
-#[derive(Debug, Clone, PartialEq, Eq, Default)]
-pub enum HandOffBrowser {
-    /// The operating system's default browser.
-    #[default]
-    SystemDefault,
-    /// A specific external application nominated by the user.
-    Nominated {
-        /// The executable or application name.
-        program: String,
-    },
-}
-
-impl HandOffBrowser {
-    /// Nominate a specific external browser executable or command.
-    ///
-    /// Validates that the application does not nominate itself (Key Entities rule).
-    pub fn nominated(program: impl Into<String>) -> Result<Self, ProfileError> {
-        let prog = program.into();
-        let trimmed = prog.trim();
-        if trimmed.is_empty() {
-            return Err(ProfileError::InvalidHandOffBrowser(
-                "nominated browser program cannot be empty".to_string(),
-            ));
-        }
-
-        let product = crate::brand::brand().product_name.to_lowercase();
-        if (!product.is_empty() && trimmed.eq_ignore_ascii_case(&product))
-            || trimmed.eq_ignore_ascii_case("self")
-        {
-            return Err(ProfileError::InvalidHandOffBrowser(
-                "the shell cannot nominate itself as a hand-off browser".to_string(),
-            ));
-        }
-
-        Ok(Self::Nominated {
-            program: trimmed.to_string(),
-        })
-    }
-}
 
 /// Errors occurring during profile manipulation or serialization.
 #[derive(Debug)]
