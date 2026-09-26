@@ -342,7 +342,7 @@ impl fmt::Display for ImportError {
             Self::ProfileMissing => write!(f, "the source profile does not exist"),
             Self::SourceBusy { store, attempts } => write!(
                 f,
-                "{store} was being written through {attempts} attempts to copy it"
+                "{store} was seen changing and no still copy of it was taken in {attempts} attempts"
             ),
             Self::SourceInterrupted { store, attempts } => write!(
                 f,
