@@ -1,0 +1,48 @@
+{
+   "checksum": "00000000000000000000000000000000",
+   "roots": {
+      "bookmark_bar": {
+         "children": [
+            {
+               "date_added": "13344473611000000",
+               "guid": "00000000-0000-4000-8000-000000000011",
+               "id": "111",
+               "name": "Account bookmark",
+               "type": "url",
+               "url": "https://account.example/"
+            }
+         ],
+         "date_added": "13344473601000000",
+         "guid": "00000000-0000-4000-9000-000000000001",
+         "id": "501",
+         "name": "Bookmarks bar",
+         "type": "folder"
+      },
+      "other": {
+         "children": [],
+         "date_added": "13344473602000000",
+         "guid": "00000000-0000-4000-9000-000000000002",
+         "id": "502",
+         "name": "Other bookmarks",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [
+            {
+               "date_added": "13344473612000000",
+               "guid": "00000000-0000-4000-8000-000000000012",
+               "id": "112",
+               "name": "From phone",
+               "type": "url",
+               "url": "https://phone.example/"
+            }
+         ],
+         "date_added": "13344473603000000",
+         "guid": "00000000-0000-4000-9000-000000000003",
+         "id": "503",
+         "name": "Mobile bookmarks",
+         "type": "folder"
+      }
+   },
+   "version": 1
+}
