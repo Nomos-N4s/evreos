@@ -20,6 +20,7 @@ pub mod site_key;
 pub mod store;
 pub mod suggest;
 pub mod tabs;
+pub mod theme;
 pub mod work;
 
 pub use app::{App, AppWindow, AppWindowId, mint_window_id};
@@ -58,6 +59,10 @@ pub use suggest::{OpenTab, Suggestion, SuggestionIndex, SuggestionSource};
 pub use tabs::{
     Clock, DEFAULT_NAVIGATION_TIMEOUT, MockClock, NavigationState, NavigationTracker, SystemClock,
     Tab, TabError, TabId, TabLifecycle, WindowTabs, mint_tab_id,
+};
+pub use theme::{
+    MockSystemThemeSource, PlatformSystemThemeSource, SystemThemeSource, ThemeCoordinator,
+    ThemeManager, ThemePresentation,
 };
 pub use work::{
     DEFAULT_MAX_QUEUE_CAPACITY, DEFAULT_WORKER_THREADS, JobId, JobOutcome, JobResult, PoolError,

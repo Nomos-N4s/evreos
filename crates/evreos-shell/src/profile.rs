@@ -66,6 +66,7 @@ impl ThemePreference {
 
 pub use crate::handoff::HandOffBrowser;
 pub use crate::search_provider::SearchProviderSetting;
+pub use crate::theme::ThemePresentation;
 
 /// Errors occurring during profile manipulation or serialization.
 #[derive(Debug)]
@@ -198,6 +199,24 @@ impl Profile {
         } else {
             Err(ProfileError::InvalidUiScale(scale))
         }
+    }
+
+    /// Resolve the effective theme presentation given the current system theme preference.
+    pub fn effective_theme(&self, system_preference: ThemePresentation) -> ThemePresentation {
+        match self.theme_preference {
+            ThemePreference::System => system_preference,
+            ThemePreference::Light => ThemePresentation::Light,
+            ThemePreference::Dark => ThemePresentation::Dark,
+        }
+    }
+
+    /// Set the member theme preference override and save the profile immediately.
+    pub fn set_theme_preference(
+        &mut self,
+        preference: ThemePreference,
+    ) -> Result<(), ProfileError> {
+        self.theme_preference = preference;
+        self.save()
     }
 
     /// Path to the primary profile configuration file.
