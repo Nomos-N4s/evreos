@@ -55,8 +55,9 @@ pub mod sqlite;
 
 use std::collections::HashSet;
 use std::fmt;
+use std::fs;
 use std::io;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use evreos_i18n::{Language, catalogue};
@@ -125,6 +126,64 @@ impl SourceProfile {
             path: path.into(),
         }
     }
+}
+
+/// Where each browser keeps its profiles on this machine.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ProfileLocations {
+    /// Chrome's `User Data` directory.
+    pub chrome: Option<PathBuf>,
+    /// Edge's `User Data` directory.
+    pub edge: Option<PathBuf>,
+    /// The directory holding Firefox's `profiles.ini`.
+    pub firefox: Option<PathBuf>,
+}
+
+impl ProfileLocations {
+    /// Each browser's default location on this platform, from the
+    /// environment. Nothing here calls a platform service: the locations are
+    /// the documented directories under the user's own profile.
+    pub fn from_environment() -> Self {
+        let var = |name: &str| std::env::var_os(name).map(PathBuf::from);
+        if cfg!(windows) {
+            let local = var("LOCALAPPDATA");
+            Self {
+                chrome: local.as_ref().map(|d| d.join("Google/Chrome/User Data")),
+                edge: local.as_ref().map(|d| d.join("Microsoft/Edge/User Data")),
+                firefox: var("APPDATA").map(|d| d.join("Mozilla/Firefox")),
+            }
+        } else if cfg!(target_os = "macos") {
+            let support = var("HOME").map(|d| d.join("Library/Application Support"));
+            Self {
+                chrome: support.as_ref().map(|d| d.join("Google/Chrome")),
+                edge: support.as_ref().map(|d| d.join("Microsoft Edge")),
+                firefox: support.as_ref().map(|d| d.join("Firefox")),
+            }
+        } else {
+            let home = var("HOME");
+            Self {
+                chrome: home.as_ref().map(|d| d.join(".config/google-chrome")),
+                edge: home.as_ref().map(|d| d.join(".config/microsoft-edge")),
+                firefox: home.as_ref().map(|d| d.join(".mozilla/firefox")),
+            }
+        }
+    }
+}
+
+/// Every profile of every source browser found under `locations`, Chrome's
+/// first, then Edge's, then Firefox's.
+pub fn discover(locations: &ProfileLocations) -> Vec<SourceProfile> {
+    let mut found = Vec::new();
+    if let Some(dir) = &locations.chrome {
+        found.extend(chromium::discover(SourceBrowser::Chrome, dir));
+    }
+    if let Some(dir) = &locations.edge {
+        found.extend(chromium::discover(SourceBrowser::Edge, dir));
+    }
+    if let Some(dir) = &locations.firefox {
+        found.extend(firefox::discover(dir));
+    }
+    found
 }
 
 /// What the member chose to import. Site credentials are not a field: they
@@ -690,6 +749,12 @@ fn firefox_time(micros: i64) -> Option<SystemTime> {
 fn unix_micros(micros: i64) -> Option<SystemTime> {
     let micros = u64::try_from(micros).ok().filter(|m| *m > 0)?;
     UNIX_EPOCH.checked_add(Duration::from_micros(micros))
+}
+
+/// Whether a directory entry is a directory, following no further than
+/// `fs::metadata` does.
+fn is_dir(path: &Path) -> bool {
+    fs::metadata(path).is_ok_and(|meta| meta.is_dir())
 }
 
 #[cfg(test)]

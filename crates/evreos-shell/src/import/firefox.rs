@@ -13,13 +13,14 @@
 #![forbid(unsafe_code)]
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles};
 use super::sqlite::{Database, SqliteError, Value};
 use super::{
-    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, clean_address,
-    copy_store, firefox_time,
+    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, SourceBrowser,
+    SourceProfile, clean_address, copy_store, firefox_time, is_dir,
 };
 
 /// Every file an import of a Firefox profile reads.
@@ -256,4 +257,51 @@ fn walk(
         }
     }
     Ok(out)
+}
+
+/// The profiles `profiles.ini` lists under `app_dir`, by the names it gives.
+pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
+    let Ok(ini) = fs::read_to_string(app_dir.join("profiles.ini")) else {
+        return Vec::new();
+    };
+    let mut profiles = Vec::new();
+    let mut section = String::new();
+    let mut name: Option<String> = None;
+    let mut path: Option<String> = None;
+    let mut relative = true;
+    let mut flush =
+        |section: &str, name: &mut Option<String>, path: &mut Option<String>, relative: bool| {
+            if section.starts_with("Profile") {
+                if let Some(raw) = path.take() {
+                    let dir: PathBuf = if relative {
+                        app_dir.join(&raw)
+                    } else {
+                        PathBuf::from(&raw)
+                    };
+                    if is_dir(&dir) {
+                        let label = name.take().unwrap_or(raw);
+                        profiles.push(SourceProfile::new(SourceBrowser::Firefox, label, dir));
+                    }
+                }
+            }
+            *name = None;
+            *path = None;
+        };
+    for line in ini.lines() {
+        let line = line.trim();
+        if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            flush(&section, &mut name, &mut path, relative);
+            section = header.to_string();
+            relative = true;
+        } else if let Some((key, value)) = line.split_once('=') {
+            match key.trim() {
+                "Name" => name = Some(value.trim().to_string()),
+                "Path" => path = Some(value.trim().to_string()),
+                "IsRelative" => relative = value.trim() != "0",
+                _ => {}
+            }
+        }
+    }
+    flush(&section, &mut name, &mut path, relative);
+    profiles
 }

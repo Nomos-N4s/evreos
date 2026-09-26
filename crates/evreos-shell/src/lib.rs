@@ -38,7 +38,7 @@ pub use handoff::{
 };
 pub use import::{
     ImportCounts, ImportError, ImportFailure, ImportJob, ImportScope, ImportState, ImportedData,
-    SourceBrowser, SourceProfile,
+    ProfileLocations, SourceBrowser, SourceProfile,
 };
 pub use keymap::{
     ChromeCommand, CommandCategory, Key, KeyShortcut, Keymap, KeymapError, Modifiers,

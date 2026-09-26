@@ -20,7 +20,7 @@ use evreos_i18n::{Language, catalogue};
 use evreos_shell::import::snapshot::{Disk, FileSource, SnapshotPolicy};
 use evreos_shell::import::{
     ImportError, ImportFailure, ImportJob, ImportScope, ImportState, ImportedData, ImportedNode,
-    ReadRequest, SourceBrowser, SourceProfile, read_profile_with,
+    ProfileLocations, ReadRequest, SourceBrowser, SourceProfile, discover, read_profile_with,
 };
 use evreos_shell::store::{BookmarkSource, BookmarkStore, FolderId, HistorySource, StoreRegistry};
 use evreos_shell::work::WorkerPool;
@@ -721,6 +721,38 @@ fn the_read_runs_on_the_worker_pool_and_the_write_on_the_ui_thread() {
     assert_eq!(counts, job.counts());
     assert_eq!(stores.history().count(), counts.history_imported);
     fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn discovery_finds_each_browsers_profiles_by_the_names_they_carry() {
+    let locations = ProfileLocations {
+        chrome: Some(fixtures().join("chrome")),
+        edge: Some(fixtures().join("edge")),
+        firefox: Some(fixtures().join("firefox")),
+    };
+    let found: Vec<(SourceBrowser, String, String)> = discover(&locations)
+        .into_iter()
+        .map(|p| {
+            let dir = p.path.file_name().unwrap().to_string_lossy().into_owned();
+            (p.browser, p.name, dir)
+        })
+        .collect();
+    assert_eq!(
+        found,
+        [
+            (SourceBrowser::Chrome, "Person 1".into(), "Default".into()),
+            (SourceBrowser::Chrome, "Work".into(), "Profile 1".into()),
+            (SourceBrowser::Edge, "Profile 1".into(), "Default".into()),
+            (
+                SourceBrowser::Firefox,
+                "default-release".into(),
+                "fx1a2b3c.default-release".into()
+            ),
+        ],
+        "System Profile, Guest Profile and a profiles.ini entry whose \
+         directory is gone are not profiles"
+    );
+    assert!(discover(&ProfileLocations::default()).is_empty());
 }
 
 #[test]

@@ -13,14 +13,15 @@
 
 #![forbid(unsafe_code)]
 
+use std::fs;
 use std::path::Path;
 
 use super::json::{self, Json};
 use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles};
 use super::sqlite::{Database, Value};
 use super::{
-    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, chromium_time,
-    clean_address, copy_store,
+    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, SourceBrowser,
+    SourceProfile, chromium_time, clean_address, copy_store, is_dir,
 };
 
 /// Every file an import of a Chromium profile reads.
@@ -182,4 +183,45 @@ fn visits(db: &Database) -> Result<Vec<ImportedVisit>, super::sqlite::SqliteErro
         Ok(())
     })?;
     Ok(out)
+}
+
+/// The profiles in a Chromium `User Data` directory: `Default` and each
+/// `Profile N` holding a store, named as the browser's `Local State` names
+/// them where it does.
+pub(super) fn discover(browser: SourceBrowser, user_data: &Path) -> Vec<SourceProfile> {
+    let Ok(entries) = fs::read_dir(user_data) else {
+        return Vec::new();
+    };
+    let local_state = fs::read_to_string(user_data.join("Local State"))
+        .ok()
+        .and_then(|text| json::parse(&text).ok());
+    let mut profiles: Vec<SourceProfile> = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let dir = entry.file_name().into_string().ok()?;
+            let path = entry.path();
+            let is_profile = dir == "Default" || dir.starts_with("Profile ");
+            let has_store = ["Bookmarks", "History", "Preferences"]
+                .iter()
+                .any(|store| path.join(store).is_file());
+            if !is_profile || !is_dir(&path) || !has_store {
+                return None;
+            }
+            let name = local_state
+                .as_ref()
+                .and_then(|state| {
+                    state
+                        .get("profile")?
+                        .get("info_cache")?
+                        .get(&dir)?
+                        .get("name")?
+                        .as_str()
+                })
+                .filter(|name| !name.is_empty())
+                .map_or_else(|| dir.clone(), str::to_string);
+            Some(SourceProfile::new(browser, name, path))
+        })
+        .collect();
+    profiles.sort_by(|a, b| a.path.cmp(&b.path));
+    profiles
 }
