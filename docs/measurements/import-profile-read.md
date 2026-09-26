@@ -99,8 +99,9 @@ Three arms read each store while the browser wrote it:
   `crates/evreos-shell/examples/import_probe.rs`, which runs the import's own
   read — `read_profile_with`, the verified copy included — in a loop for 60 s
   and reports attempts, the cause of each retry, and any accepted copy that
-  read torn: a parse error, or fewer rows or bookmarks than an earlier trial,
-  which a browser that only adds them cannot produce. Beside it the probe runs
+  read torn: fewer rows or bookmarks than an earlier trial, which a browser
+  that only adds them cannot produce. A copy the parser refuses fails its
+  trial and is counted as a failure, not as a torn copy. Beside it the probe runs
   two unverified arms through the same parser: one single read of the files
   with the log applied, and one of the main file alone.
 
