@@ -283,6 +283,7 @@ impl Parser<'_> {
         let digits = self
             .text
             .get(self.at..self.at + 4)
+            .filter(|digits| digits.bytes().all(|byte| byte.is_ascii_hexdigit()))
             .ok_or_else(|| self.error("four hex digits"))?;
         let value = u16::from_str_radix(digits, 16).map_err(|_| self.error("four hex digits"))?;
         self.at += 4;
@@ -339,6 +340,7 @@ mod tests {
             "-",
             "1.",
             "1e",
+            "\"\\u+abc\"",
         ] {
             assert!(parse(bad).is_err(), "{bad:?} should not parse");
         }
