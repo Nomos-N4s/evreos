@@ -790,7 +790,7 @@ fn imported_data_counts_bookmarks_but_not_folders() {
 }
 
 #[test]
-fn the_import_has_no_path_to_the_network() {
+fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // Reading another browser's files is the local computation FR-007a
     // permits; the import must hold no route by which any of it could leave.
     // The crate as a whole depends on evreos-net, so what is asserted is the
