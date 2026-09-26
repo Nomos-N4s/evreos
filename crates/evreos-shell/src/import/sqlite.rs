@@ -220,8 +220,11 @@ impl<'a> Database<'a> {
         // The in-header size is authoritative only when it was written by the
         // same version that last changed the file; otherwise the file length
         // is, as the format specification states.
+        // Never more than the file holds, whatever the header claims: a page
+        // past the end has no bytes to read, and an inflated count would let a
+        // crafted header size allocations by it.
         let mut page_count = if header_pages != 0 && change_counter == valid_for {
-            header_pages
+            header_pages.min(file_pages)
         } else {
             file_pages
         };
@@ -294,6 +297,12 @@ impl<'a> Database<'a> {
         self.main
             .get(start..start + self.page_size)
             .ok_or_else(|| corrupt(format!("page {number} lies past the end of the file")))
+    }
+
+    /// Every byte the store actually holds. No payload can be longer, so this
+    /// bounds what any cell may make the reader allocate.
+    fn available_bytes(&self) -> usize {
+        self.main.len() + self.wal.map_or(0, <[u8]>::len)
     }
 
     /// Find a table by name in the schema table.
@@ -411,7 +420,7 @@ impl<'a> Database<'a> {
         let (rowid, used_rowid) = varint(page, cell + used)?;
         let payload_len = usize::try_from(payload_len)
             .ok()
-            .filter(|len| *len <= self.page_count as usize * self.page_size)
+            .filter(|len| *len <= self.available_bytes())
             .ok_or_else(|| corrupt(format!("a cell on page {number} claims an absurd size")))?;
         let start = cell + used + used_rowid;
         let payload = self.payload(page, start, payload_len, number)?;
@@ -928,6 +937,22 @@ mod tests {
         ));
     }
 
+    /// The Chromium fixture history store: a two-level `urls` table with one
+    /// address long enough to spill into an overflow chain.
+    const HISTORY: &[u8] =
+        include_bytes!("../../../../tests/fixtures/import/chrome/Default/History");
+
+    fn url_rows(bytes: &[u8]) -> Result<usize, SqliteError> {
+        let db = Database::open(bytes, None)?;
+        let table = db.table("urls")?;
+        let mut rows = 0;
+        db.scan(&table, |_| {
+            rows += 1;
+            Ok(())
+        })?;
+        Ok(rows)
+    }
+
     #[test]
     fn a_table_level_key_after_the_column_list_does_not_panic() {
         // The column list ends at the last `)`, so one definition is
@@ -937,6 +962,25 @@ mod tests {
             parsed.is_ok() || parsed.is_err(),
             "it returns, whatever it returns"
         );
+    }
+
+    #[test]
+    fn an_inflated_header_page_count_is_clamped_to_the_file() {
+        let good = url_rows(HISTORY).unwrap();
+        let mut bytes = HISTORY.to_vec();
+        bytes[28..32].copy_from_slice(&u32::MAX.to_be_bytes());
+        let counter = [bytes[24], bytes[25], bytes[26], bytes[27]];
+        bytes[92..96].copy_from_slice(&counter);
+        assert_eq!(url_rows(&bytes).unwrap(), good);
+    }
+
+    #[test]
+    fn a_cell_claiming_more_bytes_than_the_store_holds_is_an_error_not_an_allocation() {
+        let mut bytes = HISTORY.to_vec();
+        let first_cell = usize::from(u16::from_be_bytes([bytes[108], bytes[109]]));
+        // A five-byte varint of about 2^34 in place of a schema cell's size.
+        bytes[first_cell..first_cell + 5].copy_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x7f]);
+        assert!(matches!(url_rows(&bytes), Err(SqliteError::Corrupt(_))));
     }
 
     #[test]
