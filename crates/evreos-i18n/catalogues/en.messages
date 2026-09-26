@@ -22,7 +22,8 @@ menu.home_surface = Apps
 
 # FR-012: the folders an import files bookmarks under. The browser's name is
 # an argument, never text of this file; the four root names stand for the
-# source browsers' permanent folders, which they store untranslated.
+# source browsers' permanent folders, which they store untranslated or in
+# their own interface language.
 import.folder = Imported from {browser}
 import.root.toolbar = Bookmarks toolbar
 import.root.menu = Bookmarks menu
