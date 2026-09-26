@@ -37,6 +37,10 @@ const HEADER_LEN: usize = 100;
 /// The write-ahead log header, and each frame's header.
 const WAL_HEADER_LEN: usize = 32;
 const WAL_FRAME_HEADER_LEN: usize = 24;
+/// SQLite's own hard ceiling on a table's columns. A record header naming
+/// more values than any table can hold is corrupt, and bounding it keeps a
+/// header of one-byte NULL entries from costing a decoded value each.
+const MAX_COLUMNS: usize = 32_767;
 /// Deeper than any real table b-tree: a four-level tree of 512-byte pages
 /// already addresses more rows than a browser profile holds.
 const MAX_TREE_DEPTH: usize = 40;
@@ -623,6 +627,9 @@ fn decode_record(payload: &[u8], encoding: TextEncoding) -> Result<Vec<Value>, S
     let mut body = header_len;
     let mut values = Vec::new();
     while cursor < header_len {
+        if values.len() == MAX_COLUMNS {
+            return Err(corrupt("a record names more values than a table can have"));
+        }
         let (serial, used) = varint(payload, cursor)?;
         cursor += used;
         let (value, width) = decode_value(serial, &payload[body.min(payload.len())..], encoding)?;
@@ -909,6 +916,31 @@ mod tests {
                 Value::Integer(1),
                 Value::Text("abc".into()),
             ]
+        );
+    }
+
+    #[test]
+    fn a_record_naming_more_values_than_a_table_can_have_is_refused() {
+        // A header of NULL entries, one byte each, one past the ceiling.
+        let entries = MAX_COLUMNS + 1;
+        let header_len = entries + 3;
+        let mut payload = vec![0x80 | (header_len >> 14) as u8 & 0x7f];
+        payload.push(0x80 | ((header_len >> 7) & 0x7f) as u8);
+        payload.push((header_len & 0x7f) as u8);
+        payload.extend(std::iter::repeat_n(0u8, entries));
+        assert_eq!(varint(&payload, 0).unwrap(), (header_len as u64, 3));
+        assert!(matches!(
+            decode_record(&payload, TextEncoding::Utf8),
+            Err(SqliteError::Corrupt(_))
+        ));
+        payload.truncate(3 + MAX_COLUMNS);
+        let at_ceiling = MAX_COLUMNS + 3;
+        payload[0] = 0x80 | (at_ceiling >> 14) as u8 & 0x7f;
+        payload[1] = 0x80 | ((at_ceiling >> 7) & 0x7f) as u8;
+        payload[2] = (at_ceiling & 0x7f) as u8;
+        assert_eq!(
+            decode_record(&payload, TextEncoding::Utf8).unwrap().len(),
+            MAX_COLUMNS
         );
     }
 
