@@ -225,7 +225,9 @@ pub enum ImportFailure {
     SourceInterrupted,
     /// A store is not in a format this reader understands.
     Unreadable,
-    /// Evreos's own stores could not be written; nothing was imported.
+    /// Evreos's own stores could not be written. Nothing was imported,
+    /// unless the error is [`ImportError::RollbackFailed`], which says the
+    /// bookmarks already written remain.
     WriteFailed,
 }
 
@@ -238,7 +240,8 @@ pub enum ImportState {
     Reading,
     /// Every row written.
     Written,
-    /// Stopped, having written nothing.
+    /// Stopped. Nothing was written, except where the job's error is
+    /// [`ImportError::RollbackFailed`].
     Failed(ImportFailure),
 }
 
