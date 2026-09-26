@@ -34,6 +34,7 @@
 #![forbid(unsafe_code)]
 
 mod chromium;
+mod firefox;
 pub mod json;
 pub mod snapshot;
 pub mod sqlite;
@@ -53,11 +54,13 @@ pub enum SourceBrowser {
     Chrome,
     /// Microsoft Edge, which keeps Chromium's store formats.
     Edge,
+    /// Mozilla Firefox.
+    Firefox,
 }
 
 impl SourceBrowser {
     /// Every source browser.
-    pub const ALL: [SourceBrowser; 2] = [Self::Chrome, Self::Edge];
+    pub const ALL: [SourceBrowser; 3] = [Self::Chrome, Self::Edge, Self::Firefox];
 
     /// The browser's name as imported rows record it. A product name is not
     /// interface text: it enters the folder name as a catalogue argument, the
@@ -66,6 +69,7 @@ impl SourceBrowser {
         match self {
             Self::Chrome => "Chrome",
             Self::Edge => "Edge",
+            Self::Firefox => "Firefox",
         }
     }
 
@@ -75,6 +79,7 @@ impl SourceBrowser {
     pub fn store_files(self) -> &'static [&'static str] {
         match self {
             Self::Chrome | Self::Edge => chromium::STORE_FILES,
+            Self::Firefox => firefox::STORE_FILES,
         }
     }
 }
@@ -300,6 +305,7 @@ pub fn read_profile_with(
         SourceBrowser::Chrome | SourceBrowser::Edge => {
             chromium::read(&profile.path, scope, policy, source)?
         }
+        SourceBrowser::Firefox => firefox::read(&profile.path, scope, policy, source)?,
     };
     let roots = RootKind::ALL
         .iter()
@@ -367,6 +373,11 @@ fn chromium_time(micros: i64) -> Option<SystemTime> {
     unix_micros(micros.checked_sub(UNIX_OFFSET_MICROS)?)
 }
 
+/// Firefox's timestamps (PRTime): microseconds since the Unix epoch.
+fn firefox_time(micros: i64) -> Option<SystemTime> {
+    unix_micros(micros)
+}
+
 fn unix_micros(micros: i64) -> Option<SystemTime> {
     let micros = u64::try_from(micros).ok().filter(|m| *m > 0)?;
     UNIX_EPOCH.checked_add(Duration::from_micros(micros))
@@ -414,5 +425,15 @@ mod tests {
         ] {
             assert_eq!(clean_address(skipped), None, "{skipped:?}");
         }
+    }
+
+    #[test]
+    fn timestamps_convert_from_both_epochs() {
+        let unix = UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+        assert_eq!(chromium_time(13_344_473_600_000_000), Some(unix));
+        assert_eq!(firefox_time(1_700_000_000_000_000), Some(unix));
+        assert_eq!(chromium_time(0), None);
+        assert_eq!(chromium_time(i64::MIN), None);
+        assert_eq!(firefox_time(-5), None);
     }
 }
