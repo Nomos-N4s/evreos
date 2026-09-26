@@ -22,7 +22,7 @@
 
 FR-012 requires importing bookmarks and history from Chrome, Firefox and Edge.
 research.md asks two things of that import before it is built, and T058 commits
-the answers here:
+its measurement of them here, as the Status above frames it:
 
 1. **Does each profile store read reliably while its browser is running**,
    and how: read directly, or copied and then read, with a write-ahead log
@@ -69,11 +69,12 @@ the answers here:
 
 This instrument is **neither tier**. decisions/0004 authorises an interim
 instrument for T015 and T016 alone, and this record does not extend it: it
-claims nothing about Windows or macOS. What it establishes is what the
-browsers themselves decide, which the platform does not — each store's
-format, its journal mode and its locking mode, all set by the browser's own
-code and observed here in the files it wrote — and how the reader behaves
-against those files under concurrent writes.
+claims nothing about Windows or macOS. What it observed is what the browsers
+themselves decide, which the platform does not — each store's format, its
+journal mode and its locking mode, all set by the browser's own code and seen
+here in the files it wrote — and how the reader behaves against those files
+under concurrent writes; the tier runs are what make any of it FR-012's
+result.
 
 What it cannot establish, and the tier runs must: whether the operating
 system lets another process open a file the browser holds open. On Linux a
