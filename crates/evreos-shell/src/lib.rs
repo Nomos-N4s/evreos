@@ -9,6 +9,7 @@ pub mod brand;
 pub mod error;
 pub mod error_presentation;
 pub mod handoff;
+pub mod keymap;
 pub mod log;
 pub mod omnibox;
 pub mod permissions;
@@ -32,6 +33,9 @@ pub use error_presentation::{
 pub use handoff::{
     HandOffBrowser, HandOffError, HandOffExecutor, HandOffOffer, HandOffReason,
     MockHandOffExecutor, detect_password_input,
+};
+pub use keymap::{
+    ChromeCommand, CommandCategory, Key, KeyShortcut, Keymap, KeymapError, Modifiers,
 };
 pub use log::{
     Address, Credential, EventKind, Field, FieldValue, Level, LogSink, LogValue, MemoryLogSink,
