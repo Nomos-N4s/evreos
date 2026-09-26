@@ -359,6 +359,11 @@ impl<'a> Database<'a> {
         mut visit: impl FnMut(Row) -> Result<(), SqliteError>,
     ) -> Result<(), SqliteError> {
         let mut seen = HashSet::new();
+        // Every byte of a store belongs to at most one cell, so no scan can
+        // decode more payload than the store holds. Counting it down refuses
+        // cell pointers that repeat or overlap, which would otherwise decode
+        // one cell over and over, however small the file.
+        let mut budget = self.available_bytes();
         // An explicit stack rather than recursion, so a deep or cyclic page
         // graph is an error value rather than a stack overflow.
         let mut stack = vec![(table.root_page, 0usize)];
@@ -392,7 +397,8 @@ impl<'a> Database<'a> {
                 0x0d => {
                     for index in 0..cells {
                         let cell = cell_offset(page, base + 8, index, number)?;
-                        let row = self.leaf_row(page, cell, number, table, &mut seen)?;
+                        let row =
+                            self.leaf_row(page, cell, number, table, &mut seen, &mut budget)?;
                         visit(row)?;
                     }
                 }
@@ -420,13 +426,19 @@ impl<'a> Database<'a> {
         number: u32,
         table: &Table,
         seen: &mut HashSet<u32>,
+        budget: &mut usize,
     ) -> Result<Row, SqliteError> {
         let (payload_len, used) = varint(page, cell)?;
         let (rowid, used_rowid) = varint(page, cell + used)?;
         let payload_len = usize::try_from(payload_len)
             .ok()
-            .filter(|len| *len <= self.available_bytes())
-            .ok_or_else(|| corrupt(format!("a cell on page {number} claims an absurd size")))?;
+            .filter(|len| *len <= *budget)
+            .ok_or_else(|| {
+                corrupt(format!(
+                    "a cell on page {number} takes the table past the bytes the store holds"
+                ))
+            })?;
+        *budget -= payload_len;
         let start = cell + used + used_rowid;
         let payload = self.payload(page, start, payload_len, number, seen)?;
         let mut values = decode_record(&payload, self.encoding)?;
@@ -1066,6 +1078,44 @@ mod tests {
         let mut cell = vec![b'x'; local];
         cell.extend_from_slice(&2u32.to_be_bytes());
         cell
+    }
+
+    #[test]
+    fn cell_pointers_that_repeat_one_cell_are_refused() {
+        // On every leaf table page, point each slot of the cell array at the
+        // page's last cell, with as many slots as fit ahead of it: the urls
+        // table then claims far more payload than the whole file holds.
+        let page_size = 4096;
+        let mut bytes = HISTORY.to_vec();
+        let mut patched = 0;
+        for n in 2..=bytes.len() / page_size {
+            let at = (n - 1) * page_size;
+            if bytes[at] != 0x0d {
+                continue;
+            }
+            let page = &bytes[at..at + page_size];
+            let cells = usize::from(u16::from_be_bytes([page[3], page[4]]));
+            let Some(last) = (0..cells)
+                .map(|i| usize::from(u16::from_be_bytes([page[8 + 2 * i], page[9 + 2 * i]])))
+                .max()
+            else {
+                continue;
+            };
+            // Leave the page whose last cell spills into an overflow chain:
+            // repeating it trips the chain check, not the one under test.
+            if varint(page, last).unwrap().0 > (page_size - 35) as u64 {
+                continue;
+            }
+            let repeats = (last - 8) / 2;
+            bytes[at + 3..at + 5].copy_from_slice(&(repeats as u16).to_be_bytes());
+            for i in 0..repeats {
+                let slot = at + 8 + 2 * i;
+                bytes[slot..slot + 2].copy_from_slice(&(last as u16).to_be_bytes());
+            }
+            patched += 1;
+        }
+        assert!(patched > 1, "the urls table spans several leaf pages");
+        assert!(matches!(url_rows(&bytes), Err(SqliteError::Corrupt(_))));
     }
 
     #[test]
