@@ -203,6 +203,11 @@ Firefox's four default bookmarks.
   profile used for years. SC-004's condition — ten tabs, sampled through a
   soak — does not include an import, so no entry measures this; it is
   recorded so the harness that measures SC-004 does not meet it unannounced.
+  One interleaving escapes the verification: a rollback-journal transaction
+  that starts after the first journal check, ends before the last, and
+  writes pages both ahead of the two reads and behind them yields two
+  identical torn reads. It needs one transaction to straddle two whole-file
+  reads; no run here produced one, and `snapshot.rs` states it.
 - **The write-ahead log is always read with its main file**, and applied only
   up to its last valid commit — frames with the wrong salt, a broken checksum
   chain, or no commit after them are ignored, as SQLite's own recovery ignores
