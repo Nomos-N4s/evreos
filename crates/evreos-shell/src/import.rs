@@ -749,9 +749,16 @@ pub fn clean_address(raw: &str) -> Option<String> {
     let scheme = raw[..colon].to_ascii_lowercase();
     match scheme.as_str() {
         "http" | "https" | "file" => {
-            let Some(rest) = raw[colon + 1..].strip_prefix("//") else {
-                // `file:/path` carries no authority, so no credential.
-                return (scheme == "file").then(|| format!("file:{}", &raw[colon + 1..]));
+            let after = &raw[colon + 1..];
+            let Some(rest) = after.strip_prefix("//") else {
+                // Only `file:/path` is a path with no authority, so no
+                // credential. A browser reads `\\` and `/\` as the start
+                // of an authority, where a user name and password can sit,
+                // and any other shape is not an address it loads.
+                let plain_path = scheme == "file"
+                    && after.starts_with('/')
+                    && !after[1..].starts_with(['/', '\\']);
+                return plain_path.then(|| format!("file:{after}"));
             };
             // A browser ends the authority at a backslash too, for these
             // schemes; ending it there keeps the host the one it loaded.
@@ -822,6 +829,10 @@ mod tests {
             clean_address("https://u:p@host\\p@x").as_deref(),
             Some("https://host\\p@x")
         );
+        assert_eq!(
+            clean_address("file:/home/a/b.html").as_deref(),
+            Some("file:/home/a/b.html")
+        );
     }
 
     #[test]
@@ -839,6 +850,9 @@ mod tests {
             "no scheme",
             "",
             "https://exa\nmple.com",
+            "file:/\\u:secret@server/x",
+            "file:\\\\u:secret@server\\x",
+            "file:u:secret@server/x",
         ] {
             assert_eq!(clean_address(skipped), None, "{skipped:?}");
         }
