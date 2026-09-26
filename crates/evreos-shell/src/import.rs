@@ -568,8 +568,9 @@ impl ImportJob {
 
     /// Write a finished read into `stores`, on the thread that owns them.
     ///
-    /// Folder names resolve in `language`; rows whose own timestamp is
-    /// missing are dated `now`. Either every row is written or none is.
+    /// Folder names resolve in `language`; a bookmark with no date of its
+    /// own is dated `now`, and a history row with no visit time was never
+    /// read. The guarantee on a failed write is [`write_imported`]'s.
     pub fn finish(
         &mut self,
         read: Result<ImportedData, ImportError>,
