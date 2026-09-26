@@ -41,7 +41,7 @@ the answers here:
    with its main file**: a read of `places.sqlite` alone missed committed
    rows in 826 of 1,101 trials.
 2. **The reader is in-tree, safe Rust, and costs 0 bytes in the binary this
-   change ships and 93,960 bytes (0.090 MB) once an interface reaches it**,
+   change ships and 95,824 bytes (0.091 MB) once an interface reaches it**,
    against at least 1,112,160 bytes (1.061 MB) for the SQLite library with a
    JSON parser — the option not adopted. Both
    figures are Linux x86-64 deltas; no SC-001 entry can be measured yet, for
@@ -240,22 +240,25 @@ Firefox's four default bookmarks.
 
 Five release builds of `evreos-shell` under the workspace's release profile
 (`opt-level = "z"`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`,
-`strip = "symbols"`), each measured as the binary's `st_size`:
+`strip = "symbols"`), each measured as the binary's `st_size`. B, C and E
+were re-measured after the fixes review round 1 on the pull request
+required, which grew the reader; A and D reach none of that code and were
+not rebuilt:
 
 | Build | What it contains | Bytes |
 | --- | --- | --- |
 | A | the merge base, `main` at `aaffd75` | 507,576 |
 | B | this change, as it ships | 507,576 |
-| C | B, with `main` calling `discover` and `ImportJob::run` | 673,928 |
-| E | B, with `main` making the same store and catalogue calls the import makes, and no import | 579,968 |
+| C | B, with `main` calling `discover` and `ImportJob::run` | 675,968 |
+| E | B, with `main` making the same store and catalogue calls the import makes, and no import | 580,144 |
 | D | B, with `main` reading a table through `rusqlite` 0.40.2 (`bundled`) and a document through `serde_json` 1.0.151 | 1,619,736 |
 
 - **B − A = 0 bytes.** Nothing in the binary reaches the import yet: no
   interface surface calls it, so the linker keeps none of it. This change
   moves no SC-001 figure today.
-- **C − E = 93,960 bytes (0.090 MB)**: the importer's own cost — both
+- **C − E = 95,824 bytes (0.091 MB)**: the importer's own cost — both
   readers, the verified copy, discovery and the job — once a surface reaches
-  it. C − B, 166,352 bytes, is larger because it also counts the
+  it. C − B, 168,392 bytes, is larger because it also counts the
   stores and the catalogue, which the binary does not reach yet either and
   which every surface that shows history or bookmarks will pull in whether or
   not import exists.
@@ -281,8 +284,8 @@ $ python3 scripts/check-budgets.py --allow-unpinned-runners --allow-unmeasured
 
 **All four SC-001 entries therefore stay unmeasured-with-reason.** Against
 their figures — 20 MB download and 60 MB installed on each tier — the
-importer's reachable cost is 0.45% of the download figure on this
-host, and the library option's floor is 5.30%, 11.8 times as much. These
+importer's reachable cost is 0.46% of the download figure on this
+host, and the library option's floor is 5.30%, 11.6 times as much. These
 are Linux x86-64 deltas, not the tier-1 or tier-2 figure: N10 measured its deltas on
 the tier-1 host, and the same builds on each tier's host are owed with the
 tier runs above. No baseline is written, because no SC-001 entry was
