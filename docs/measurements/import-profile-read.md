@@ -243,8 +243,9 @@ Firefox's four default bookmarks.
   thread that owns the stores, took 5–13 ms for the live profiles and
   36 ms for the 20,000 bookmarks. Inside the import's batch a new row
   finds its parent and position from an index built when the batch
-  starts, so the write grows with its size: 50,000 bookmarks in one folder
-  take 97 ms. Before review round 2 on the pull request each row scanned
+  starts, so the write is linear in the store and the rows it adds
+  together, the batch copying, indexing and validating the store once each:
+  50,000 bookmarks in one folder take 97 ms. Before review round 2 on the pull request each row scanned
   the whole store, which made the same 20,000 bookmarks take 264 ms and
   50,000 in one folder take 7.0 s.
 

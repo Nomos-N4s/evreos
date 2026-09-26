@@ -430,7 +430,10 @@ impl BookmarkStore {
     /// An FR-012 import creates thousands of rows at once, and each
     /// operation on its own rewrites the whole file, and on its own finds a
     /// new row's position by scanning the store; inside a batch a create does
-    /// neither, so a batch of any size costs time in proportion to it.
+    /// neither. A batch therefore costs time linear in the store and the
+    /// batch together: it copies the store once for its rollback, indexes it
+    /// once, validates the tree once when it saves, and does constant work
+    /// per create in between.
     ///
     /// A batch inside a batch belongs to the outer one: it neither saves nor
     /// rolls back on its own. Its error reaches the outer closure, and an
