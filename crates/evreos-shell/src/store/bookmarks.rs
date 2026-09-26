@@ -392,11 +392,16 @@ impl BookmarkStore {
     /// left exactly as it was before the batch began.
     ///
     /// An FR-012 import creates thousands of rows at once, and each
-    /// operation on its own rewrites the whole file.
+    /// operation on its own rewrites the whole file. A batch inside a batch
+    /// belongs to the outer one: it neither saves nor rolls back on its own,
+    /// so the outer batch's guarantee covers it.
     pub fn batch<T>(
         &mut self,
         operations: impl FnOnce(&mut Self) -> Result<T, BookmarkError>,
     ) -> Result<T, BookmarkError> {
+        if self.deferred {
+            return operations(self);
+        }
         let before = self.clone();
         self.deferred = true;
         let result = operations(self);

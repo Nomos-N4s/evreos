@@ -355,3 +355,26 @@ fn a_failed_batch_leaves_the_store_as_it_was() {
     assert_eq!(BookmarkStore::open(&dir).bookmarks().len(), 1);
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_nested_batch_is_part_of_the_outer_one() {
+    let dir = unique_temp_dir();
+    let mut store = BookmarkStore::open(&dir);
+    let result: Result<(), BookmarkError> = store.batch(|store| {
+        store.batch(|inner| {
+            inner.create_folder(FolderId::ROOT, "Inner")?;
+            Ok(())
+        })?;
+        assert!(!store.file_path().exists(), "the inner batch saved nothing");
+        store.create_bookmark(FolderId::new(9_999), "Orphan", "https://x.example")?;
+        Ok(())
+    });
+    assert!(result.is_err());
+    assert_eq!(
+        store.folders().len(),
+        1,
+        "the outer failure undid the inner batch"
+    );
+    assert!(!store.file_path().exists());
+    let _ = fs::remove_dir_all(&dir);
+}
