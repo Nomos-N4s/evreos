@@ -113,10 +113,9 @@ content-blocking conversion for tier 2's compiled rule lists.
 signatures over a fixed-layout, length-prefixed, domain-separated preimage.
 - **An OHTTP-over-HPKE client** for FR-039b, with the key configuration compiled
 into the release rather than fetched.
-- **A localisation format for FR-035** — Fluent is the candidate, one bundle per
-primary language subtag; a plain keyed table is the alternative. This one is
-*indicative*, not established: the byte cost against SC-001 is unmeasured (N10)
-and FR-043 requires the pull request to state it.
+- **A localisation format for FR-035** — a plain keyed table, one catalogue per
+primary language subtag, adopted over Fluent on the N10 measurement at
+`specs/001-evreos-v1/measurements/n10-catalogue-format.md`.
 
 **Storage**: Local files only, in five residence classes the data model fixes.
 Profile-local and never transmitted in any form, derived or not: history,

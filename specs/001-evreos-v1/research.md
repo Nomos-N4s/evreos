@@ -2370,7 +2370,13 @@ specification statement that lands as an amendment there.
   to state anyway. For the backend, an A/B under the existing gate — two
   commits, backend absent then present, each measured by
   `scripts/check-budgets.py` — and the measuring commit must also write the
-  baseline (§9.11(j)).
+  baseline (§9.11(j)). *Status*: the catalogue question is settled at
+  `specs/001-evreos-v1/measurements/n10-catalogue-format.md`, for the plain
+  keyed table. The import questions are answered, under their own record
+  rather than this identifier, at `docs/measurements/import-profile-read.md`:
+  no SQLite dependency is taken — the stores are locked against the library
+  while their browsers run, so they are copied and read by an in-tree reader
+  — with the tier runs owed there.
 - **N11 — tier-2 crash capture and symbol-table sizing.** On tier 2, what is the
   crash-capture route, is a web-content-process-termination callback available
   and usable as a reason code, and does symbolisation from the release's DWARF
