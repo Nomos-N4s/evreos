@@ -959,7 +959,9 @@ wallet's plural and gender cases turn out trivial, and worth costing before
 Fluent is adopted); ICU MessageFormat (it needs CLDR data, which is bytes
 against a 20 MB download and 60 MB installed budget). *Indicative; the byte cost
 is unmeasured (N10) · projectfluent/fluent-rs; FR-016a, FR-035, FR-041, FR-042,
-SC-001.*
+SC-001.* *Status*: N10's measurement settled this for the plain keyed table
+over Fluent, at `specs/001-evreos-v1/measurements/n10-catalogue-format.md`;
+the paragraph above is kept as the reasoning that preceded it.
 
 ---
 
@@ -2376,7 +2378,9 @@ specification statement that lands as an amendment there.
   rather than this identifier, at `docs/measurements/import-profile-read.md`:
   no SQLite dependency is taken — the stores are locked against the library
   while their browsers run, so they are copied and read by an in-tree reader
-  — with the tier runs owed there.
+  — with the tier runs owed there. The third question, the byte and
+  millisecond cost of `evreos-engine-webview` and the windowing crate on the
+  tier-1 runner, remains open.
 - **N11 — tier-2 crash capture and symbol-table sizing.** On tier 2, what is the
   crash-capture route, is a web-content-process-termination callback available
   and usable as a reason code, and does symbolisation from the release's DWARF
