@@ -802,6 +802,7 @@ impl BookmarkStore {
     /// - Every non-root folder references an existing parent folder.
     /// - No cycles exist in the folder graph.
     /// - Every bookmark references an existing folder reachable from the root.
+    /// - No two folders, and no two bookmarks, share an identifier.
     pub fn validate_tree(&self) -> Result<(), BookmarkError> {
         let roots: Vec<&BookmarkFolder> = self.folders.iter().filter(|f| f.is_root()).collect();
         if roots.len() != 1 {
