@@ -2,8 +2,18 @@
 
 - **Task**: T058 (`specs/001-evreos-v1/tasks.md`) / CAR-114
 - **Date**: 2026-09-26
-- **Status**: Measured on the Linux instrument named below. The tier-1 and
-  tier-2 runs are owed, on each tier's pinned runner once T013 procures it.
+- **Status**: Evidence from the Linux instrument named below, not yet a
+  result for FR-012. Two rules decide that, and neither admits this
+  instrument. `specs/001-evreos-v1/quickstart.md` §A7 names FR-012 import among what "no
+  result obtained" on a machine without a system web view "may be reported
+  for". `specs/001-evreos-v1/tasks.md` orders every measurement behind the
+  reference machines T013 procures, with decisions/0004 as the one
+  exception, for T015 and T016 alone. The figures below are therefore
+  recorded as the evidence the implementation's design rests on and as the
+  baseline the tier-1 and tier-2 runs will be compared against. They become
+  FR-012's result when those runs confirm them on each tier's pinned
+  runner, or sooner only if a founder decision admits them, as
+  decisions/0004 did for its two tasks.
 - **Identifier**: none. N10 is the catalogue-format measurement
   (`specs/001-evreos-v1/measurements/n10-catalogue-format.md`) and is not
   reused here, although research.md's N10 entry asks this question beside it.
@@ -20,7 +30,7 @@ the answers here:
 2. **What does the dependency the reading needs cost** in bytes, stated
    against `budgets.toml` under FR-043?
 
-## The answers
+## What the instrument showed
 
 1. **No store can be read directly through the SQLite library while its
    browser runs, and a single copy is not reliable either; a verified copy is.**

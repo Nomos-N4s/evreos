@@ -134,8 +134,9 @@ measurement. Money state is remote-owned: any wallet value held on the device is
 typed as stale and carries the time it was received (FR-026a). FR-012's import
 reads Chrome, Firefox and Edge profile stores; whether they read reliably while
 their browser runs, and the reader's byte cost, are measured at
-`docs/measurements/import-profile-read.md` on a Linux instrument, with the
-tier-1 and tier-2 runs owed on each tier's pinned runner. No server-side store of anything
+`docs/measurements/import-profile-read.md` as evidence from a Linux
+instrument that quickstart A7 does not admit as a result; the tier-1 and
+tier-2 runs on each tier's pinned runner are what settle them. No server-side store of anything
 this client holds.
 
 **Testing**: `cargo test --all`, `cargo fmt --all --check` and `cargo clippy
