@@ -743,19 +743,24 @@ pub fn clean_address(raw: &str) -> Option<String> {
     let colon = raw.find(':')?;
     let scheme = raw[..colon].to_ascii_lowercase();
     match scheme.as_str() {
-        "http" | "https" => {
-            let rest = raw[colon + 1..].strip_prefix("//")?;
-            let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+        "http" | "https" | "file" => {
+            let Some(rest) = raw[colon + 1..].strip_prefix("//") else {
+                // `file:/path` carries no authority, so no credential.
+                return (scheme == "file").then(|| format!("file:{}", &raw[colon + 1..]));
+            };
+            // A browser ends the authority at a backslash too, for these
+            // schemes; ending it there keeps the host the one it loaded.
+            let end = rest.find(['/', '?', '#', '\\']).unwrap_or(rest.len());
             let authority = &rest[..end];
             let host = authority
                 .rsplit_once('@')
                 .map_or(authority, |(_, host)| host);
-            if host.is_empty() {
+            // A web address needs a host; a local file's may be empty.
+            if host.is_empty() && scheme != "file" {
                 return None;
             }
             Some(format!("{scheme}://{host}{}", &rest[end..]))
         }
-        "file" => Some(format!("file:{}", &raw[colon + 1..])),
         _ => None,
     }
 }
@@ -803,6 +808,14 @@ mod tests {
         assert_eq!(
             clean_address("file:///home/a/b.html").as_deref(),
             Some("file:///home/a/b.html")
+        );
+        assert_eq!(
+            clean_address("file://user:secret@server/share/x").as_deref(),
+            Some("file://server/share/x")
+        );
+        assert_eq!(
+            clean_address("https://u:p@host\\p@x").as_deref(),
+            Some("https://host\\p@x")
         );
     }
 
