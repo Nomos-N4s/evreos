@@ -796,10 +796,27 @@ pub fn clean_address(raw: &str) -> Option<String> {
             if host.is_empty() && scheme != "file" {
                 return None;
             }
-            Some(format!("{scheme}://{host}{}", &rest[end..]))
+            let path = &rest[end..];
+            // With no host, a path opening on two separators is read as a
+            // further authority, as above, and one naming a user is refused.
+            if host.is_empty() && smuggles_credential(path) {
+                return None;
+            }
+            Some(format!("{scheme}://{host}{path}"))
         }
         _ => None,
     }
+}
+
+/// Whether `path` opens on two or more separators and the segment after
+/// them, which a browser may read as an authority, carries a user name.
+fn smuggles_credential(path: &str) -> bool {
+    let segment = path.trim_start_matches(['/', '\\']);
+    if path.len() - segment.len() < 2 {
+        return false;
+    }
+    let end = segment.find(['/', '\\', '?', '#']).unwrap_or(segment.len());
+    segment[..end].contains('@')
 }
 
 /// Chromium's timestamps: microseconds since 1601-01-01 UTC.
@@ -878,9 +895,24 @@ mod tests {
             "file:/\\u:secret@server/x",
             "file:\\\\u:secret@server\\x",
             "file:u:secret@server/x",
+            "file:////u:secret@server/x",
+            "file://\\\\u:secret@server\\x",
+            "file:///\\u:secret@server/x",
         ] {
             assert_eq!(clean_address(skipped), None, "{skipped:?}");
         }
+    }
+
+    #[test]
+    fn a_hostless_file_address_keeps_a_share_path_that_names_no_user() {
+        assert_eq!(
+            clean_address("file:////server/share/x").as_deref(),
+            Some("file:////server/share/x")
+        );
+        assert_eq!(
+            clean_address("file:///home/a@b/x").as_deref(),
+            Some("file:///home/a@b/x")
+        );
     }
 
     #[test]
