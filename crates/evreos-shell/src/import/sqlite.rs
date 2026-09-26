@@ -388,7 +388,7 @@ impl<'a> Database<'a> {
                 0x0d => {
                     for index in 0..cells {
                         let cell = cell_offset(page, base + 8, index, number)?;
-                        let row = self.leaf_row(page, cell, number, table)?;
+                        let row = self.leaf_row(page, cell, number, table, &mut seen)?;
                         visit(row)?;
                     }
                 }
@@ -415,6 +415,7 @@ impl<'a> Database<'a> {
         cell: usize,
         number: u32,
         table: &Table,
+        seen: &mut HashSet<u32>,
     ) -> Result<Row, SqliteError> {
         let (payload_len, used) = varint(page, cell)?;
         let (rowid, used_rowid) = varint(page, cell + used)?;
@@ -423,7 +424,7 @@ impl<'a> Database<'a> {
             .filter(|len| *len <= self.available_bytes())
             .ok_or_else(|| corrupt(format!("a cell on page {number} claims an absurd size")))?;
         let start = cell + used + used_rowid;
-        let payload = self.payload(page, start, payload_len, number)?;
+        let payload = self.payload(page, start, payload_len, number, seen)?;
         let mut values = decode_record(&payload, self.encoding)?;
         if let Some(alias) = table.rowid_alias {
             if let Some(slot) = values.get_mut(alias) {
@@ -445,6 +446,7 @@ impl<'a> Database<'a> {
         start: usize,
         len: usize,
         number: u32,
+        seen: &mut HashSet<u32>,
     ) -> Result<Vec<u8>, SqliteError> {
         let usable = self.usable_size;
         let max_local = usable - 35;
@@ -465,12 +467,19 @@ impl<'a> Database<'a> {
         }
 
         let mut next = be_u32(page, start + local)?;
-        let mut hops = 0u32;
         while out.len() < len {
-            hops += 1;
-            if next == 0 || hops > self.page_count {
+            if next == 0 {
                 return Err(corrupt(format!(
-                    "an overflow chain from page {number} ends early or loops"
+                    "an overflow chain from page {number} ends early"
+                )));
+            }
+            // Every page belongs to one place in a well-formed file, so a page
+            // this scan has already read — in the tree or in another chain —
+            // is corruption. Refusing it also keeps a scan linear: chains that
+            // share pages would otherwise re-read them once per cell.
+            if !seen.insert(next) {
+                return Err(corrupt(format!(
+                    "an overflow chain from page {number} reuses page {next}"
                 )));
             }
             let overflow = self.page(next)?;
@@ -981,6 +990,67 @@ mod tests {
         // A five-byte varint of about 2^34 in place of a schema cell's size.
         bytes[first_cell..first_cell + 5].copy_from_slice(&[0xff, 0xff, 0xff, 0xff, 0x7f]);
         assert!(matches!(url_rows(&bytes), Err(SqliteError::Corrupt(_))));
+    }
+
+    /// A store of four 512-byte pages whose pages 2, 3 and 4 form an
+    /// overflow chain, page 4 pointing back at page 2.
+    fn looped_chain() -> Vec<u8> {
+        let mut main = vec![0u8; 4 * 512];
+        for (page, next) in [(2usize, 3u32), (3, 4), (4, 2)] {
+            main[(page - 1) * 512..(page - 1) * 512 + 4].copy_from_slice(&next.to_be_bytes());
+        }
+        main
+    }
+
+    fn bare(main: &[u8]) -> Database<'_> {
+        Database {
+            main,
+            wal: None,
+            wal_pages: HashMap::new(),
+            page_size: 512,
+            usable_size: 512,
+            page_count: 4,
+            encoding: TextEncoding::Utf8,
+        }
+    }
+
+    /// A cell's local part at its minimum size, continuing on page 2.
+    fn spilling_cell() -> Vec<u8> {
+        let local = (512 - 12) * 32 / 255 - 23;
+        let mut cell = vec![b'x'; local];
+        cell.extend_from_slice(&2u32.to_be_bytes());
+        cell
+    }
+
+    #[test]
+    fn an_overflow_chain_that_loops_is_refused() {
+        let main = looped_chain();
+        let db = bare(&main);
+        let cell = spilling_cell();
+        let mut seen = HashSet::new();
+        assert!(matches!(
+            db.payload(&cell, 0, 1_700, 1, &mut seen),
+            Err(SqliteError::Corrupt(_))
+        ));
+    }
+
+    #[test]
+    fn two_cells_sharing_one_overflow_chain_are_refused_rather_than_reread() {
+        let mut main = looped_chain();
+        // End the chain at page 3, so one cell's payload reads cleanly.
+        main[2 * 512..2 * 512 + 4].copy_from_slice(&0u32.to_be_bytes());
+        let db = bare(&main);
+        let len = (512 - 12) * 32 / 255 - 23 + 2 * 508;
+        let cell = spilling_cell();
+        let mut seen = HashSet::new();
+        assert_eq!(db.payload(&cell, 0, len, 1, &mut seen).unwrap().len(), len);
+        assert!(
+            matches!(
+                db.payload(&cell, 0, len, 1, &mut seen),
+                Err(SqliteError::Corrupt(_))
+            ),
+            "a second cell in the same scan may not walk the same pages"
+        );
     }
 
     #[test]
