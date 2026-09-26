@@ -225,8 +225,10 @@ Firefox's four default bookmarks.
   Chromium's `urls` and Firefox's `moz_places` — the shape both browsers'
   own importers carry across, rather than every visit.
 - **The read runs on the worker pool; the write runs where the stores live.**
-  Reading took 8–22 ms for the live profiles here and 64 ms for a synthetic
-  profile of 20,000 bookmarks in 400 folders. Writing, which happens on the
+  With the browsers stopped, reading took 8–22 ms for the live profiles
+  here and 64 ms for a synthetic profile of 20,000 bookmarks in 400
+  folders; against a running browser a read retries, and the slowest live
+  trial in the tables above took 550 ms. Writing, which happens on the
   thread that owns the stores, took 10–13 ms for the live profiles and
   **264 ms for the 20,000 bookmarks**: the bookmark store computes each new
   row's position by scanning every bookmark it holds, so a bulk insert grows
