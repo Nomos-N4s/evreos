@@ -273,6 +273,14 @@ pub enum ImportError {
     History(HistoryError),
     /// A folder name did not resolve from the catalogue.
     Catalogue(String),
+    /// The history store refused the write, and removing the bookmarks this
+    /// import had already written failed as well: they remain.
+    RollbackFailed {
+        /// Why the history write failed.
+        history: HistoryError,
+        /// Why the bookmarks could not be removed.
+        bookmarks: BookmarkError,
+    },
 }
 
 impl ImportError {
@@ -282,9 +290,10 @@ impl ImportError {
             Self::ProfileMissing => ImportFailure::ProfileMissing,
             Self::SourceBusy { .. } => ImportFailure::SourceBusy,
             Self::Unreadable { .. } | Self::Io { .. } => ImportFailure::Unreadable,
-            Self::Bookmarks(_) | Self::History(_) | Self::Catalogue(_) => {
-                ImportFailure::WriteFailed
-            }
+            Self::Bookmarks(_)
+            | Self::History(_)
+            | Self::Catalogue(_)
+            | Self::RollbackFailed { .. } => ImportFailure::WriteFailed,
         }
     }
 
@@ -321,6 +330,10 @@ impl fmt::Display for ImportError {
             Self::Bookmarks(error) => write!(f, "{error}"),
             Self::History(error) => write!(f, "{error}"),
             Self::Catalogue(key) => write!(f, "catalogue key {key} did not resolve"),
+            Self::RollbackFailed { history, bookmarks } => write!(
+                f,
+                "{history}; the bookmarks already imported could not be removed: {bookmarks}"
+            ),
         }
     }
 }
@@ -593,9 +606,15 @@ impl ImportJob {
 /// root; a second import of the same profile makes a second such folder, as
 /// the source browsers' own importers do. History rows already present — the
 /// same address at the same instant, as a repeated import produces — are not
-/// written twice. Each store takes its rows in one write or none of them, and
-/// when the history write fails the bookmark folder this import created is
-/// removed again, so a failed import leaves no rows behind.
+/// written twice.
+///
+/// Each store takes its rows in one write or none of them. The bookmarks are
+/// written first; when the history write then fails, the folder this import
+/// created is removed again, so the failure leaves no rows behind. Two cases
+/// escape that, and are stated rather than hidden: if the removal itself
+/// cannot be saved, [`ImportError::RollbackFailed`] reports that the
+/// bookmarks remain; and the process ending between the two writes leaves
+/// the bookmarks without the history, which a second import completes.
 pub fn write_imported(
     data: &ImportedData,
     stores: &mut StoreRegistry,
@@ -651,9 +670,14 @@ pub fn write_imported(
     let written = match history.record_batch(fresh, WindowKind::Normal) {
         Ok(ids) => ids.len(),
         Err(error) => {
-            // Undo the bookmark half, so a failed import leaves nothing.
+            // Undo the bookmark half, and say so if that fails too.
             if let Some(folder) = top_folder {
-                let _ = stores.bookmarks_mut().delete_folder(folder);
+                if let Err(bookmarks) = stores.bookmarks_mut().delete_folder(folder) {
+                    return Err(ImportError::RollbackFailed {
+                        history: error,
+                        bookmarks,
+                    });
+                }
             }
             return Err(ImportError::History(error));
         }
