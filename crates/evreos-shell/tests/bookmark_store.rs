@@ -420,3 +420,26 @@ fn a_batch_positions_rows_exactly_as_single_operations_do() {
     assert_eq!(shape(&batched), shape(&single));
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_file_repeating_a_folder_identifier_is_refused_whatever_its_row_order() {
+    // Folder 5 appears twice, once under the root and once under folder 7,
+    // which is itself under 5: a cycle through the repeated identifier.
+    let rows = [(5, 0), (7, 5), (5, 7)];
+    for order in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+        let dir = unique_temp_dir();
+        let mut text = String::from("[[folder]]\nid = 0\nname = \"Bookmarks\"\nposition = 0\n\n");
+        for &i in &order {
+            let (id, parent) = rows[i];
+            text.push_str(&format!(
+                "[[folder]]\nid = {id}\nparent = {parent}\nname = \"f{id}\"\nposition = 0\n\n"
+            ));
+        }
+        fs::write(dir.join("bookmarks.toml"), text).unwrap();
+        assert!(
+            BookmarkStore::try_open(&dir).is_err(),
+            "order {order:?} was accepted"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

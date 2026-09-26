@@ -819,6 +819,21 @@ impl BookmarkStore {
         }
 
         let folder_ids: HashSet<FolderId> = self.folders.iter().map(|f| f.folder_id).collect();
+        // An identifier names one row. A repeated one would let the parent
+        // map below keep only the last of its rows, and hide a cycle running
+        // through the others.
+        if folder_ids.len() != self.folders.len() {
+            return Err(BookmarkError::TreeInvariantViolation(
+                "two folders share an identifier".into(),
+            ));
+        }
+        let bookmark_ids: HashSet<BookmarkId> =
+            self.bookmarks.iter().map(|b| b.bookmark_id).collect();
+        if bookmark_ids.len() != self.bookmarks.len() {
+            return Err(BookmarkError::TreeInvariantViolation(
+                "two bookmarks share an identifier".into(),
+            ));
+        }
         let parents: HashMap<FolderId, Option<FolderId>> = self
             .folders
             .iter()
