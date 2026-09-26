@@ -133,8 +133,10 @@ directory on tier 2, the serialised `adblock` engine on tier 1) are product data
 materialised at first run and land inside SC-001's installed-footprint
 measurement. Money state is remote-owned: any wallet value held on the device is
 typed as stale and carries the time it was received (FR-026a). FR-012's import
-implies reading Chrome, Firefox and Edge profile stores; that dependency's byte
-cost is unmeasured (N10). No server-side store of anything this client holds.
+reads Chrome, Firefox and Edge profile stores; whether they read reliably while
+their browser runs, and the reader's byte cost, are measured at
+`docs/measurements/import-profile-read.md`. No server-side store of anything
+this client holds.
 
 **Testing**: `cargo test --all`, `cargo fmt --all --check` and `cargo clippy
 --all-targets --all-features -- -D warnings`, all three run in CI before
