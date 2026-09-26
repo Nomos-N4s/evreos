@@ -324,6 +324,9 @@ pub fn take(
             }
         }
         if journal_hot(source, files)? {
+            // Let this attempt's copy go before the fingerprint reads the
+            // files again, so a refusal never holds the store twice.
+            drop((main, wal));
             moved |= refused_open(source, files, &mut held)?;
             continue;
         }
