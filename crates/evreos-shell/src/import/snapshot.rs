@@ -267,6 +267,19 @@ fn journal_hot(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<b
     }
 }
 
+/// Record an attempt refused for an open write, at either journal check:
+/// whether the files differ from what the last such attempt found.
+fn refused_open(
+    source: &mut impl FileSource,
+    files: &StoreFiles,
+    held: &mut Option<Fingerprint>,
+) -> io::Result<bool> {
+    let now = fingerprint(source, files)?;
+    let moved = held.is_some_and(|before| before != now);
+    *held = Some(now);
+    Ok(moved)
+}
+
 /// Take a verified copy of `files` under `policy`.
 pub fn take(
     source: &mut impl FileSource,
@@ -285,11 +298,7 @@ pub fn take(
             backoff = (backoff * 2).min(policy.max_backoff);
         }
         if journal_hot(source, files)? {
-            let now = fingerprint(source, files)?;
-            if held.is_some_and(|before| before != now) {
-                moved = true;
-            }
-            held = Some(now);
+            moved |= refused_open(source, files, &mut held)?;
             continue;
         }
         let Some(main) = source.read(&files.main)? else {
@@ -312,6 +321,7 @@ pub fn take(
             }
         }
         if journal_hot(source, files)? {
+            moved |= refused_open(source, files, &mut held)?;
             continue;
         }
         return Ok(Snapshot {
@@ -344,6 +354,11 @@ mod tests {
         tick: u32,
         writes: Vec<(u32, Write)>,
         paused: Vec<Duration>,
+        /// Answer every second journal check hot, whatever `hot` says.
+        hot_at_last_check: bool,
+        checks: u32,
+        /// A write made while the import backs off.
+        on_pause: Option<Write>,
     }
 
     impl Scripted {
@@ -356,6 +371,9 @@ mod tests {
                 tick: 0,
                 writes: Vec::new(),
                 paused: Vec::new(),
+                hot_at_last_check: false,
+                checks: 0,
+                on_pause: None,
             }
         }
 
@@ -383,11 +401,15 @@ mod tests {
 
         fn journal_hot(&mut self, _: &Path) -> io::Result<bool> {
             self.advance();
-            Ok(self.hot)
+            self.checks += 1;
+            Ok(self.hot || (self.hot_at_last_check && self.checks % 2 == 0))
         }
 
         fn pause(&mut self, duration: Duration) {
             self.paused.push(duration);
+            if let Some(write) = &self.on_pause {
+                write(&mut self.files, &mut self.hot);
+            }
         }
     }
 
@@ -536,6 +558,23 @@ mod tests {
                 }),
             ));
         }
+        match take(&mut source, &files(), quick()) {
+            Err(SnapshotError::Busy { attempts }) => assert_eq!(attempts, 4),
+            other => panic!("expected Busy, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_writer_caught_open_only_at_the_last_check_is_busy_not_interrupted() {
+        let mut source = Scripted::new(b"0");
+        // Every attempt finds the journal cold at its first check and hot at
+        // its last, and the writer commits a new main file while the import
+        // backs off.
+        source.hot_at_last_check = true;
+        source.on_pause = Some(Box::new(|files, _| {
+            let next = files[&PathBuf::from("db")][0] + 1;
+            files.insert(PathBuf::from("db"), vec![next]);
+        }));
         match take(&mut source, &files(), quick()) {
             Err(SnapshotError::Busy { attempts }) => assert_eq!(attempts, 4),
             other => panic!("expected Busy, got {other:?}"),
