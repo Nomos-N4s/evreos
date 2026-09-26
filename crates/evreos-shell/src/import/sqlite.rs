@@ -518,12 +518,14 @@ fn parse_wal(bytes: &[u8]) -> Result<Option<Log>, SqliteError> {
         _ => return Ok(None),
     };
     let version = be_u32(bytes, 4)?;
+    // SQLite treats a log whose header it cannot use as empty rather than
+    // failing the database, and so does this reader.
     if version != 3_007_000 {
-        return Err(SqliteError::Unsupported(format!(
-            "write-ahead log format {version}"
-        )));
+        return Ok(None);
     }
-    let page_size = decode_page_size_wal(be_u32(bytes, 8)?)?;
+    let Ok(page_size) = decode_page_size_wal(be_u32(bytes, 8)?) else {
+        return Ok(None);
+    };
     let salt = (be_u32(bytes, 16)?, be_u32(bytes, 20)?);
     let mut sum = wal_checksum(&bytes[..24], big_endian, (0, 0));
     if sum != (be_u32(bytes, 24)?, be_u32(bytes, 28)?) {
@@ -1050,6 +1052,20 @@ mod tests {
                 Err(SqliteError::Corrupt(_))
             ),
             "a second cell in the same scan may not walk the same pages"
+        );
+    }
+
+    #[test]
+    fn a_log_with_an_unknown_version_is_ignored_as_sqlite_ignores_it() {
+        let mut header = vec![0u8; 32];
+        header[..4].copy_from_slice(&0x377f_0682u32.to_be_bytes());
+        header[4..8].copy_from_slice(&1u32.to_be_bytes());
+        assert!(parse_wal(&header).unwrap().is_none());
+        header[4..8].copy_from_slice(&3_007_000u32.to_be_bytes());
+        header[8..12].copy_from_slice(&3u32.to_be_bytes());
+        assert!(
+            parse_wal(&header).unwrap().is_none(),
+            "nor with a bad page size"
         );
     }
 
