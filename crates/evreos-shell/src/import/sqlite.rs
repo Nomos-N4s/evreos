@@ -748,7 +748,9 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
         if first == "PRIMARY" || upper.starts_with("PRIMARY(") {
             // A table-level key over one column makes that column the rowid
             // alias when the column is declared INTEGER.
-            if let (Some(open), Some(close)) = (definition.find('('), definition.rfind(')')) {
+            let open = definition.find('(');
+            let close = open.and_then(|open| definition.rfind(')').filter(|close| *close > open));
+            if let (Some(open), Some(close)) = (open, close) {
                 let inner: Vec<&str> = definition[open + 1..close].split(',').collect();
                 if inner.len() == 1 {
                     let name = inner[0].split_whitespace().next().unwrap_or("");
@@ -924,6 +926,17 @@ mod tests {
             parse_create_table("CREATE TABLE t(a TEXT PRIMARY KEY, b) WITHOUT ROWID"),
             Err(SqliteError::Unsupported(_))
         ));
+    }
+
+    #[test]
+    fn a_table_level_key_after_the_column_list_does_not_panic() {
+        // The column list ends at the last `)`, so one definition is
+        // `PRIMARY KEY) (x`, whose `(` follows its `)`.
+        let parsed = parse_create_table("CREATE TABLE urls(a INTEGER, PRIMARY KEY) (x)");
+        assert!(
+            parsed.is_ok() || parsed.is_err(),
+            "it returns, whatever it returns"
+        );
     }
 
     #[test]
