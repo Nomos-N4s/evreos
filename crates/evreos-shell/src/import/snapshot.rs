@@ -134,6 +134,14 @@ pub enum SnapshotError {
         /// Attempts made.
         attempts: u32,
     },
+    /// Every attempt found a transaction open in the rollback journal, and
+    /// the files never moved: the browser is holding a write open, or it
+    /// stopped mid-write and left the journal for it to roll back the next
+    /// time it opens the store.
+    Interrupted {
+        /// Attempts made.
+        attempts: u32,
+    },
     /// The files could not be read at all.
     Io(io::Error),
 }
@@ -240,6 +248,7 @@ pub fn take(
 ) -> Result<Snapshot, SnapshotError> {
     let attempts = policy.attempts.max(1);
     let mut backoff = policy.first_backoff;
+    let mut moved = false;
     for attempt in 1..=attempts {
         if attempt > 1 {
             source.pause(backoff);
@@ -256,12 +265,14 @@ pub fn take(
             None => None,
         };
         if !source.unchanged(&files.main, Some(&main))? {
+            moved = true;
             continue;
         }
         // A log that appeared since the first read counts as a change: it
         // means writing began.
         if let Some(path) = &files.wal {
             if !source.unchanged(path, wal.as_deref())? {
+                moved = true;
                 continue;
             }
         }
@@ -274,7 +285,11 @@ pub fn take(
             attempts: attempt,
         });
     }
-    Err(SnapshotError::Busy { attempts })
+    if moved {
+        Err(SnapshotError::Busy { attempts })
+    } else {
+        Err(SnapshotError::Interrupted { attempts })
+    }
 }
 
 #[cfg(test)]
@@ -442,6 +457,16 @@ mod tests {
             [10, 20, 30].map(Duration::from_millis),
             "the backoff doubles and is capped"
         );
+    }
+
+    #[test]
+    fn a_journal_left_hot_on_a_still_store_is_interrupted_not_busy() {
+        let mut source = Scripted::new(b"left by a crash");
+        source.hot = true;
+        match take(&mut source, &files(), quick()) {
+            Err(SnapshotError::Interrupted { attempts }) => assert_eq!(attempts, 4),
+            other => panic!("expected Interrupted, got {other:?}"),
+        }
     }
 
     #[test]

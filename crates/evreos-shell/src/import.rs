@@ -220,6 +220,9 @@ pub enum ImportFailure {
     ProfileMissing,
     /// The browser kept writing through every attempt to copy a store.
     SourceBusy,
+    /// A store was held mid-write at every attempt without changing: the
+    /// browser left it so, most likely by stopping mid-write.
+    SourceInterrupted,
     /// A store is not in a format this reader understands.
     Unreadable,
     /// Evreos's own stores could not be written; nothing was imported.
@@ -248,6 +251,15 @@ pub enum ImportError {
     /// The named store never held still long enough to copy; the member can
     /// close that browser and try again.
     SourceBusy {
+        /// The store's file name.
+        store: &'static str,
+        /// Attempts made.
+        attempts: u32,
+    },
+    /// The named store had a write open at every attempt and never changed,
+    /// which is what a browser that stopped mid-write leaves behind; opening
+    /// that browser and closing it again completes or undoes the write.
+    SourceInterrupted {
         /// The store's file name.
         store: &'static str,
         /// Attempts made.
@@ -289,6 +301,7 @@ impl ImportError {
         match self {
             Self::ProfileMissing => ImportFailure::ProfileMissing,
             Self::SourceBusy { .. } => ImportFailure::SourceBusy,
+            Self::SourceInterrupted { .. } => ImportFailure::SourceInterrupted,
             Self::Unreadable { .. } | Self::Io { .. } => ImportFailure::Unreadable,
             Self::Bookmarks(_)
             | Self::History(_)
@@ -300,6 +313,7 @@ impl ImportError {
     fn from_snapshot(store: &'static str, error: SnapshotError) -> Self {
         match error {
             SnapshotError::Busy { attempts } => Self::SourceBusy { store, attempts },
+            SnapshotError::Interrupted { attempts } => Self::SourceInterrupted { store, attempts },
             SnapshotError::Io(error) => Self::Io { store, error },
             // Absent stores are handled by the callers, which read them as empty.
             SnapshotError::Absent => Self::Unreadable {
@@ -324,6 +338,11 @@ impl fmt::Display for ImportError {
             Self::SourceBusy { store, attempts } => write!(
                 f,
                 "{store} changed during each of {attempts} attempts to copy it"
+            ),
+            Self::SourceInterrupted { store, attempts } => write!(
+                f,
+                "{store} held an unfinished write through each of {attempts} attempts \
+                 to copy it"
             ),
             Self::Unreadable { store, reason } => write!(f, "{store} is unreadable: {reason}"),
             Self::Io { store, error } => write!(f, "{store} could not be read: {error}"),
