@@ -317,6 +317,9 @@ pub struct BookmarkStore {
     bookmarks: Vec<Bookmark>,
     next_folder_id: u64,
     next_bookmark_id: u64,
+    /// Set while [`BookmarkStore::batch`] runs, so the operations inside it
+    /// persist once at its end rather than once each.
+    deferred: bool,
 }
 
 impl Default for BookmarkStore {
@@ -327,6 +330,7 @@ impl Default for BookmarkStore {
             bookmarks: Vec::new(),
             next_folder_id: 1,
             next_bookmark_id: 1,
+            deferred: false,
         }
     }
 }
@@ -365,6 +369,7 @@ impl BookmarkStore {
                 + 1,
             folders,
             bookmarks,
+            deferred: false,
         };
 
         store.validate_tree()?;
@@ -378,6 +383,30 @@ impl BookmarkStore {
             bookmarks: Vec::new(),
             next_folder_id: 1,
             next_bookmark_id: 1,
+            deferred: false,
+        }
+    }
+
+    /// Run several operations as one: they persist with a single write at
+    /// the end, and if any of them fails, or the write does, the store is
+    /// left exactly as it was before the batch began.
+    ///
+    /// An FR-012 import creates thousands of rows at once, and each
+    /// operation on its own rewrites the whole file.
+    pub fn batch<T>(
+        &mut self,
+        operations: impl FnOnce(&mut Self) -> Result<T, BookmarkError>,
+    ) -> Result<T, BookmarkError> {
+        let before = self.clone();
+        self.deferred = true;
+        let result = operations(self);
+        self.deferred = false;
+        match result.and_then(|value| self.save_to_disk().map(|()| value)) {
+            Ok(value) => Ok(value),
+            Err(error) => {
+                *self = before;
+                Err(error)
+            }
         }
     }
 
@@ -771,6 +800,9 @@ impl BookmarkStore {
 
     /// Save the bookmark tree atomically to disk.
     fn save_to_disk(&self) -> Result<(), BookmarkError> {
+        if self.deferred {
+            return Ok(());
+        }
         self.validate_tree()?;
 
         if self.root.as_os_str().is_empty() {

@@ -297,3 +297,61 @@ fn no_undo_log_or_journal_on_disk() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_batch_persists_once_at_its_end() {
+    let dir = unique_temp_dir();
+    {
+        let mut store = BookmarkStore::open(&dir);
+        let folder = store
+            .batch(|store| {
+                let folder = store.create_folder(FolderId::ROOT, "Imported")?;
+                for n in 0..200 {
+                    store.create_bookmark_with_details(
+                        folder,
+                        format!("Item {n}"),
+                        format!("https://batch.example/{n}"),
+                        UNIX_EPOCH + Duration::from_secs(1_700_000_000 + n),
+                        BookmarkSource::imported("Chrome"),
+                    )?;
+                    // Nothing reaches disk until the batch ends.
+                    assert!(!store.file_path().exists());
+                }
+                Ok(folder)
+            })
+            .expect("batch succeeds");
+        assert_eq!(store.bookmarks_in_folder(folder).len(), 200);
+        assert!(store.file_path().exists());
+    }
+    let reopened = BookmarkStore::open(&dir);
+    assert_eq!(reopened.bookmarks().len(), 200);
+    reopened.validate_tree().expect("the tree invariant holds");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failed_batch_leaves_the_store_as_it_was() {
+    let dir = unique_temp_dir();
+    let mut store = BookmarkStore::open(&dir);
+    let kept = store.create_folder(FolderId::ROOT, "Kept").unwrap();
+    let result = store.batch(|store| {
+        let folder = store.create_folder(FolderId::ROOT, "Half")?;
+        store.create_bookmark(folder, "One", "https://one.example")?;
+        store.create_bookmark(FolderId::new(9_999), "Orphan", "https://two.example")
+    });
+    assert!(matches!(result, Err(BookmarkError::FolderNotFound(_))));
+    assert_eq!(
+        store.folders().len(),
+        2,
+        "the root and Kept, nothing of Half"
+    );
+    assert!(store.bookmarks().is_empty());
+    assert!(store.get_folder(kept).is_some());
+
+    // The store is usable afterwards, and saves each operation again.
+    store
+        .create_bookmark(kept, "After", "https://after.example")
+        .unwrap();
+    assert_eq!(BookmarkStore::open(&dir).bookmarks().len(), 1);
+    let _ = fs::remove_dir_all(&dir);
+}
