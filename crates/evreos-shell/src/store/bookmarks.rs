@@ -433,7 +433,10 @@ impl BookmarkStore {
     /// neither, so a batch of any size costs time in proportion to it.
     ///
     /// A batch inside a batch belongs to the outer one: it neither saves nor
-    /// rolls back on its own, so the outer batch's guarantee covers it.
+    /// rolls back on its own. Its error reaches the outer closure, and an
+    /// outer closure that catches it and carries on keeps whatever the inner
+    /// operations had already done; only the outer batch's failure undoes
+    /// them.
     pub fn batch<T>(
         &mut self,
         operations: impl FnOnce(&mut Self) -> Result<T, BookmarkError>,
