@@ -673,7 +673,12 @@ pub fn write_imported(
         Err(error) => {
             // Undo the bookmark half, and say so if that fails too.
             if let Some(folder) = top_folder {
-                if let Err(bookmarks) = stores.bookmarks_mut().delete_folder(folder) {
+                // Inside a batch, so that a removal whose save fails leaves
+                // the folder in memory too, agreeing with what is on disk.
+                let removal = stores
+                    .bookmarks_mut()
+                    .batch(|store| store.delete_folder(folder));
+                if let Err(bookmarks) = removal {
                     return Err(ImportError::RollbackFailed {
                         history: error,
                         bookmarks,
