@@ -191,7 +191,8 @@ impl FileSource for Disk {
     }
 
     /// Compared in chunks as it is read, so the second pass holds no second
-    /// copy of a store that may run to hundreds of megabytes.
+    /// copy of a store that runs to tens of megabytes, and more on a
+    /// profile used for years.
     fn unchanged(&mut self, path: &Path, held: Option<&[u8]>) -> io::Result<bool> {
         let (mut file, held) = match (open_if_present(path)?, held) {
             (None, None) => return Ok(true),
