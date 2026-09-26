@@ -25,6 +25,15 @@
 //! honours only frames up to the log's last valid commit — but they fail the
 //! comparison too, which costs a retry and nothing else.
 //!
+//! One interleaving escapes it, and is stated rather than assumed away: a
+//! rollback-journal transaction that begins after the first journal check,
+//! ends before the last, writes a page ahead of both reads and another page
+//! behind both, leaves two identical reads of a torn file. SQLite writes a
+//! transaction's pages in ascending order in a few milliseconds, so the
+//! transaction would have to straddle both whole-file reads; no run in the
+//! measurement produced one, and the parser still refuses any copy whose
+//! structure does not hold together.
+//!
 //! The copy lives only in memory and is dropped when the import has read it:
 //! no copy of another browser's history is ever written to disk, so a crash
 //! mid-import leaves nothing of it behind.
