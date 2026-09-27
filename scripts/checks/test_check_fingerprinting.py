@@ -304,6 +304,25 @@ report("...while the same path in a script the shell injects is",
        mentions(problems, "probe.rs:1", "'screen.'")
        and mentions(problems, "probe.rs:1", "'performance.now'"))
 
+problems = tree(with_rust(
+    'let id = read("/etc/machine\\x2did");\n'
+    'let mem = read("/proc/mem\\u{69}nfo");\n'
+    'const PROBE: &str = "performance\\x2enow()";\n'
+))[0]
+report("a source name spelled with a literal's escapes is the same name",
+       mentions(problems, "probe.rs:1", "'machine-id'")
+       and mentions(problems, "probe.rs:2", "'/proc/meminfo'")
+       and mentions(problems, "probe.rs:3", "'performance.now'"))
+
+problems = tree(with_rust(
+    'let a = "/etc/machine\\\\x2did";\nlet b = "line\\x0a";\nlet guid = MachineGuid();\n'
+))[0]
+report("...while an escaped backslash is left as written, with what follows it",
+       check.decode_escapes('"a\\\\x2d" "\\\\\\\\u{69}"') == '"a\\\\x2d" "\\\\\\\\u{69}"'
+       and check.decode_escapes('"a\\\\\\x2d"') == '"a\\\\-"')
+report("...and so is an escaped line break, so a later read keeps its line",
+       mentions(problems, "probe.rs:3", "'MachineGuid'"))
+
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
 

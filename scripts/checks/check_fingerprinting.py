@@ -45,7 +45,10 @@ It reads the tree and fails on:
                 and `navigator.connection` -- are dotted paths an ordinary
                 Rust field access can spell, `self.screen.width` among them,
                 so in Rust they are matched inside string literals only,
-                where an injected script lives.
+                where an injected script lives. A literal's `\\x` and
+                `\\u{...}` escapes are decoded before matching, so a name
+                spelled with an escape -- `"/etc/machine\\x2did"` -- is the
+                same name.
                 Script and markup the shell could ship -- `.js`, `.mjs`,
                 `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
                 whole, comments included: there is no shared scanner for
@@ -448,6 +451,11 @@ SOURCES = {
     ),
 }
 
+# An escape inside a Rust literal that spells one character: `\x2d`,
+# `\u{69}`. An escaped backslash is matched first, so `\\x2d` stays the four
+# characters it is.
+ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\})")
+
 # The sources shaped as script's dotted paths, which a Rust field access can
 # also spell: in Rust they are matched inside string literals only.
 SCRIPT_SHAPED = {
@@ -539,6 +547,28 @@ def read_text(path):
         return path.read_text(encoding="utf-8").lstrip("﻿")
     except UnicodeDecodeError:
         return None
+
+
+def decode_escapes(text):
+    """`text` with each `\\x` and `\\u{...}` escape replaced by the
+    character it spells.
+
+    An escape that spells a line break is left as written, and so is one that
+    spells no character, so the line a read is reported on is the line it is
+    written on.
+    """
+    def one(match):
+        body = match.group(1)
+        if body == "\\":
+            return match.group(0)
+        digits = body[1:].strip("{}").replace("_", "")
+        try:
+            character = chr(int(digits, 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+        return match.group(0) if character in "\r\n" else character
+
+    return ESCAPE.sub(one, text)
 
 
 def sources_in(text, only=None, skip=()):
@@ -697,8 +727,8 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     kept if kept != blank else ("\n" if kept == "\n" else " ")
                     for kept, blank in zip(code, bare)
                 )
-                reads = sources_in(code, skip=SCRIPT_SHAPED)
-                reads += sources_in(literals, only=SCRIPT_SHAPED)
+                reads = sources_in(decode_escapes(code), skip=SCRIPT_SHAPED)
+                reads += sources_in(decode_escapes(literals), only=SCRIPT_SHAPED)
                 for number, category, name in sorted(reads, key=lambda item: item[0]):
                     found(where, number, category, name)
             elif suffix_of(path) in SCRIPT_SUFFIXES:
