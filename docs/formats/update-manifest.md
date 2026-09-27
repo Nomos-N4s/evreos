@@ -36,6 +36,11 @@ the 64-byte Ed25519 signature over that preimage.
 | not after | 8 | the last moment the manifest is accepted, in seconds since 1970-01-01 UTC |
 | signature | 64 | Ed25519 over every byte above |
 
+No document fixes the platform names yet: they are fixed with the installers
+T148 and T149 build, one per build they ship. Until then `windows-x86_64` is
+the one the tests use, and the client compares the field with the name the
+shell passes as its own, byte for byte.
+
 A manifest is read in one pass and every byte is accounted for. It is refused if
 it is shorter or longer than its fields make it, if any field is outside its
 range, or if its domain is not exactly the one above.
