@@ -170,9 +170,10 @@ respects the trials measure. Beyond the checks the trials counted, a copy
 must now also be of regular files of at most 1 GiB each, which every store
 here was. The fixes also changed how a store refused at every attempt is
 classified, how malformed input is bounded, how a rowid alias declared with
-irregular spacing is found, and which addresses at the edges of the filter
-are kept. And an attempt refused at a journal check now reads the files once
-more, one at a time, to fingerprint them. That lengthens only those
+irregular spacing, through a named constraint or past a comment is found,
+and which addresses at the edges of the filter are kept. And an
+attempt refused at a journal check now reads the files once more, one at
+a time, to fingerprint them. That lengthens only those
 attempts, not the ones retried because the files moved, so the slowest
 times below that retried on a hot journal would be somewhat longer. The tier
 runs measure the reader as it ships.

@@ -760,6 +760,7 @@ fn be_u32(bytes: &[u8], at: usize) -> Result<u32, SqliteError> {
 /// The column names of a `CREATE TABLE` statement, in declaration order, and
 /// the index of the `INTEGER PRIMARY KEY` column if there is one.
 fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteError> {
+    let sql = &strip_comments(sql);
     let open = sql
         .find('(')
         .ok_or_else(|| SqliteError::Unsupported("a table defined without a column list".into()))?;
@@ -778,10 +779,19 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
     let mut alias = None;
     let mut table_key: Option<String> = None;
     for definition in split_top_level(&sql[open + 1..close]) {
-        let definition = definition.trim();
+        let mut definition = definition.trim();
+        // A named table constraint, `CONSTRAINT k PRIMARY KEY (id)`, is the
+        // constraint it names: the name is set aside and the rest read.
+        if definition
+            .get(..10)
+            .is_some_and(|word| word.eq_ignore_ascii_case("CONSTRAINT"))
+            && definition[10..].starts_with(char::is_whitespace)
+        {
+            definition = unquote(&definition[10..]).1.trim();
+        }
         let upper = definition.to_ascii_uppercase();
         let first = upper.split_whitespace().next().unwrap_or("");
-        if matches!(first, "CONSTRAINT" | "UNIQUE" | "CHECK" | "FOREIGN") {
+        if matches!(first, "UNIQUE" | "CHECK" | "FOREIGN") {
             continue;
         }
         if first == "PRIMARY" || upper.starts_with("PRIMARY(") {
@@ -831,6 +841,49 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
     Ok((columns, alias))
 }
 
+/// `sql` with its comments, `-- …` to the end of a line and `/* … */`, each
+/// replaced by a space, as SQLite reads them; text inside a string or a
+/// quoted identifier is left as it is.
+fn strip_comments(sql: &str) -> String {
+    let mut out = String::with_capacity(sql.len());
+    let mut quote: Option<char> = None;
+    let mut chars = sql.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if let Some(open) = quote {
+            out.push(ch);
+            let close = if open == '[' { ']' } else { open };
+            if ch == close {
+                quote = None;
+            }
+            continue;
+        }
+        match (ch, chars.peek()) {
+            ('-', Some('-')) => {
+                while chars.next_if(|next| *next != '\n').is_some() {}
+                out.push(' ');
+            }
+            ('/', Some('*')) => {
+                chars.next();
+                let mut last = ' ';
+                for next in chars.by_ref() {
+                    if last == '*' && next == '/' {
+                        break;
+                    }
+                    last = next;
+                }
+                out.push(' ');
+            }
+            _ => {
+                if matches!(ch, '"' | '\'' | '`' | '[') {
+                    quote = Some(ch);
+                }
+                out.push(ch);
+            }
+        }
+    }
+    out
+}
+
 /// Split a column list on commas that are not inside parentheses or quotes.
 fn split_top_level(list: &str) -> Vec<&str> {
     let mut parts = Vec::new();
@@ -867,7 +920,9 @@ fn unquote(text: &str) -> (String, &str) {
     let text = text.trim_start();
     let mut chars = text.char_indices();
     match chars.next() {
-        Some((_, open @ ('"' | '`' | '['))) => {
+        // SQLite also reads a single-quoted string as a name where a name
+        // is expected.
+        Some((_, open @ ('"' | '\'' | '`' | '['))) => {
             let close = if open == '[' { ']' } else { open };
             let mut name = String::new();
             let mut rest = "";
@@ -1022,6 +1077,24 @@ mod tests {
             parsed.is_ok() || parsed.is_err(),
             "it returns, whatever it returns"
         );
+    }
+
+    #[test]
+    fn a_named_table_key_and_comments_leave_the_rowid_alias_found() {
+        for sql in [
+            "CREATE TABLE t(id INTEGER, x TEXT, CONSTRAINT k PRIMARY KEY (id))",
+            "CREATE TABLE t(id INTEGER, x TEXT, constraint \"k\" primary key(id))",
+            "CREATE TABLE t(id INTEGER PRIMARY KEY -- the key, (, x\n, x TEXT)",
+            "CREATE TABLE t(/* ( */ id INTEGER PRIMARY KEY, x TEXT /* ) */)",
+            "CREATE TABLE t(id INTEGER CONSTRAINT k PRIMARY KEY, x TEXT)",
+        ] {
+            let (columns, alias) = parse_create_table(sql).unwrap();
+            assert_eq!(columns, ["id", "x"], "{sql}");
+            assert_eq!(alias, Some(0), "{sql}");
+        }
+        let (columns, _) =
+            parse_create_table("CREATE TABLE t(\"a--b\" TEXT, 'c/*d' TEXT)").unwrap();
+        assert_eq!(columns, ["a--b", "c/*d"], "comment marks inside quotes");
     }
 
     #[test]
