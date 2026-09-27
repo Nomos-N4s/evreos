@@ -26,8 +26,8 @@
 //!
 //! **The network** — reading another browser's files is the local computation
 //! FR-007a permits. Nothing in this module or its submodules references
-//! `evreos-net` or any part of this crate but the stores, which
-//! `tests/import.rs` asserts.
+//! `evreos-net`, the standard library's sockets or processes, or any part of
+//! this crate but the stores, which `tests/import.rs` asserts token by token.
 //!
 //! # How a running browser's store is read
 //!
