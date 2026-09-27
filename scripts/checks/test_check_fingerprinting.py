@@ -474,9 +474,15 @@ report("...and one embedded through include_str! is read whole",
 report("...while one named only in a comment is not read",
        "crates/x/src/commented.in" not in read)
 
-problems = tree(with_rust('include!("../../../../outside.in");\n'))[0]
-report("a file brought in from outside the tree is reported",
-       mentions(problems, "probe.rs", "outside.in", "outside the tree"))
+problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
+report("a file brought in from outside the tree is reported, on the line that brings it",
+       mentions(problems, "probe.rs:2", "outside.in", "outside the tree"))
+
+problems = tree(with_rust(
+    'const FIXTURE: &str = r#"include!("../../../../outside.in");"#;\n'
+    'const QUOTED: &str = "#[path = \\"../../../../outside.rs\\"] mod m;";\n'
+))[0]
+report("a literal that quotes an include! or #[path] brings nothing in", problems == [])
 
 problems = tree(with_rust("let a = xMachineGuid;\nlet b = MachineGuidx;\nlet c = MachineGuid_2;\n"))[0]
 report("a source continued by an identifier on either side alone is not a read",

@@ -568,12 +568,15 @@ BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
 # What a Rust file brings into the build under a name of its own choosing,
 # resolved against that file's directory, as Rust resolves both: a file
 # compiled in as Rust whatever its suffix, and a file embedded as text, which
-# may be a script the shell injects.
+# may be a script the shell injects. Each pattern is matched in code with
+# literals blanked, so a literal that quotes one brings nothing, and ends
+# where BROUGHT_PATH, read from the code with literals kept, begins.
 BRINGS = (
-    ("rust", re.compile(r'\binclude!\s*\(\s*r?#*"([^"]+)"')),
-    ("rust", re.compile(r'#\s*\[\s*path\s*=\s*r?#*"([^"]+)"')),
-    ("text", re.compile(r'\binclude_str!\s*\(\s*r?#*"([^"]+)"')),
+    ("rust", re.compile(r"\binclude!\s*\(")),
+    ("rust", re.compile(r"#\s*\[\s*path\s*=")),
+    ("text", re.compile(r"\binclude_str!\s*\(")),
 )
+BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
 
 # The sources shaped as script's dotted paths, which a Rust field access can
 # also spell: in Rust they are matched inside string literals only.
@@ -835,9 +838,9 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     workspaces = {}
 
     # Files a Rust file brings into the build under a name of its own
-    # choosing, as (kind, path, the file that names it): compiled in through
-    # `include!` or `#[path = ...]`, or embedded through `include_str!`. Each
-    # is read after the walk, once, whatever its suffix.
+    # choosing, as (kind, path, the file and line that name it): compiled in
+    # through `include!` or `#[path = ...]`, or embedded through
+    # `include_str!`. Each is read after the walk, once, whatever its suffix.
     brought = []
 
     def scan_rust(path, where):
@@ -862,8 +865,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         for number, category, name in sorted(dict.fromkeys(reads), key=lambda item: item[0]):
             found(where, number, category, name)
         for kind, pattern in BRINGS:
-            for match in pattern.finditer(code):
-                brought.append((kind, path.parent / match.group(1), where))
+            for match in pattern.finditer(bare):
+                named = BROUGHT_PATH.match(code, match.end())
+                if named:
+                    number = bare.count("\n", 0, match.start()) + 1
+                    brought.append((kind, path.parent / named.group(1), f"{where}:{number}"))
 
     def scan_whole(path, where, what):
         read.append(where)
