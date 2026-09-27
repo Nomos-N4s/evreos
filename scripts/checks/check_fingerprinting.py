@@ -246,6 +246,15 @@ SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".html", ".htm"
 # The manifest this check reads dependencies from.
 MANIFEST = "Cargo.toml"
 
+def member(name):
+    """A pattern for reading property `name` off an object in script: dotted,
+    optionally chained, or bracketed with a quoted key of any quote kind."""
+    return (
+        r"(?:\??\.\s*" + name
+        + r"|(?:\?\.)?\s*\[\s*[\"'`]" + name + r"[\"'`]\s*\])"
+    )
+
+
 # Every source, by category. A source is (name, pattern): the name is what a
 # failure reports and what an allowlist entry spells, the pattern is matched as
 # a whole token with case folded. A name holds no whitespace, because an
@@ -331,7 +340,7 @@ SOURCES = {
         ("PhysicalAddress", r"PhysicalAddress"),
         ("GetHostNames", r"GetHostNames"),
         ("NetworkInformation", r"NetworkInformation"),
-        ("navigator.connection", r"navigator\s*\??\.\s*connection"),
+        ("navigator.connection", r"navigator\s*" + member("connection")),
         ("RTCPeerConnection", r"RTCPeerConnection"),
         ("WlanQueryInterface", r"WlanQueryInterface"),
         ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
@@ -361,7 +370,7 @@ SOURCES = {
         ("XDisplayHeight", r"XDisplayHeight"),
         ("XRRGetScreenResources", r"XRRGetScreenResources(?:Current)?"),
         ("screen.", (
-            r"screen\s*(?:\??\.\s*(?:{0})|\[\s*[\"'](?:{0})[\"']\s*\])".format(
+            r"screen\s*(?:\??\.\s*(?:{0})|(?:\?\.)?\s*\[)".format(
                 "width|height|availWidth|availHeight|availLeft|availTop"
                 "|colorDepth|pixelDepth|orientation"
             )
@@ -392,7 +401,7 @@ SOURCES = {
         ("load_system_fonts", r"load_system_fonts"),
         ("font_kit", r"font_kit"),
         ("queryLocalFonts", r"queryLocalFonts"),
-        ("document.fonts", r"document\s*\??\.\s*fonts"),
+        ("document.fonts", r"document\s*" + member("fonts")),
         ("/usr/share/fonts", r"/share/fonts"),
         ("~/.fonts", r"/\.fonts"),
         ("/Library/Fonts", r"/Library/Fonts"),
@@ -488,8 +497,8 @@ SOURCES = {
         ("/proc/uptime", r'/proc/uptime|"uptime"'),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
-        ("performance.now", r"performance\s*\??\.\s*now"),
-        ("performance.timeOrigin", r"performance\s*\??\.\s*timeOrigin"),
+        ("performance.now", r"performance\s*" + member("now")),
+        ("performance.timeOrigin", r"performance\s*" + member("timeOrigin")),
     ),
 }
 

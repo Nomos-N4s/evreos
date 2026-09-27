@@ -494,6 +494,24 @@ report("...and through self, globalThis or a bracketed window",
        and mentions(problems, "whole.js:6", "'window.screen'"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/brackets.js": (
+        "for (const k in screen) out[k] = screen[k];\n"
+        "const w = screen?.['width'];\n"
+        "const t = performance['now']();\n"
+        "const o = performance?.[`timeOrigin`];\n"
+        "const c = navigator['connection'];\n"
+        "const f = document[\"fonts\"];\n"
+    ),
+}))[0]
+report("a bracketed read of a script object is a read, whatever the key's quotes",
+       mentions(problems, "brackets.js:1", "'screen.'")
+       and mentions(problems, "brackets.js:2", "'screen.'")
+       and mentions(problems, "brackets.js:3", "'performance.now'")
+       and mentions(problems, "brackets.js:4", "'performance.timeOrigin'")
+       and mentions(problems, "brackets.js:5", "'navigator.connection'")
+       and mentions(problems, "brackets.js:6", "'document.fonts'"))
+
+problems = tree(passing_tree({
     "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",
