@@ -292,12 +292,13 @@ fn a_local_path(raw: &str, relative: bool) -> bool {
 }
 
 /// Whether a path component is one of the names Windows reserves for a
-/// device, in any case, with or without an extension or trailing spaces and
-/// dots: `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, and `COM` or `LPT`
-/// followed by a digit or a superscript one, two or three.
+/// device, in any case, with or without an extension, a stream after a colon,
+/// or trailing spaces and dots: `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`,
+/// `CONOUT$`, and `COM` or `LPT` followed by a digit or a superscript one,
+/// two or three.
 fn names_a_device(component: &str) -> bool {
     let stem = component
-        .split('.')
+        .split(['.', ':'])
         .next()
         .unwrap_or("")
         .trim_end_matches([' ', '.'])
@@ -410,6 +411,9 @@ mod tests {
             ("C:\\x\\LPT1", false),
             ("/home/member/aux", false),
             ("Profiles/COM\u{b9}", true),
+            ("C:\\p\\LPT1:", false),
+            ("/home/member/NUL:", false),
+            ("/home/member/COM1:x", false),
             ("", true),
         ] {
             assert!(!a_local_path(raw, relative), "{raw:?}, relative {relative}");
