@@ -512,6 +512,23 @@ report("a bracketed read of a script object is a read, whatever the key's quotes
        and mentions(problems, "brackets.js:6", "'document.fonts'"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/destructure.js": (
+        "const { now } = performance;\n"
+        "const { timeOrigin } = window.performance\n"
+        "const { connection } = navigator;\n"
+        "const { fonts } = document;\n"
+        "const { language } = navigator;\n"
+    ),
+}))[0]
+report("a property destructured out of a script object is a read",
+       mentions(problems, "destructure.js:1", "'performance.now'")
+       and mentions(problems, "destructure.js:2", "'performance.timeOrigin'")
+       and mentions(problems, "destructure.js:3", "'navigator.connection'")
+       and mentions(problems, "destructure.js:4", "'document.fonts'"))
+report("...while destructuring a property no source names is not",
+       not mentions(problems, "destructure.js:5"))
+
+problems = tree(passing_tree({
     "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",

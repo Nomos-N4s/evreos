@@ -255,6 +255,17 @@ def member(name):
     )
 
 
+def destructured(name, obj):
+    """A pattern for destructuring property `name` out of the global `obj` in
+    script, `const { name } = obj`, directly or through window, self or
+    globalThis. The brace span is bounded, so a crafted file cannot make the
+    match backtrack without end."""
+    return (
+        r"\{[^{}]{0,200}\b" + name + r"\b[^{}]{0,200}\}\s*=\s*"
+        r"(?:(?:window|self|globalThis)\s*\??\.\s*)?" + obj
+    )
+
+
 # Every source, by category. A source is (name, pattern): the name is what a
 # failure reports and what an allowlist entry spells, the pattern is matched as
 # a whole token with case folded. A name holds no whitespace, because an
@@ -340,7 +351,9 @@ SOURCES = {
         ("PhysicalAddress", r"PhysicalAddress"),
         ("GetHostNames", r"GetHostNames"),
         ("NetworkInformation", r"NetworkInformation"),
-        ("navigator.connection", r"navigator\s*" + member("connection")),
+        ("navigator.connection", (
+            r"navigator\s*" + member("connection") + "|" + destructured("connection", "navigator")
+        )),
         ("RTCPeerConnection", r"RTCPeerConnection"),
         ("WlanQueryInterface", r"WlanQueryInterface"),
         ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
@@ -401,7 +414,7 @@ SOURCES = {
         ("load_system_fonts", r"load_system_fonts"),
         ("font_kit", r"font_kit"),
         ("queryLocalFonts", r"queryLocalFonts"),
-        ("document.fonts", r"document\s*" + member("fonts")),
+        ("document.fonts", r"document\s*" + member("fonts") + "|" + destructured("fonts", "document")),
         ("/usr/share/fonts", r"/share/fonts"),
         ("~/.fonts", r"/\.fonts"),
         ("/Library/Fonts", r"/Library/Fonts"),
@@ -497,8 +510,10 @@ SOURCES = {
         ("/proc/uptime", r'/proc/uptime|"uptime"'),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
-        ("performance.now", r"performance\s*" + member("now")),
-        ("performance.timeOrigin", r"performance\s*" + member("timeOrigin")),
+        ("performance.now", r"performance\s*" + member("now") + "|" + destructured("now", "performance")),
+        ("performance.timeOrigin", (
+            r"performance\s*" + member("timeOrigin") + "|" + destructured("timeOrigin", "performance")
+        )),
     ),
 }
 
