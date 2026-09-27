@@ -4,7 +4,7 @@
 //! `docs/formats/update-manifest.md` fixes. [`manifest`] reads it and
 //! verifies it against the key pinned in the shipped binary. [`rollout`]
 //! holds the value this install draws, once, to decide its own inclusion.
-
+//!
 //! [`decide`] takes a manifest through every check in the order the format
 //! document fixes, and says whether this install is offered the update.
 //! [`artefact`] checks an offered update's artefact against its manifest
