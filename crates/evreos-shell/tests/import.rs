@@ -818,8 +818,9 @@ fn imported_data_counts_bookmarks_but_not_folders() {
     assert_eq!(folders, 1, "Work, on the bar");
 }
 
-/// A token of Rust source, as the reach test needs it: literals and
-/// lifetimes carry nothing, and comments and whitespace are dropped.
+/// A token of Rust source, as the reach test needs it: a literal carries
+/// nothing, a lifetime is kept as an identifier with its `'` so that its name
+/// is checked, and comments and whitespace are dropped.
 #[derive(Debug, Clone, PartialEq)]
 enum Tok {
     Ident(String),
@@ -949,10 +950,14 @@ fn tokens(source: &str) -> Vec<Tok> {
             let lifetime =
                 at(i + 1).is_some_and(|c| c.is_alphabetic() || c == '_') && at(i + 2) != Some('\'');
             if lifetime {
+                // Kept as a token, `'` and all, so that its name is held to
+                // ASCII like any identifier's.
+                let start = i;
                 i += 1;
                 while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
                     i += 1;
                 }
+                out.push(Tok::Ident(chars[start..i].iter().collect()));
             } else {
                 i = character(i);
                 out.push(Tok::Lit);
@@ -1310,6 +1315,7 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { let caf\u{e9} = 1; }", false),
         ("fn f() { let x = 1\u{e9}; }", false),
         ("fn f() { let x\u{b2} = 1; }", false),
+        ("fn f<'caf\u{e9}>(x: &'caf\u{e9} u8) {}", false),
         ("extern crate evreos_net;", false),
         ("fn f() { evreos_net::connect() }", false),
         ("fn f() { some_macro!() }", false),
