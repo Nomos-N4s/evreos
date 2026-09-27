@@ -46,6 +46,26 @@ the shell runs the check it is at most 90,112 bytes on this build, 0.086 MB.
 That is an upper bound, since the probe counts the standard library's error
 formatting and file handling, which the shell already carries.
 
+### The crates they come from
+
+The shell does not depend on `evreos-platform` yet. Once it does, the update
+code brings these crates into its graph on `x86_64-pc-windows-msvc` and
+`aarch64-apple-darwin`, found by comparing `cargo tree -e normal,build
+--target <triple>` for `evreos-shell` and for `evreos-platform`:
+
+- **Linked:** `ed25519-dalek`, `ed25519`, `signature`, `curve25519-dalek`,
+  `subtle`, `sha2`, `digest`, `block-buffer`, `crypto-common`,
+  `generic-array`, `typenum`, `cpufeatures`, `cfg-if` and `getrandom`,
+  fourteen in all. The lockfile already held every one of them, `getrandom`
+  0.3.4 through `winit` on Linux and `sha2` through a test spike's `wry`, but
+  the shell links none of them on Windows or macOS today. The bytes above
+  include them all.
+- **At build time only:** `rustc_version`, `semver` and `version_check`, and
+  on Windows `curve25519-dalek-derive` too. None reaches the executable.
+
+`windows-registry`, which the same comparison also lists on Windows, is
+T059's, recorded in `docs/measurements/default-browser-registration.md`.
+
 ## Processor time
 
 A release build with the workspace's size-optimised profile, on this change's
