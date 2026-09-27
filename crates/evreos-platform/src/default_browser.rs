@@ -60,7 +60,8 @@ pub struct Application<'a> {
 pub enum InvalidApplication {
     /// The name is empty, or holds a control character.
     Name,
-    /// The name holds no ASCII letter or digit to derive a key from.
+    /// The name's ASCII letters and digits, from which the key is derived,
+    /// are none, or start with a digit, which a ProgID may not.
     NameWithoutKey,
     /// The key derived from the name is longer than a ProgID allows.
     NameTooLong,
@@ -77,7 +78,7 @@ impl fmt::Display for InvalidApplication {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
             Self::Name => "the name is empty or holds a control character",
-            Self::NameWithoutKey => "the name holds no ASCII letter or digit",
+            Self::NameWithoutKey => "the name yields no key that starts with an ASCII letter",
             Self::NameTooLong => "the key derived from the name is too long",
             Self::Description => "the description is empty or holds a control character",
             Self::Executable => "the executable is not a plain absolute path",
@@ -115,9 +116,10 @@ pub const REGISTERED_APPLICATIONS: &str = r"Software\RegisteredApplications";
 
 /// The longest a ProgID may be, in characters.
 const PROGID_MAX: usize = 39;
-/// The suffixes this module appends to the key to name its two ProgIDs.
-const HTML_SUFFIX: &str = "HTML";
-const URL_SUFFIX: &str = "URL";
+/// The suffixes this module appends to the key to name its two ProgIDs, in
+/// the `Application.Component` form ProgIDs take.
+const HTML_SUFFIX: &str = ".HTML";
+const URL_SUFFIX: &str = ".URL";
 
 /// One string value [`register`] writes.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -138,7 +140,8 @@ pub struct Registration {
     /// `ApplicationName` among its capabilities.
     pub name: String,
     /// The name the registration's keys are filed under: the product name's
-    /// ASCII letters and digits, in order.
+    /// ASCII letters and digits, in order. Two names that differ only in
+    /// other characters share it, and so share one registration.
     pub key: String,
     /// Every value written, in the order [`register`] writes them.
     pub values: Vec<Value>,
@@ -157,7 +160,7 @@ impl Registration {
             .chars()
             .filter(char::is_ascii_alphanumeric)
             .collect();
-        if key.is_empty() {
+        if !key.starts_with(|ch: char| ch.is_ascii_alphabetic()) {
             return Err(InvalidApplication::NameWithoutKey);
         }
         if key.len() + HTML_SUFFIX.len().max(URL_SUFFIX.len()) > PROGID_MAX {

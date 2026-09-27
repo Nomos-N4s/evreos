@@ -137,22 +137,22 @@ fn registering_writes_the_browser_entry_and_its_capabilities() {
         (
             &format!(r"{CAPABILITIES}\FileAssociations"),
             ".htm",
-            "SampleBrowserHTML",
+            "SampleBrowser.HTML",
         ),
         (
             &format!(r"{CAPABILITIES}\FileAssociations"),
             ".html",
-            "SampleBrowserHTML",
+            "SampleBrowser.HTML",
         ),
         (
             &format!(r"{CAPABILITIES}\URLAssociations"),
             "http",
-            "SampleBrowserURL",
+            "SampleBrowser.URL",
         ),
         (
             &format!(r"{CAPABILITIES}\URLAssociations"),
             "https",
-            "SampleBrowserURL",
+            "SampleBrowser.URL",
         ),
         (
             &format!(r"{CAPABILITIES}\StartMenu"),
@@ -161,18 +161,22 @@ fn registering_writes_the_browser_entry_and_its_capabilities() {
         ),
         (&format!(r"{CLIENT}\DefaultIcon"), "", &icon),
         (&format!(r"{CLIENT}\shell\open\command"), "", exe),
-        (r"Software\Classes\SampleBrowserHTML", "", "Sample Browser"),
-        (r"Software\Classes\SampleBrowserHTML\DefaultIcon", "", &icon),
+        (r"Software\Classes\SampleBrowser.HTML", "", "Sample Browser"),
         (
-            r"Software\Classes\SampleBrowserHTML\shell\open\command",
+            r"Software\Classes\SampleBrowser.HTML\DefaultIcon",
+            "",
+            &icon,
+        ),
+        (
+            r"Software\Classes\SampleBrowser.HTML\shell\open\command",
             "",
             &open,
         ),
-        (r"Software\Classes\SampleBrowserURL", "", "Sample Browser"),
-        (r"Software\Classes\SampleBrowserURL", "URL Protocol", ""),
-        (r"Software\Classes\SampleBrowserURL\DefaultIcon", "", &icon),
+        (r"Software\Classes\SampleBrowser.URL", "", "Sample Browser"),
+        (r"Software\Classes\SampleBrowser.URL", "URL Protocol", ""),
+        (r"Software\Classes\SampleBrowser.URL\DefaultIcon", "", &icon),
         (
-            r"Software\Classes\SampleBrowserURL\shell\open\command",
+            r"Software\Classes\SampleBrowser.URL\shell\open\command",
             "",
             &open,
         ),
@@ -211,8 +215,8 @@ fn unregistering_removes_every_key_and_value_and_nothing_else() {
 
     for key in [
         CLIENT,
-        r"Software\Classes\SampleBrowserHTML",
-        r"Software\Classes\SampleBrowserURL",
+        r"Software\Classes\SampleBrowser.HTML",
+        r"Software\Classes\SampleBrowser.URL",
     ] {
         assert!(!registry.has_key(key), "{key} survived the uninstall");
     }
@@ -261,8 +265,8 @@ fn keys_and_progids_come_from_the_name_alone() {
         registration.owned_keys,
         [
             r"Software\Clients\StartMenuInternet\ncodeBrowser2",
-            r"Software\Classes\ncodeBrowser2HTML",
-            r"Software\Classes\ncodeBrowser2URL",
+            r"Software\Classes\ncodeBrowser2.HTML",
+            r"Software\Classes\ncodeBrowser2.URL",
         ]
     );
     // The name is still shown as given.
@@ -271,7 +275,7 @@ fn keys_and_progids_come_from_the_name_alone() {
 
 #[test]
 fn an_application_that_cannot_be_registered_writes_nothing() {
-    let long = "x".repeat(36);
+    let long = "x".repeat(35);
     let cases: &[(Application<'_>, InvalidApplication)] = &[
         (Application { name: "", ..APP }, InvalidApplication::Name),
         (
@@ -280,6 +284,13 @@ fn an_application_that_cannot_be_registered_writes_nothing() {
                 ..APP
             },
             InvalidApplication::Name,
+        ),
+        (
+            Application {
+                name: "7 Browser",
+                ..APP
+            },
+            InvalidApplication::NameWithoutKey,
         ),
         (
             Application {
@@ -378,8 +389,8 @@ fn an_application_that_cannot_be_registered_writes_nothing() {
         assert_eq!(registry.writes, 0, "{app:?}");
         assert!(unregister(&mut registry, app).is_err(), "{app:?}");
     }
-    // The longest name that fits: 35 characters and a four-letter suffix.
-    let longest = "x".repeat(35);
+    // The longest name that fits: 34 characters and a five-character suffix.
+    let longest = "x".repeat(34);
     Registration::of(&Application {
         name: &longest,
         ..APP
@@ -504,8 +515,8 @@ fn a_removal_that_fails_does_not_stop_the_others() {
     assert_eq!(error.to_string(), "removal refused");
     assert!(registry.has_key(CLIENT));
     for key in [
-        r"Software\Classes\SampleBrowserHTML",
-        r"Software\Classes\SampleBrowserURL",
+        r"Software\Classes\SampleBrowser.HTML",
+        r"Software\Classes\SampleBrowser.URL",
     ] {
         assert!(!registry.has_key(key), "{key} was left behind");
     }
