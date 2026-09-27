@@ -358,6 +358,8 @@ CAUGHT = (
     ("high-resolution timing correlator", "systemUptime",
      "let up = NSProcessInfo::processInfo().systemUptime();\n"),
     ("processor model or count", "processorCount",
+     "let cores = unsafe { KeQueryMaximumProcessorCount() };\n"),
+    ("processor model or count", "processorCount",
      "let cores = unsafe { GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) };\n"),
     ("processor model or count", "processorCount",
      "let cores = NSProcessInfo::processInfo().activeProcessorCount();\n"),
@@ -367,6 +369,32 @@ for category, name, body in CAUGHT:
     problems = tree(with_rust(body))[0]
     report(f"a read of {name} fails as a {category} source",
            mentions(problems, "crates/x/src/probe.rs:1", category, repr(name)))
+
+# Every source the table lists, each in a file of its own and spelled by its
+# name where the name is a spelling the pattern takes, so an entry whose
+# pattern no longer matches fails here even where CAUGHT has no case.
+SPELLINGS = {
+    "/dev/disk/by-": "/dev/disk/by-uuid",
+    "gdk_screen": "gdk_screen_get_width",
+    "gdk_monitor": "gdk_monitor_get_geometry",
+    "screen.": "screen.width",
+    "CTFontManagerCopyAvailable": "CTFontManagerCopyAvailableFontFamilyNames",
+    "CFTimeZoneCopy": "CFTimeZoneCopySystem",
+    "_SC_NPROCESSORS": "_SC_NPROCESSORS_ONLN",
+}
+listed = {}
+for category, entries in check.SOURCES.items():
+    for name, _ in entries:
+        where = f"crates/x/src/every/source_{len(listed)}.rs"
+        listed[where] = (category, name)
+problems = tree(passing_tree({
+    where: f'const PROBE: &str = "{SPELLINGS.get(name, name)}";\n'
+    for where, (_, name) in listed.items()
+}))[0]
+missed = [name for where, (category, name) in listed.items()
+          if not mentions(problems, f"{where}:1", category, repr(name))]
+report(f"every source the table lists fails on a spelling of its own {missed or ''}",
+       not missed)
 
 problems = tree(with_rust('let id = read("/ETC/MACHINE-ID");\nlet g = "machineguid";\n'))[0]
 report("a source spelled in another case is the same source",
@@ -806,6 +834,22 @@ for suffix in (".htm", ".cjs", ".mts", ".cts"):
 def with_manifest(tail):
     return passing_tree({"crates/x/Cargo.toml": CLEAN_MANIFEST + tail})
 
+
+# Every crate refused, written out here rather than read from the check, so a
+# name misspelt in its table fails.
+REFUSED = (
+    "machine-uid", "machineid-rs", "wmi", "smbios-lib", "hostname",
+    "gethostname", "whoami", "mac_address", "get_if_addrs", "if-addrs",
+    "local-ip-address", "network-interface", "pnet_datalink", "pnet", "netdev",
+    "default-net", "display-info", "font-kit", "fontdb", "iana-time-zone",
+    "sysinfo", "sys-info", "systemstat", "heim", "raw-cpuid", "num_cpus",
+)
+problems = tree(with_manifest("".join(f'{crate} = "1"\n' for crate in REFUSED)))[0]
+missed = [crate for crate in REFUSED
+          if not mentions(problems, "crates/x/Cargo.toml", repr(crate))]
+report(f"every crate refused fails as a dependency {missed or ''}", not missed)
+report("...and the check refuses no crate this list leaves out",
+       set(REFUSED) == set(check.DEPENDENCY_SOURCES))
 
 problems = tree(with_manifest('sysinfo = "0.30"\n'))[0]
 report("a direct dependency on sysinfo fails",
