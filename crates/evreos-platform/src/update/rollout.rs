@@ -64,7 +64,25 @@ impl RolloutDraw {
         let partial = Self::write_partial(path, draw)?;
         let kept = Self::keep(path, &partial, draw);
         let _ = fs::remove_file(&partial);
+        if kept.is_ok() {
+            Self::sync_directory(path);
+        }
         kept
+    }
+
+    /// Flushes the directory holding `path` to the disk, so that the name a
+    /// new draw was just kept under survives a power loss, and the install
+    /// does not draw again after one. It is done on Unix alone, where the
+    /// standard library opens a directory to flush it; elsewhere the file
+    /// system's own journal is relied on. A failure here is not the draw's:
+    /// the value is kept either way.
+    fn sync_directory(path: &Path) {
+        if !cfg!(unix) {
+            return;
+        }
+        if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
+            let _ = fs::File::open(dir).and_then(|dir| dir.sync_all());
+        }
     }
 
     /// Keeps `draw`, written at `partial`, at `path`, and returns the value
