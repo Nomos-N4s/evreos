@@ -110,7 +110,10 @@ constrains further.
 - **`adblock`** — the native matching engine on tier 1 and the
 content-blocking conversion for tier 2's compiled rule lists.
 - **`ed25519-dalek`**, used with strict verification, for FR-017 and FR-019a
-signatures over a fixed-layout, length-prefixed, domain-separated preimage.
+signatures over a fixed-layout, length-prefixed, domain-separated preimage, and
+for FR-014's signed update manifest in the same form, with `sha2` for the
+update artefact's digest and `getrandom` for the rollout value drawn on the
+machine.
 - **An OHTTP-over-HPKE client** for FR-039b, with the key configuration compiled
 into the release rather than fetched.
 - **A localisation format for FR-035** — a plain keyed table, one catalogue per
