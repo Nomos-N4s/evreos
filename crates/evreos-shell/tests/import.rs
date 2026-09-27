@@ -1086,7 +1086,27 @@ fn denied_in(manifest: &str) -> Vec<String> {
             denied.push(name);
         }
     };
-    for line in manifest.lines().map(str::trim) {
+    for line in manifest.lines() {
+        // A comment runs from a `#` outside a string to the end of the line,
+        // after a header as after a key.
+        let mut quote = None;
+        let end = line
+            .char_indices()
+            .find(|&(_, ch)| match quote {
+                Some(open) => {
+                    if ch == open {
+                        quote = None;
+                    }
+                    false
+                }
+                None if ch == '"' || ch == '\'' => {
+                    quote = Some(ch);
+                    false
+                }
+                None => ch == '#',
+            })
+            .map_or(line.len(), |(at, _)| at);
+        let line = line[..end].trim();
         if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
             let header = header.trim();
             let table = header.strip_prefix("target.").map_or(header, |rest| {
@@ -1101,7 +1121,7 @@ fn denied_in(manifest: &str) -> Vec<String> {
             if let Some(name) = table.strip_prefix("dependencies.") {
                 deny(name);
             }
-        } else if in_dependencies && !line.starts_with('#') {
+        } else if in_dependencies {
             if let Some((key, _)) = line.split_once('=') {
                 deny(key.split('.').next().unwrap_or(""));
             }
@@ -1115,14 +1135,22 @@ fn each_listed_form_of_dependency_table_is_read() {
     let manifest = "[package]\nname = \"x\"\n\
         [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
         evreos-i18n = { path = \"i\" }\n\
-        [target.'cfg(windows)'.dependencies]\nwindows-sys = \"1\"\n\
+        [target.'cfg(windows)'.dependencies] # the platform's own\nwindows-sys = \"1\"\n\
+        [target.\"cfg(unix)\".dependencies]#x\n# nix = \"1\"\nrustix = \"1\" # \"#\"\n\
         [target.x86_64-unknown-linux-gnu.dependencies]\nlibc = \"0.2\"\n\
         [dependencies.reqwest]\nversion = \"1\"\n\
         [dev-dependencies]\ntrybuild = \"1\"\n\
         [build-dependencies]\ncc = \"1\"\n";
     assert_eq!(
         denied_in(manifest),
-        ["evreos_net", "winit", "windows_sys", "libc", "reqwest"]
+        [
+            "evreos_net",
+            "winit",
+            "windows_sys",
+            "rustix",
+            "libc",
+            "reqwest"
+        ]
     );
 }
 
