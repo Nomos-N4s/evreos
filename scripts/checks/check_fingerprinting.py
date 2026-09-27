@@ -45,6 +45,13 @@ It reads the tree and fails on:
                 classes, the WinRT hardware and system identifiers and the
                 advertising identifier, the device model, the host name, and
                 volume serial numbers and UUIDs.
+    MAC addresses and network characteristics
+                the adapter tables and ioctls that yield a MAC address or the
+                machine's own interface addresses, `/sys/class/net`, Wi-Fi
+                network identity (BSSID and the WLAN and CoreWLAN
+                interfaces), the connection-type interfaces, and
+                `RTCPeerConnection`, which is how script learns local
+                addresses.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -122,6 +129,25 @@ SOURCES = {
         ("blkid", r"blkid"),
         ("DADiskCopyDescription", r"DADiskCopyDescription"),
         ("kDADiskDescriptionVolumeUUIDKey", r"kDADiskDescriptionVolumeUUIDKey"),
+    ),
+    "MAC address or network characteristic": (
+        ("GetAdaptersAddresses", r"GetAdaptersAddresses"),
+        ("GetAdaptersInfo", r"GetAdaptersInfo"),
+        ("GetIfTable", r"GetIfTable2?"),
+        ("SIOCGIFHWADDR", r"SIOCGIFHWADDR"),
+        ("/sys/class/net", r"/sys/class/net"),
+        ("getifaddrs", r"getifaddrs"),
+        ("mac_address", r"mac_address"),
+        ("MacAddress", r"MacAddress"),
+        ("PhysicalAddress", r"PhysicalAddress"),
+        ("GetHostNames", r"GetHostNames"),
+        ("NetworkInformation", r"NetworkInformation"),
+        ("navigator.connection", r"navigator\.connection"),
+        ("RTCPeerConnection", r"RTCPeerConnection"),
+        ("WlanQueryInterface", r"WlanQueryInterface"),
+        ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
+        ("CWWiFiClient", r"CWWiFiClient"),
+        ("bssid", r"bssid"),
     ),
 }
 

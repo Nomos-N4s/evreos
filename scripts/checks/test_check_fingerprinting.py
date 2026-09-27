@@ -141,6 +141,10 @@ CAUGHT = (
      'let key = "IOPlatformUUID";\n'),
     ("machine and volume identifier", "GetVolumeInformation",
      "unsafe { GetVolumeInformationW(root, None, Some(&mut serial), None, None, None) };\n"),
+    ("MAC address or network characteristic", "GetAdaptersAddresses",
+     "let adapters = GetAdaptersAddresses(AF_UNSPEC, 0, None, buffer, &mut size);\n"),
+    ("MAC address or network characteristic", "/sys/class/net",
+     'let mac = read("/sys/class/net/eth0/address");\n'),
 )
 
 for category, name, body in CAUGHT:
