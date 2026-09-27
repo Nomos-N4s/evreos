@@ -710,10 +710,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     Returns (problems, files read, allowlisted uses): the second a sorted
     list of the repository-relative POSIX paths the SOURCE and DEPENDENCY
     clauses read, the third how many allowlist entries answered a use. An
-    empty `problems` is a pass -- unless nothing was read, which raises
-    CheckError instead: a check over nothing is not a pass, and it is not a
-    breach of FR-036a either, so it must not exit 1 as one. A root that is not
-    a directory raises the same.
+    empty `problems` is a pass. Nothing read raises CheckError instead,
+    whatever else was found: a check over nothing is not a pass, and it is
+    not a breach of FR-036a either, so it must not exit 1 as one -- not even
+    when every allowlist entry, naming files this tree does not hold, has gone
+    stale in it. A root that is not a directory raises the same.
     """
     root = Path(root).resolve()
     if not root.is_dir():
@@ -826,6 +827,12 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         else:
             scan_whole(resolved, where, "text")
 
+    if not read:
+        raise CheckError(
+            f"{root}: no Rust source, script or manifest; a check over nothing "
+            "is not a pass"
+        )
+
     for (where, name), number in sorted(allowed.items(), key=lambda item: item[1]):
         if (where, name) not in used:
             problems.append(
@@ -833,12 +840,6 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 "no use of that source is in that file, and an entry records a "
                 "use taken, never one granted ahead of it"
             )
-
-    if not problems and not read:
-        raise CheckError(
-            f"{root}: no Rust source, script or manifest; a check over nothing "
-            "is not a pass"
-        )
     return problems, sorted(read), len(used)
 
 

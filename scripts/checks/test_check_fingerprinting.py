@@ -616,6 +616,15 @@ with tempfile.TemporaryDirectory() as tmp:
         report(f"links and unreadable files end in a verdict, not {error!r}", False)
 
 try:
+    tree({"README.md": "nothing this check reads\n"},
+         allowlist="crates/evreos-shell/src/history_time.rs TZ\n")
+    report("a tree with nothing to read raises even when every entry is stale in it",
+           False)
+except check.CheckError:
+    report("a tree with nothing to read raises even when every entry is stale in it",
+           True)
+
+try:
     tree({"README.md": "nothing this check reads\n"})
     report("a tree with nothing to read raises rather than passing", False)
 except check.CheckError:
