@@ -241,12 +241,12 @@ the same stopped profiles after review round 14, reads the same counts.
   second copy of its strings' and numbers' text, at most its own size, and
   a few dozen bytes for each value in it; a document may hold at most four
   million values, a few hundred megabytes (271 MB at the bound, measured).
-  A copy
-  refused for an open write lets go of what it held before it reads the
-  files again, one at a time, to fingerprint them. A `History` or `places.sqlite` runs to tens of megabytes on a
-  profile used for years. SC-004's condition — ten tabs, sampled through a
-  soak — does not include an import, so no entry measures this; it is
-  recorded so the harness that measures SC-004 does not meet it unannounced.
+  A copy refused for an open write lets go of what it held before it reads
+  the files again, one at a time, to fingerprint them. A `History` or
+  `places.sqlite` runs to tens of megabytes on a profile used for years.
+  SC-004's condition — ten tabs, sampled through a soak — does not include
+  an import, so no entry measures this; it is recorded so the harness that
+  measures SC-004 does not meet it unannounced.
   One interleaving escapes the verification: a rollback-journal transaction
   that starts after the first journal check, ends before the last, and
   writes pages both ahead of the two reads and behind them yields two
@@ -271,13 +271,13 @@ the same stopped profiles after review round 14, reads the same counts.
 - **The read runs on the worker pool; the write runs where the stores live.**
   With the browsers stopped, and the reader as this change ships it —
   three runs each through `examples/import_timing.rs`, re-measured after
-  review round 14 on the pull request, and
-  varying by tens of percent from one run to the next —
-  reading took 2–21 ms for the live profiles here, once each file was in
-  the file cache (in the round-4 runs, the first read of each Edge profile,
-  from a cold cache, took 278–357 ms), and 35–36 ms for a synthetic profile of 20,000
-  bookmarks in 400 folders; against a running browser a read retries, and
-  the slowest live trial in the tables above took 550 ms. Writing, which
+  review round 14 on the pull request, and varying by tens of percent from
+  one run to the next — reading took 2–21 ms for the live profiles here,
+  once each file was in the file cache (in the round-4 runs, the first read
+  of each Edge profile, from a cold cache, took 278–357 ms), and 35–36 ms
+  for a synthetic profile of 20,000 bookmarks in 400 folders; against a
+  running browser a read retries, and the slowest live trial in the tables
+  above took 550 ms. Writing, which
   happens on the thread that owns the stores, took 1–13 ms for the live
   profiles and 25–40 ms for the 20,000 bookmarks. Inside the import's batch
   a new row finds its parent and position from an index built when the
