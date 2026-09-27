@@ -572,9 +572,9 @@ BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
 # literals blanked, so a literal that quotes one brings nothing, and ends
 # where BROUGHT_PATH, read from the code with literals kept, begins.
 BRINGS = (
-    ("rust", re.compile(r"\binclude!\s*\(")),
+    ("rust", re.compile(r"\binclude!\s*[(\[{]")),
     ("rust", re.compile(r"#\s*\[\s*path\s*=")),
-    ("text", re.compile(r"\binclude_str!\s*\(")),
+    ("text", re.compile(r"\binclude_str!\s*[(\[{]")),
 )
 BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
 

@@ -474,6 +474,17 @@ report("...and one embedded through include_str! is read whole",
 report("...while one named only in a comment is not read",
        "crates/x/src/commented.in" not in read)
 
+problems = tree(passing_tree({
+    "crates/x/src/probe.rs": (
+        'include!["generated.in"];\nconst PROBE: &str = include_str!{"probe.js.txt"};\n'
+    ),
+    "crates/x/src/generated.in": "let t = mach_absolute_time();\n",
+    "crates/x/src/probe.js.txt": "send(screen.width);\n",
+}))[0]
+report("a macro called with brackets or braces brings its file in too",
+       mentions(problems, "crates/x/src/generated.in:1", "'mach_absolute_time'")
+       and mentions(problems, "crates/x/src/probe.js.txt:1", "'screen.'"))
+
 problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported, on the line that brings it",
        mentions(problems, "probe.rs:2", "outside.in", "outside the tree"))
