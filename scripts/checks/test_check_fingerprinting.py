@@ -539,8 +539,10 @@ problems, read = tree(passing_tree({
         'const PROBE: &str = include_str!("probe.js.txt");\n'
         '// include!("commented.in");\n'
     ),
-    "crates/x/src/probe_impl.txt": 'let g = "MachineGuid";\n',
-    "crates/x/src/generated.in": "let t = mach_absolute_time();\n",
+    "crates/x/src/probe_impl.txt": (
+        'let g = "MachineGuid";\n// let n = gethostname();\nlet w = self.screen.width;\n'
+    ),
+    "crates/x/src/generated.in": "let t = mach_absolute_time();\n/* uname() */\n",
     "crates/x/src/probe.js.txt": "send(screen.width);\n",
     "crates/x/src/commented.in": "let t = mach_absolute_time();\n",
 }))[:2]
@@ -548,6 +550,10 @@ report("a file compiled in through #[path] is read as Rust whatever its suffix",
        mentions(problems, "crates/x/src/probe_impl.txt:1", "'MachineGuid'"))
 report("...and so is one compiled in through include!",
        mentions(problems, "crates/x/src/generated.in:1", "'mach_absolute_time'"))
+report("...as Rust: a comment or a field access in either is not a read",
+       not mentions(problems, "crates/x/src/probe_impl.txt:2")
+       and not mentions(problems, "crates/x/src/probe_impl.txt:3")
+       and not mentions(problems, "crates/x/src/generated.in:2"))
 report("...and one embedded through include_str! is read whole",
        mentions(problems, "crates/x/src/probe.js.txt:1", "'screen.'"))
 report("...while one named only in a comment is not read",
