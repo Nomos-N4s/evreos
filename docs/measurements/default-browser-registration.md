@@ -2,8 +2,15 @@
 
 - **Task**: T059 (`specs/001-evreos-v1/tasks.md`) / CAR-116
 - **Date**: 2026-09-27
-- **Status**: measured on a cross-compiled tier-1 build; the tier-1 figure on the
-  pinned runner is owed
+- **Status**: Evidence from a build cross-compiled on Linux, not yet the
+  tier-1 figure. `specs/001-evreos-v1/tasks.md` orders every measurement
+  behind the reference machines T013 procures, with decisions/0004 as the one
+  exception, for T015 and T016 alone, and this build's target is not the
+  tier-1 one. The figures below are therefore recorded as the evidence the
+  choice of bindings rests on, and as the baseline the tier-1 build will be
+  compared against. They become the tier-1 figure when that build confirms
+  them on the tier-1 pinned runner, or sooner only if a founder decision
+  admits them.
 
 ## The question
 
@@ -93,6 +100,13 @@ no resident memory beyond the call and nothing on the chrome's input path.
   `x86_64-pc-windows-msvc`.
 - The marginal cost inside the shell itself, measured when a surface first
   reaches `evreos-platform`.
+- On Windows 10 and Windows 11, with a build that registers for real rather
+  than under a scratch key: whether the system's default-apps page lists the
+  browser after `register`, without the `SHChangeNotify` call Microsoft's
+  guidance has a browser make, which `crates/evreos-platform` does not make
+  because it is reachable only as an `unsafe` function; and whether
+  `open_settings` opens that page from a visible window. No automated test
+  can see the page.
 
 ## Reproducing
 
