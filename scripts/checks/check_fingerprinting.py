@@ -57,8 +57,11 @@ It reads the tree and fails on:
                 platform UUID and serial number, the SMBIOS and DMI tables
                 and the serial fields read from them, the WMI hardware
                 classes, the WinRT hardware and system identifiers and the
-                advertising identifier, the device model, the host name, and
-                volume serial numbers and UUIDs.
+                advertising identifier, the device model, the host name --
+                through the platform APIs and through the Windows
+                `COMPUTERNAME`, `USERDOMAIN` and `LOGONSERVER` variables and
+                the POSIX `HOSTNAME` one -- and volume serial numbers and
+                UUIDs.
     MAC addresses and network characteristics
                 the adapter tables and ioctls that yield a MAC address or the
                 machine's own interface addresses, `/sys/class/net`, Wi-Fi
@@ -94,7 +97,9 @@ It reads the tree and fails on:
                 the processor's brand string, CPUID, the registry and sysctl
                 keys that name the processor, `/proc/cpuinfo`, and the
                 processor count -- `available_parallelism`, `num_cpus`,
-                `hardwareConcurrency` and their platform equivalents. The
+                `hardwareConcurrency` and their platform equivalents -- and
+                the Windows `PROCESSOR_IDENTIFIER`, `PROCESSOR_REVISION`,
+                `PROCESSOR_LEVEL` and `NUMBER_OF_PROCESSORS` variables. The
                 task names the model; the count is read here too because
                 FR-036a binds on the characteristic, not on the one field a
                 crash reporter happens to label it with, and the count is the
@@ -230,6 +235,12 @@ SOURCES = {
         ("GetComputerName", r"GetComputerName(?:Ex)?[AW]?"),
         ("hostname::get", r"hostname::get"),
         ("/etc/hostname", r"/etc/hostname"),
+        # Environment variables, in the case Windows and POSIX spell them: a
+        # host name is read as often from the environment as from an API.
+        ("COMPUTERNAME", r"(?-i:COMPUTERNAME)"),
+        ("USERDOMAIN", r"(?-i:USERDOMAIN)"),
+        ("LOGONSERVER", r"(?-i:LOGONSERVER)"),
+        ("HOSTNAME", r"(?-i:HOSTNAME)"),
         ("GetVolumeInformation", r"GetVolumeInformation(?:ByHandle)?[AW]?"),
         ("VolumeSerialNumber", r"VolumeSerialNumber"),
         ("/dev/disk/by-", r"/dev/disk/by-(?:uuid|id|partuuid|label)"),
@@ -366,6 +377,10 @@ SOURCES = {
         ("hw.logicalcpu", r"hw\.logicalcpu"),
         ("/sys/devices/system/cpu", r"/sys/devices/system/cpu"),
         ("hardwareConcurrency", r"hardwareConcurrency"),
+        ("PROCESSOR_IDENTIFIER", r"(?-i:PROCESSOR_IDENTIFIER)"),
+        ("PROCESSOR_REVISION", r"(?-i:PROCESSOR_REVISION)"),
+        ("PROCESSOR_LEVEL", r"(?-i:PROCESSOR_LEVEL)"),
+        ("NUMBER_OF_PROCESSORS", r"(?-i:NUMBER_OF_PROCESSORS)"),
         ("processorCount", r"(?:active)?processorCount"),
     ),
     "high-resolution timing correlator": (

@@ -160,6 +160,14 @@ CAUGHT = (
      'let id = std::fs::read_to_string("/etc/machine-id");\n'),
     ("machine and volume identifier", "IOPlatformUUID",
      'let key = "IOPlatformUUID";\n'),
+    ("machine and volume identifier", "COMPUTERNAME",
+     'let host = std::env::var("COMPUTERNAME");\n'),
+    ("machine and volume identifier", "USERDOMAIN",
+     'let domain = std::env::var("USERDOMAIN");\n'),
+    ("machine and volume identifier", "LOGONSERVER",
+     'let server = std::env::var("LOGONSERVER");\n'),
+    ("machine and volume identifier", "HOSTNAME",
+     'let host = std::env::var("HOSTNAME");\n'),
     ("machine and volume identifier", "GetVolumeInformation",
      "unsafe { GetVolumeInformationW(root, None, Some(&mut serial), None, None, None) };\n"),
     ("MAC address or network characteristic", "GetAdaptersAddresses",
@@ -212,6 +220,14 @@ CAUGHT = (
      "let cores = std::thread::available_parallelism();\n"),
     ("processor model or count", "brand_string",
      'let model = sysctl("machdep.cpu.brand_string");\n'),
+    ("processor model or count", "PROCESSOR_IDENTIFIER",
+     'let model = std::env::var("PROCESSOR_IDENTIFIER");\n'),
+    ("processor model or count", "NUMBER_OF_PROCESSORS",
+     'let cores = std::env::var("NUMBER_OF_PROCESSORS");\n'),
+    ("processor model or count", "PROCESSOR_REVISION",
+     'let stepping = std::env::var_os("PROCESSOR_REVISION");\n'),
+    ("processor model or count", "PROCESSOR_LEVEL",
+     'let family = std::env::var_os("PROCESSOR_LEVEL");\n'),
     ("high-resolution timing correlator", "rdtsc",
      "let ticks = unsafe { core::arch::x86_64::_rdtsc() };\n"),
     ("high-resolution timing correlator", "QueryPerformanceFrequency",
@@ -238,6 +254,9 @@ problems = tree(with_rust(
     'let path = user_data.join("Local State");\nout.push_str("# Local Bookmark Store");\n'
 ))[0]
 report("the word Local in ordinary prose is not chrono's Local", problems == [])
+
+problems = tree(with_rust('let hostname = url.host_str();\nlet computername = 1;\n'))[0]
+report("a variable named for a host name is not the environment variable", problems == [])
 
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
