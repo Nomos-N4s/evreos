@@ -365,7 +365,7 @@ mod decide {
 
     const NOW: u64 = 3_000_000_000;
 
-    fn draw(value: u32) -> RolloutDraw {
+    pub(super) fn draw(value: u32) -> RolloutDraw {
         // Each call its own directory: tests run at once, and two drawing the
         // same value must not remove each other's file.
         static CALLS: AtomicU32 = AtomicU32::new(0);
@@ -410,7 +410,7 @@ mod decide {
         // the one drawing 250,000 is not.
         let fields = Fields::default();
         match decided(&fields, [1, 2, 2], 249_999).unwrap() {
-            Decision::Offered(manifest) => assert_eq!(manifest.rollout(), 250_000),
+            Decision::Offered(offer) => assert_eq!(offer.manifest().rollout(), 250_000),
             other => panic!("{other:?}"),
         }
         assert_eq!(
@@ -510,40 +510,55 @@ mod artefact {
     use std::io::{self, Read};
 
     use evreos_platform::update::artefact::{ArtefactRefusal, verify};
-    use evreos_platform::update::manifest::VerifiedManifest;
+    use evreos_platform::update::manifest::Version;
+    use evreos_platform::update::{Decision, Installed, Offer, decide};
     use sha2::{Digest, Sha256};
 
+    use super::decide::draw;
     use super::{Fields, key};
 
     const ARTEFACT: &[u8] = b"an installer, standing in for the real one";
 
-    fn manifest_for(bytes: &[u8]) -> VerifiedManifest {
+    /// The offer of an update whose artefact is `bytes`, to an install of
+    /// an older version inside its rollout.
+    fn offer_for(bytes: &[u8]) -> Offer {
         let fields = Fields {
             size: bytes.len() as u64,
             digest: Sha256::digest(bytes).into(),
             ..Fields::default()
         };
-        VerifiedManifest::verify(&fields.signed(), &key()).unwrap()
+        let installed = Installed {
+            platform: "windows-x86_64",
+            version: Version {
+                major: 1,
+                minor: 0,
+                patch: 0,
+            },
+        };
+        match decide(&fields.signed(), &key(), installed, 0, draw(0)) {
+            Ok(Decision::Offered(offer)) => offer,
+            other => panic!("not offered: {other:?}"),
+        }
     }
 
     #[test]
     fn the_published_artefact_verifies() {
-        let manifest = manifest_for(ARTEFACT);
-        let verified = verify(&manifest, ARTEFACT).unwrap();
-        assert_eq!(verified.version(), manifest.version());
+        let offer = offer_for(ARTEFACT);
+        let verified = verify(&offer, ARTEFACT).unwrap();
+        assert_eq!(verified.version(), offer.manifest().version());
         // Read a byte at a time, it verifies the same.
         let one_at_a_time = io::BufReader::with_capacity(1, ARTEFACT);
-        verify(&manifest, one_at_a_time).unwrap();
+        verify(&offer, one_at_a_time).unwrap();
     }
 
     #[test]
     fn any_changed_byte_is_refused() {
-        let manifest = manifest_for(ARTEFACT);
+        let offer = offer_for(ARTEFACT);
         for index in 0..ARTEFACT.len() {
             let mut changed = ARTEFACT.to_vec();
             changed[index] ^= 0x01;
             assert!(matches!(
-                verify(&manifest, changed.as_slice()),
+                verify(&offer, changed.as_slice()),
                 Err(ArtefactRefusal::Digest)
             ));
         }
@@ -551,15 +566,15 @@ mod artefact {
 
     #[test]
     fn a_shorter_or_longer_artefact_is_refused() {
-        let manifest = manifest_for(ARTEFACT);
+        let offer = offer_for(ARTEFACT);
         assert!(matches!(
-            verify(&manifest, &ARTEFACT[..ARTEFACT.len() - 1]),
+            verify(&offer, &ARTEFACT[..ARTEFACT.len() - 1]),
             Err(ArtefactRefusal::Size)
         ));
         let mut longer = ARTEFACT.to_vec();
         longer.push(0);
         assert!(matches!(
-            verify(&manifest, longer.as_slice()),
+            verify(&offer, longer.as_slice()),
             Err(ArtefactRefusal::Size)
         ));
     }
@@ -580,10 +595,10 @@ mod artefact {
                 Ok(buffer.len())
             }
         }
-        let manifest = manifest_for(ARTEFACT);
+        let offer = offer_for(ARTEFACT);
         let mut endless = Endless(0);
         assert!(matches!(
-            verify(&manifest, &mut endless),
+            verify(&offer, &mut endless),
             Err(ArtefactRefusal::Size)
         ));
         assert!(endless.0 <= 64 * 1024, "read {} bytes", endless.0);
@@ -598,7 +613,7 @@ mod artefact {
             }
         }
         assert!(matches!(
-            verify(&manifest_for(ARTEFACT), Failing),
+            verify(&offer_for(ARTEFACT), Failing),
             Err(ArtefactRefusal::Read(_))
         ));
     }

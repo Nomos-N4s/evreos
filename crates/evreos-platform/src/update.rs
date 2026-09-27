@@ -67,7 +67,22 @@ pub enum Decision {
     NotIncluded,
     /// The manifest names a newer version this install is offered. Its
     /// artefact is not applied until it matches the manifest.
-    Offered(VerifiedManifest),
+    Offered(Offer),
+}
+
+/// A verified manifest that passed every check in [`decide`] and is offered
+/// to this install. Only `decide` makes one, and [`artefact::verify`] takes
+/// nothing else, so an artefact is never checked against a manifest that
+/// was refused, is for another platform, names an older version, or is
+/// rolled out to installs this one is not among.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Offer(VerifiedManifest);
+
+impl Offer {
+    /// The manifest offered.
+    pub fn manifest(&self) -> &VerifiedManifest {
+        &self.0
+    }
 }
 
 /// Why a manifest was refused, and nothing in it acted on.
@@ -120,7 +135,7 @@ pub fn decide(
         std::cmp::Ordering::Less => Err(CheckRefusal::Downgrade),
         std::cmp::Ordering::Equal => Ok(Decision::UpToDate),
         std::cmp::Ordering::Greater if draw.included(manifest.rollout()) => {
-            Ok(Decision::Offered(manifest))
+            Ok(Decision::Offered(Offer(manifest)))
         }
         std::cmp::Ordering::Greater => Ok(Decision::NotIncluded),
     }

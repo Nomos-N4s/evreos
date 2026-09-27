@@ -1,14 +1,15 @@
-//! An offered update's artefact, checked against its verified manifest
-//! before anything applies it.
+//! An offered update's artefact, checked against its manifest before
+//! anything applies it.
 
 use std::fmt;
 use std::io::{self, Read};
 
 use sha2::{Digest, Sha256};
 
-use super::manifest::{VerifiedManifest, Version};
+use super::Offer;
+use super::manifest::Version;
 
-/// An artefact whose length and SHA-256 matched its verified manifest. Only
+/// An artefact whose length and SHA-256 matched its offered manifest. Only
 /// [`verify`] makes one, so holding one means the bytes read were the ones
 /// the manifest's signer published.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -47,17 +48,16 @@ impl fmt::Display for ArtefactRefusal {
 impl std::error::Error for ArtefactRefusal {}
 
 /// Reads the artefact from `reader` to its end and checks its length and
-/// SHA-256 against `manifest`. Reading stops as soon as it passes the
+/// SHA-256 against the manifest `offer` holds, which only a manifest
+/// [`decide`](super::decide) offered to this install can reach. Reading stops as soon as it passes the
 /// manifest's length, so an artefact far longer than stated is not read
 /// whole.
 ///
 /// The check covers the bytes read here. What applies the update must apply
 /// those bytes, from a copy only the updater writes, and not reopen a path
 /// another process could have written to since.
-pub fn verify(
-    manifest: &VerifiedManifest,
-    mut reader: impl Read,
-) -> Result<VerifiedArtefact, ArtefactRefusal> {
+pub fn verify(offer: &Offer, mut reader: impl Read) -> Result<VerifiedArtefact, ArtefactRefusal> {
+    let manifest = offer.manifest();
     let mut hasher = Sha256::new();
     let mut read: u64 = 0;
     let mut buffer = [0u8; 64 * 1024];
