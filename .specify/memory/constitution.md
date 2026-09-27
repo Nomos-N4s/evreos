@@ -1,6 +1,24 @@
 <!--
 Sync Impact Report
-Version change: 1.1.0 → 2.0.0
+Version change: 2.0.0 → 2.1.0
+
+Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Principles
+  expanded:
+  - Classified MINOR. The change is to the Development Workflow, which is not a Core
+    Principle, so MAJOR does not apply. It adds an option: a pull request may be linked to
+    the Linear issue that tracks the work, as well as to a GitHub issue. The Versioning
+    policy names MINOR for guidance materially expanded, and PATCH would understate it,
+    since it changes what a pull request must carry.
+  - What changed: the Development Workflow's first bullet. A pull request is linked to an
+    issue, on GitHub or in Linear. Recorded at `decisions/0008`, which the amendment
+    procedure requires.
+  - What replaces the discipline relaxed, as the amendment procedure asks: nothing is
+    withdrawn. The link stays mandatory for every pull request, and every commit still
+    references its issue, which `scripts/check-commit-hygiene.py` already enforces for
+    GitHub and Linear references alike. What is removed is only the need to open a GitHub
+    issue that duplicates a Linear one.
+  - Follow-on: `CLAUDE.md`'s Workflow section, the pull request template and `README.md`
+    are aligned in the same pull request.
 
 Amendment 1.1.0 → 2.0.0 (2026-09-02), MAJOR — Principle I narrowed by a recorded
   exception:
@@ -280,8 +298,9 @@ of them requires a MAJOR amendment to this constitution:
 
 ## Development Workflow
 
-- Every change reaches `main` through a pull request linked to a GitHub issue. Direct
-  pushes to `main` are prohibited.
+- Every change reaches `main` through a pull request linked to an issue: a GitHub issue,
+  or the Linear issue that tracks the work (`decisions/0008`). Direct pushes to `main`
+  are prohibited.
 - Commits are atomic: exactly one logical change per commit, each standing, building and
   reverting on its own.
 - Every pull request that adds or changes a feature states the byte and millisecond cost
@@ -353,4 +372,4 @@ release blockers, as is any client-side money logic prohibited by Principle V.
 Complexity that appears to conflict with Principle II or Principle III MUST be justified in
 the pull request that introduces it, or removed.
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-02
+**Version**: 2.1.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-27
