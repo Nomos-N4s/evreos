@@ -397,7 +397,7 @@ SOURCES = {
         ("hw.memsize", r"hw\.memsize"),
         ("HW_MEMSIZE", r"HW_MEMSIZE"),
         ("HW_PHYSMEM", r"HW_PHYSMEM"),
-        ("/proc/meminfo", r"/proc/meminfo"),
+        ("/proc/meminfo", r"(?:/proc/)?meminfo"),
         ("sysinfo", r"sysinfo"),
         ("totalram", r"totalram"),
         ("total_memory", r"total_memory"),
@@ -405,7 +405,10 @@ SOURCES = {
         ("deviceMemory", r"deviceMemory"),
     ),
     "processor model or count": (
-        ("/proc/cpuinfo", r"/proc/cpuinfo"),
+        # By path, or by the file's name joined onto /proc: `cpuinfo` and
+        # `meminfo` name nothing else, while `uptime` is matched only as a whole
+        # literal, since a field of that name is ordinary code.
+        ("/proc/cpuinfo", r"(?:/proc/)?cpuinfo"),
         ("cpuid", r"_*cpuid(?:_count)?"),
         ("raw_cpuid", r"raw_cpuid"),
         ("brand_string", r"brand_string"),
@@ -443,7 +446,7 @@ SOURCES = {
         ("QueryInterruptTime", r"Query(?:Unbiased)?InterruptTime(?:Precise)?"),
         ("systemUptime", r"systemUptime"),
         ("GetTickCount", r"GetTickCount(?:64)?"),
-        ("/proc/uptime", r"/proc/uptime"),
+        ("/proc/uptime", r'/proc/uptime|"uptime"'),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
         ("performance.now", r"performance\s*\??\.\s*now"),

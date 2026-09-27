@@ -323,6 +323,19 @@ report("...while an escaped backslash is left as written, with what follows it",
 report("...and so is an escaped line break, so a later read keeps its line",
        mentions(problems, "probe.rs:3", "'MachineGuid'"))
 
+problems = tree(with_rust(
+    'let cpu = read(Path::new("/proc").join("cpuinfo"));\n'
+    'let mem = read(Path::new("/proc").join("meminfo"));\n'
+    'let up = read(Path::new("/proc").join("uptime"));\n'
+))[0]
+report("a /proc file named by joining its name onto /proc is the same read",
+       mentions(problems, "probe.rs:1", "'/proc/cpuinfo'")
+       and mentions(problems, "probe.rs:2", "'/proc/meminfo'")
+       and mentions(problems, "probe.rs:3", "'/proc/uptime'"))
+
+problems = tree(with_rust("let uptime = started.elapsed();\n"))[0]
+report("...while a field named uptime is not", problems == [])
+
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
 
