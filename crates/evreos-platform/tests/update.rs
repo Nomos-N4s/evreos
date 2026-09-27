@@ -682,11 +682,8 @@ mod artefact {
 }
 
 mod check_request {
-    use std::fs;
-
     use evreos_net::{BrandResolved, Endpoint, NonHistory, Purpose};
     use evreos_platform::update::check_request;
-    use evreos_platform::update::rollout::RolloutDraw;
 
     #[test]
     fn the_check_carries_its_purpose_and_endpoint_and_nothing_of_the_install() {
@@ -702,18 +699,11 @@ mod check_request {
         );
         assert_eq!(planned.endpoint(), &endpoint());
 
-        // The install's draw, a distinctive value, appears nowhere in what
-        // the request holds.
-        let dir = std::env::temp_dir().join(format!("evreos-check-{}", std::process::id()));
-        fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("rollout");
-        fs::write(&path, "731529\n").unwrap();
-        let _draw = RolloutDraw::load_or_draw(&path).unwrap();
-        let _ = fs::remove_dir_all(&dir);
-        let held = format!("{planned:?}");
-        assert!(!held.contains("731529"), "{held}");
-        // The request is the same for every install: the same endpoint
-        // plans an equal request whatever the install drew.
+        // Nothing of the install can reach the request: check_request takes
+        // an Endpoint and nothing else, so the compiler, not this test,
+        // keeps the rollout draw out of it. What the test shows is that the
+        // request is the same for every install: the same endpoint plans an
+        // equal request.
         assert_eq!(check_request(endpoint()), planned);
     }
 }
