@@ -1308,10 +1308,10 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
                 }
                 Some(_) => {}
             },
-            // The import writes no file of its own: nothing in it may
-            // write, create,
-            // remove or rename a file, or change one's permissions, mode or
-            // times. A file it wrote could be anything the operating system
+            // The import writes no file itself; its rows reach disk through
+            // the stores alone. Nothing in it may write, create, remove or
+            // rename a file, or change one's permissions, mode or times. A
+            // file it wrote could be anything the operating system
             // treats as code or as a route out, which no refusal of a module
             // could see.
             "remove_file" | "remove_dir" | "remove_dir_all" | "rename" | "create_dir"

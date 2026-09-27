@@ -38,9 +38,10 @@
 //! - it imports nothing by a glob, and names `std`, `core` and `alloc` only as
 //!   the first segment of a plain path, never renamed and never with a group
 //!   directly under them;
-//! - it writes no file but the member's stores, through them, and calls
-//!   nothing of the standard library's that writes, creates, removes or
-//!   renames a file, or changes one's permissions, mode or times;
+//! - it names nothing of the standard library's that writes, creates,
+//!   removes or renames a file, or changes one's permissions, mode or times:
+//!   the only files it writes are the member's own stores, through
+//!   `crate::store`;
 //! - it loads no file but its own five modules, through no `#[path]` and no
 //!   `cfg_attr`, and invokes no macro by `name!` but a short list of the
 //!   standard library's, which no `macro_rules!` in the crate may shadow;
