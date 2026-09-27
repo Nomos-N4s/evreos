@@ -1092,6 +1092,9 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             "path" if punct(i.wrapping_sub(1), '[') => {
                 found.push("a `#[path]` attribute".to_string());
             }
+            // `cfg_attr` applies any attribute it names, `path` included, so
+            // no attribute can be told harmless from its first word.
+            "cfg_attr" => found.push("a `cfg_attr` attribute".to_string()),
             _ => {}
         }
     }
@@ -1136,6 +1139,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { if !some_macro![] {} }", false),
         ("include!(\"../x.rs\");", false),
         ("#[path = \"../x.rs\"] mod x;", true),
+        (
+            "#[cfg_attr(all(), path = \"../outside.rs\")] mod json;",
+            true,
+        ),
+        ("#[cfg_attr(unix, allow(dead_code))] fn f() {}", false),
         ("mod elsewhere;", true),
         ("mod json;", false),
         (
