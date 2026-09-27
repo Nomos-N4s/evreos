@@ -114,6 +114,9 @@ pub trait Registry {
     /// Removes a key with everything below it. A key that does not exist is
     /// not an error.
     fn remove_key(&mut self, key: &str) -> io::Result<()>;
+    /// The string values a key holds, by name. A key that does not exist
+    /// holds none.
+    fn string_values(&self, key: &str) -> io::Result<Vec<(String, String)>>;
     /// Removes one value, leaving its key and the key's other values. A key
     /// or value that does not exist is not an error.
     fn remove_value(&mut self, key: &str, name: &str) -> io::Result<()>;
@@ -155,6 +158,9 @@ pub struct Registration {
     pub values: Vec<Value>,
     /// The keys this registration owns, which [`unregister`] removes whole.
     pub owned_keys: Vec<String>,
+    /// The capabilities key, which the value under
+    /// [`REGISTERED_APPLICATIONS`] points at.
+    pub capabilities: String,
 }
 
 impl Registration {
@@ -231,6 +237,7 @@ impl Registration {
             key,
             values,
             owned_keys: vec![client, html_class, url_class],
+            capabilities,
         })
     }
 }
@@ -267,7 +274,10 @@ pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Resu
             return Err(error);
         }
     }
-    Ok(())
+    // A registration under an earlier name with the same key points at the
+    // same capabilities from a value of its own name, which no longer
+    // matches ApplicationName; only this registration's value may remain.
+    remove_pointers(registry, &registration, Some(&registration.name))
 }
 
 /// Removes what [`register`] wrote for `app`, as an uninstall must.
@@ -283,7 +293,9 @@ fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Resu
     // half removed. Every removal is tried even after one fails, so a
     // failure leaves as little behind as it can, and the first error is
     // the one reported.
-    let mut result = registry.remove_value(REGISTERED_APPLICATIONS, &registration.name);
+    let mut result = registry
+        .remove_value(REGISTERED_APPLICATIONS, &registration.name)
+        .and_then(|()| remove_pointers(registry, registration, None));
     for key in &registration.owned_keys {
         let removed = registry.remove_key(key);
         if result.is_ok() {
@@ -291,6 +303,22 @@ fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Resu
         }
     }
     result
+}
+
+/// Removes every value under [`REGISTERED_APPLICATIONS`] that points at this
+/// registration's capabilities, but the one named `keep`.
+fn remove_pointers(
+    registry: &mut impl Registry,
+    registration: &Registration,
+    keep: Option<&str>,
+) -> io::Result<()> {
+    for (name, data) in registry.string_values(REGISTERED_APPLICATIONS)? {
+        let kept = keep.is_some_and(|keep| keep.eq_ignore_ascii_case(&name));
+        if !kept && data.eq_ignore_ascii_case(&registration.capabilities) {
+            registry.remove_value(REGISTERED_APPLICATIONS, &name)?;
+        }
+    }
+    Ok(())
 }
 
 /// Whether `path` is an absolute Windows path that can sit between quotes on

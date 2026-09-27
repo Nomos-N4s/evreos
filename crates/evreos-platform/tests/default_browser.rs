@@ -70,6 +70,19 @@ impl Registry for Memory {
         Ok(())
     }
 
+    fn string_values(&self, key: &str) -> io::Result<Vec<(String, String)>> {
+        Ok(self
+            .keys
+            .get(&fold(key))
+            .map(|values| {
+                values
+                    .iter()
+                    .map(|(name, value)| (name.clone(), value.clone()))
+                    .collect()
+            })
+            .unwrap_or_default())
+    }
+
     fn remove_key(&mut self, key: &str) -> io::Result<()> {
         if self
             .stuck
@@ -449,6 +462,22 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
         assert!(registry.key_exists(key).unwrap(), "{key}");
     }
 
+    // Re-registered under another name with the same key, only the new
+    // value points at the capabilities; then back again.
+    let renamed = Application {
+        name: "Sample-Browser",
+        ..APP
+    };
+    register(&mut registry, &renamed).unwrap();
+    let registered = root.open(REGISTERED_APPLICATIONS).unwrap();
+    assert!(registered.get_string("Sample Browser").is_err());
+    assert_eq!(
+        registered.get_string("Sample-Browser").unwrap(),
+        registration.capabilities
+    );
+    drop(registered);
+    register(&mut registry, &APP).unwrap();
+
     unregister(&mut registry, &APP).unwrap();
     for key in &registration.owned_keys {
         assert!(root.open(key).is_err(), "{key} survived the uninstall");
@@ -579,4 +608,37 @@ fn a_failed_first_registration_keeps_a_key_it_did_not_create() {
         );
         assert!(registry.has_key(FOREIGN), "failing write {fail_at}");
     }
+}
+
+#[test]
+fn a_renamed_product_leaves_one_value_and_its_removal_leaves_none() {
+    let renamed = Application {
+        name: "Sample-Browser",
+        ..APP
+    };
+    let untouched = with_neighbours();
+    let mut registry = with_neighbours();
+    register(&mut registry, &APP).unwrap();
+    register(&mut registry, &renamed).unwrap();
+
+    // Both names derive the key SampleBrowser, so the second registration
+    // replaces the first, and only its value, which matches its
+    // ApplicationName, points at the capabilities.
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
+        None
+    );
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "Sample-Browser"),
+        Some(CAPABILITIES)
+    );
+    assert_eq!(
+        registry.value(CAPABILITIES, "ApplicationName"),
+        Some("Sample-Browser")
+    );
+
+    // Removed under the earlier name, the registration leaves no value
+    // pointing at capabilities that are gone.
+    unregister(&mut registry, &APP).unwrap();
+    assert_eq!(registry.keys, untouched.keys);
 }

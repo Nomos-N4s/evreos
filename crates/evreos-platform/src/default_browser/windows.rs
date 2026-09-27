@@ -66,6 +66,18 @@ impl Registry for WindowsRegistry {
         absent_is_done(self.root.remove_tree(key))
     }
 
+    fn string_values(&self, key: &str) -> io::Result<Vec<(String, String)>> {
+        let key = match self.root.open(key) {
+            Ok(key) => key,
+            Err(error) if error.code().0 == NOT_FOUND => return Ok(Vec::new()),
+            Err(error) => return Err(error.into()),
+        };
+        Ok(key
+            .values()?
+            .filter_map(|(name, value)| Some((name, String::try_from(value).ok()?)))
+            .collect())
+    }
+
     fn remove_value(&mut self, key: &str, name: &str) -> io::Result<()> {
         match self.root.options().write().open(key) {
             Ok(key) => absent_is_done(key.remove_value(name)),
