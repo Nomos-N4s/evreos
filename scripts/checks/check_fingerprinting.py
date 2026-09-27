@@ -163,10 +163,14 @@ It reads the tree and fails on:
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
 A window's own scale factor -- winit's `scale_factor()`, script's
-`devicePixelRatio` -- is not read. Every window reads it to render at the size
-the member chose, which Principle X's scaling to 200% requires, and the
-accessibility spike already does; a rule on it would fail every conformant
-window, the chrome's among them. A derivation that uses it rests on review.
+`devicePixelRatio` -- is not read. It is a display characteristic, and leaving
+it unread is a scope choice, not a claim that it is harmless. The shell's
+design reads no system scale: crates/evreos-shell/src/scaling.rs drives
+rasterisation from the member's own interface scale and states that no crate
+reads a system DPI value. The one reader in the tree is the accessibility
+spike under tests/spikes/, which lays out its tree by it, and a rule on it
+would fail that spike while T061 has the allowlist empty in v1. A read of it,
+and any derivation from it, rests on review.
 
 `std::time::Instant` is not read. The shell uses it for intervals -- the tab
 model's load timeouts -- and an interval between two readings in one process
