@@ -1289,6 +1289,7 @@ fn each_listed_form_of_dependency_table_is_read() {
         [package]\nname = \"x\" # not a dependency\n\
         [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
         evreos-i18n = { path = \"i\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
+        'lit\\\\x' = \"1\"\n\
         ok = { version = \"a\\\"#b\" } # c = 1\n\
         [dependencies . spaced]\nversion = \"1\"\n\
         [ target . 'cfg(unix)' . dependencies ]\ntspaced = \"1\"\n\
@@ -1310,6 +1311,7 @@ fn each_listed_form_of_dependency_table_is_read() {
             "winit",
             "quoted_literal",
             "quoted",
+            "lit\\\\x",
             "ok",
             "spaced",
             "tspaced",
