@@ -10,6 +10,8 @@ Amendment 2.1.0 → 2.2.0 (2026-09-27), MINOR — guidance outside the Core Prin
   - What changed: the Development Workflow gains a bullet. A docstring or code comment
     states what the code does, briefly, and cites the document that gives the reason
     rather than paraphrasing it. Recorded at `decisions/0009`.
+  - It binds a pull request opened after the amendment merges, when that pull request edits
+    a file. One already open when it merges, #106 among them, is not covered.
   - Nothing is relaxed, so the amendment procedure asks for no replacement discipline.
   - Follow-on: `CLAUDE.md`'s Workflow section points to the new bullet, in the same pull
     request.
@@ -324,7 +326,8 @@ of them requires a MAJOR amendment to this constitution:
   and limits — briefly. The reason for a rule lives in the document that makes it, the
   specification, a decision record or an ADR, and is cited by its identifier, never
   paraphrased or argued afresh; no docstring claims a guarantee beyond what the code it
-  documents does. A file is held to this when a change edits it (`decisions/0009`).
+  documents does. A file is held to this when a pull request opened after this amendment
+  merges edits it (`decisions/0009`).
 - Every pull request that adds or changes a feature states the byte and millisecond cost
   of its change against the budgets in Principle II, as that principle requires. A red
   budget gate fails the merge.
