@@ -43,9 +43,10 @@
 //!   the only files it writes are the member's own stores, through
 //!   `crate::store`;
 //! - it loads no file but its own five modules, through no `#[path]` and no
-//!   `cfg_attr`, and invokes no macro by `name!` but a short list of the
-//!   standard library's, which it names by no path and no rename, and
-//!   whose names no macro in the crate may take;
+//!   `cfg_attr`, invokes no macro by `name!` but a short list of the
+//!   standard library's, and derives, by `#[derive]`, only the standard
+//!   library's, naming either by no path and no rename, and no macro in the
+//!   crate may take their names;
 //! - it is written in ASCII outside its literals and comments, so no
 //!   character a reader cannot see hides a path.
 //!

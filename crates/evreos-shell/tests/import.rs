@@ -1004,6 +1004,18 @@ fn tokens(source: &str) -> Vec<Tok> {
     out
 }
 
+/// The derives the import's shipped code may use, the standard library's. A
+/// derive is a macro too, and one the stores re-exported could run any code.
+const DERIVES: &[&str] = &[
+    "Clone",
+    "Copy",
+    "Debug",
+    "Default",
+    "Eq",
+    "Hash",
+    "PartialEq",
+];
+
 /// The five modules `import.rs` declares; no other file can join them.
 const IMPORT_MODULES: &[&str] = &["chromium", "firefox", "json", "snapshot", "sqlite"];
 
@@ -1355,12 +1367,12 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             "mode" if punct(i.wrapping_sub(1), '.') || punct(i.wrapping_sub(1), ':') => {
                 found.push("sets a file's mode".to_string());
             }
-            // A name the import may invoke as a macro is the standard
-            // library's only while nothing brings in another under it: a
-            // path that ends in it, `use crate::store::format;` or
+            // A name the import may invoke as a macro, or derive, is the
+            // standard library's only while nothing brings in another under
+            // it: a path that ends in it, `use crate::store::format;` or
             // `crate::store::format!()`, or a rename to it, could reach a
             // macro the stores re-export.
-            _ if MACROS.contains(&word)
+            _ if (MACROS.contains(&word) || DERIVES.contains(&word))
                 && (path_sep(i.wrapping_sub(2))
                     || in_path_group(i)
                     || matches!(ident(i.wrapping_sub(1)), Some("use" | "as"))) =>
@@ -1384,6 +1396,18 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
                 let name = ident(i + 1).unwrap_or("");
                 if !at_root || !IMPORT_MODULES.contains(&name) {
                     found.push(format!("declares `mod {name};`"));
+                }
+            }
+            // A derive names its macros bare, and only the standard
+            // library's are allowed.
+            "derive" if punct(i.wrapping_sub(1), '[') && punct(i + 1, '(') => {
+                let mut at = i + 2;
+                while !punct(at, ')') && at < end {
+                    let name = ident(at);
+                    if !(punct(at, ',') || name.is_some_and(|name| DERIVES.contains(&name))) {
+                        found.push(format!("derives by {:?}", toks[at]));
+                    }
+                    at += 1;
                 }
             }
             "path" if punct(i.wrapping_sub(1), '[') => {
@@ -1465,6 +1489,13 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use crate::store::{Store, format as f};", false),
         ("fn f() -> String { crate::store::format!(\"x\") }", false),
         ("use crate::store::fmt as format;", false),
+        ("#[derive(Debug, Serialize)] struct S;", false),
+        ("#[derive(Debug, serde::Serialize)] struct S;", false),
+        ("use crate::store::Debug; #[derive(Debug)] struct S;", false),
+        (
+            "use crate::store::Hook as Clone; #[derive(Clone)] struct S;",
+            false,
+        ),
         ("include!(\"../x.rs\");", false),
         ("#[path = \"../x.rs\"] mod x;", true),
         (
@@ -1635,9 +1666,9 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
                 _ => continue,
             };
             assert_ne!(word, "macro_use", "{}", file.display());
-            // A macro can take one of those names by being defined under it,
-            // by `macro_rules!` or `macro`, or by being renamed to it with
-            // `as`, as a re-export would be.
+            // A macro can take one of those names, or a derive's, by being
+            // defined under it, by `macro_rules!` or `macro`, or by being
+            // renamed to it with `as`, as a re-export would be.
             let named = if word == "macro_rules" && toks.get(i + 1) == Some(&Tok::Punct('!')) {
                 toks.get(i + 2)
             } else if word == "macro" || word == "as" {
@@ -1648,7 +1679,7 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
             if let Some(Tok::Ident(name)) = named {
                 let name = name.strip_prefix("r#").unwrap_or(name);
                 assert!(
-                    !MACROS.contains(&name),
+                    !MACROS.contains(&name) && !DERIVES.contains(&name),
                     "{} gives a macro the name `{name}`, which the import may invoke",
                     file.display()
                 );
