@@ -789,28 +789,77 @@ fn imported_data_counts_bookmarks_but_not_folders() {
     assert_eq!(folders, 1, "Work, on the bar");
 }
 
-/// A source file's code with its comments and the contents of its string and
-/// character literals removed and all whitespace dropped, so a path can be
-/// matched however it is spaced or split across lines, and text inside a
-/// literal or a comment is never mistaken for code.
-fn bare_code(source: &str) -> String {
+/// A token of Rust source, as the reach test needs it: literals and
+/// lifetimes carry nothing, and comments and whitespace are dropped.
+#[derive(Debug, Clone, PartialEq)]
+enum Tok {
+    Ident(String),
+    Punct(char),
+    Lit,
+}
+
+/// Tokenize Rust source closely enough that no path can hide from the reach
+/// test inside what the test takes for a literal or a comment: strings and
+/// raw strings with every prefix (`b`, `c`, `r`, `br`, `cr`), byte and
+/// character literals, lifetimes, raw identifiers and nested block comments
+/// are each read as the compiler reads them.
+fn tokens(source: &str) -> Vec<Tok> {
     let chars: Vec<char> = source.chars().collect();
-    let mut out = String::new();
+    let at = |i: usize| chars.get(i).copied();
+    let mut out = Vec::new();
     let mut i = 0;
+    // Past a quoted string whose opening quote is at `i`, honouring escapes.
+    let quoted = |mut i: usize| {
+        i += 1;
+        while i < chars.len() && chars[i] != '"' {
+            i += if chars[i] == '\\' { 2 } else { 1 };
+        }
+        i + 1
+    };
+    // Past a raw string whose hashes, if any, start at `i`.
+    let raw = |mut i: usize| {
+        let mut hashes = 0;
+        while at(i) == Some('#') {
+            hashes += 1;
+            i += 1;
+        }
+        i += 1;
+        while i < chars.len() {
+            if chars[i] == '"' && (1..=hashes).all(|k| at(i + k) == Some('#')) {
+                return i + 1 + hashes;
+            }
+            i += 1;
+        }
+        i
+    };
+    // Past a character literal whose opening quote is at `i`.
+    let character = |mut i: usize| {
+        i += 1;
+        if at(i) == Some('\\') {
+            i += 2;
+        } else {
+            i += 1;
+        }
+        while i < chars.len() && chars[i] != '\'' {
+            i += 1;
+        }
+        i + 1
+    };
     while i < chars.len() {
         let ch = chars[i];
-        let next = chars.get(i + 1).copied();
-        if ch == '/' && next == Some('/') {
+        if ch.is_whitespace() {
+            i += 1;
+        } else if ch == '/' && at(i + 1) == Some('/') {
             while i < chars.len() && chars[i] != '\n' {
                 i += 1;
             }
-        } else if ch == '/' && next == Some('*') {
+        } else if ch == '/' && at(i + 1) == Some('*') {
             let mut depth = 0;
             while i < chars.len() {
-                if chars[i] == '/' && chars.get(i + 1) == Some(&'*') {
+                if chars[i] == '/' && at(i + 1) == Some('*') {
                     depth += 1;
                     i += 2;
-                } else if chars[i] == '*' && chars.get(i + 1) == Some(&'/') {
+                } else if chars[i] == '*' && at(i + 1) == Some('/') {
                     depth -= 1;
                     i += 2;
                     if depth == 0 {
@@ -820,69 +869,291 @@ fn bare_code(source: &str) -> String {
                     i += 1;
                 }
             }
-        } else if ch == 'r'
-            && matches!(next, Some('"' | '#'))
-            && !out.ends_with(|c: char| c.is_alphanumeric() || c == '_')
-        {
-            // A raw string: r"…", r#"…"#, with as many hashes as it opens with.
-            let mut hashes = 0;
-            i += 1;
-            while chars.get(i) == Some(&'#') {
-                hashes += 1;
+        } else if ch.is_alphabetic() || ch == '_' {
+            let start = i;
+            while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
                 i += 1;
             }
-            if chars.get(i) != Some(&'"') {
-                out.push('r');
-                out.extend(std::iter::repeat_n('#', hashes));
-                continue;
-            }
-            i += 1;
-            while i < chars.len() {
-                if chars[i] == '"' && (1..=hashes).all(|k| chars.get(i + k) == Some(&'#')) {
-                    i += 1 + hashes;
-                    break;
+            let word: String = chars[start..i].iter().collect();
+            match (word.as_str(), at(i)) {
+                ("r", Some('#')) if at(i + 1).is_some_and(|c| c.is_alphabetic() || c == '_') => {
+                    // A raw identifier, `r#crate`, is the identifier itself.
+                    let start = i + 1;
+                    i = start;
+                    while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                        i += 1;
+                    }
+                    out.push(Tok::Ident(chars[start..i].iter().collect()));
                 }
+                ("r" | "br" | "cr", Some('"' | '#')) => {
+                    i = raw(i);
+                    out.push(Tok::Lit);
+                }
+                ("b" | "c", Some('"')) => {
+                    i = quoted(i);
+                    out.push(Tok::Lit);
+                }
+                ("b", Some('\'')) => {
+                    i = character(i);
+                    out.push(Tok::Lit);
+                }
+                _ => out.push(Tok::Ident(word)),
+            }
+        } else if ch.is_ascii_digit() {
+            while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
                 i += 1;
             }
-            out.push_str("\"\"");
+            out.push(Tok::Lit);
         } else if ch == '"' {
-            i += 1;
-            while i < chars.len() && chars[i] != '"' {
-                i += if chars[i] == '\\' { 2 } else { 1 };
-            }
-            i += 1;
-            out.push_str("\"\"");
-        } else if ch == '\'' && next == Some('\\') {
-            // Past the quote, the backslash and the escaped character, which
-            // may itself be a quote; `\u{…}` runs on to the closing one.
-            i += 3;
-            while i < chars.len() && chars[i] != '\'' {
+            i = quoted(i);
+            out.push(Tok::Lit);
+        } else if ch == '\'' {
+            let lifetime =
+                at(i + 1).is_some_and(|c| c.is_alphabetic() || c == '_') && at(i + 2) != Some('\'');
+            if lifetime {
                 i += 1;
+                while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                    i += 1;
+                }
+            } else {
+                i = character(i);
+                out.push(Tok::Lit);
             }
-            i += 1;
-            out.push_str("\'\'");
-        } else if ch == '\'' && chars.get(i + 2) == Some(&'\'') {
-            i += 3;
-            out.push_str("\'\'");
         } else {
-            if !ch.is_whitespace() {
-                out.push(ch);
-            }
+            out.push(Tok::Punct(ch));
             i += 1;
         }
     }
     out
 }
 
+/// The five modules `import.rs` declares; no other file can join them.
+const IMPORT_MODULES: &[&str] = &["chromium", "firefox", "json", "snapshot", "sqlite"];
+
+/// The macros the import's shipped code may invoke. A macro from elsewhere in
+/// the crate needs no path to be named, so it could reach past the stores;
+/// these are the standard library's, which reach nothing.
+const MACROS: &[&str] = &[
+    "assert",
+    "cfg",
+    "assert_eq",
+    "assert_ne",
+    "debug_assert",
+    "debug_assert_eq",
+    "debug_assert_ne",
+    "format",
+    "format_args",
+    "matches",
+    "panic",
+    "unreachable",
+    "vec",
+    "write",
+    "writeln",
+];
+
+/// Keywords that a `!` may follow as negation, not as a macro call.
+const KEYWORDS: &[&str] = &[
+    "as", "break", "else", "if", "in", "let", "match", "move", "mut", "return", "while", "yield",
+];
+
+/// Every way the shipped part of one import source file reaches past the
+/// stores, the standard library's computation, or its own directory. `at_root`
+/// is true for `import.rs`, whose `super` is the crate root.
+fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
+    let toks = tokens(source);
+    let ident = |i: usize| match toks.get(i) {
+        Some(Tok::Ident(word)) => Some(word.as_str()),
+        _ => None,
+    };
+    let punct = |i: usize, ch: char| toks.get(i) == Some(&Tok::Punct(ch));
+    let path_sep = |i: usize| punct(i, ':') && punct(i + 1, ':');
+    let mut found = Vec::new();
+
+    // The unit-test module that closes the file is not shipped code, and its
+    // `super` is the module above it. It must be the file's last item, so
+    // that nothing shipped hides after it.
+    let mut end = toks.len();
+    let opening = [
+        Tok::Punct('#'),
+        Tok::Punct('['),
+        Tok::Ident("cfg".into()),
+        Tok::Punct('('),
+        Tok::Ident("test".into()),
+        Tok::Punct(')'),
+        Tok::Punct(']'),
+        Tok::Ident("mod".into()),
+        Tok::Ident("tests".into()),
+        Tok::Punct('{'),
+    ];
+    if let Some(start) = toks.windows(opening.len()).position(|w| w == opening) {
+        let mut depth = 0usize;
+        let mut close = None;
+        for (i, tok) in toks.iter().enumerate().skip(start + opening.len() - 1) {
+            match tok {
+                Tok::Punct('{') => depth += 1,
+                Tok::Punct('}') => {
+                    depth -= 1;
+                    if depth == 0 {
+                        close = Some(i);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        if close != Some(toks.len() - 1) {
+            found.push("the test module is not the file's last item".to_string());
+        }
+        end = start;
+    }
+
+    for i in 0..end {
+        let Some(word) = ident(i) else {
+            continue;
+        };
+        let visibility = punct(i.wrapping_sub(1), '(') && punct(i + 1, ')');
+        let next = if path_sep(i + 1) {
+            toks.get(i + 3)
+        } else {
+            None
+        };
+        let next_word = if path_sep(i + 1) { ident(i + 3) } else { None };
+        match word {
+            // The egress crate, and the crate's other dependencies, which an
+            // import has no use for.
+            "evreos_net"
+            | "evreos_chrome"
+            | "evreos_engine"
+            | "evreos_engine_headless"
+            | "winit"
+            | "extern" => found.push(format!("names `{word}`")),
+            // `pub(crate)` is a visibility; any other `crate` leads to the
+            // crate root, and only the stores may be reached from it.
+            "crate" if !visibility && next_word != Some("store") => {
+                found.push(format!("`crate` not followed by `::store`: {next:?}"));
+            }
+            // From import.rs `super` is the crate root, held to the stores as
+            // `crate` is. From a module under it, `super` is import.rs, and it
+            // may go no further up: neither `super::super`, nor a group that
+            // names `super` again, nor a rename.
+            "super" if !visibility => {
+                if punct(i.wrapping_sub(1), ':') || punct(i.wrapping_sub(1), '{') {
+                    found.push("`super` inside a path".to_string());
+                } else if at_root {
+                    if next_word != Some("store") {
+                        found.push(format!("`super` not followed by `::store`: {next:?}"));
+                    }
+                } else if next.is_none() || next_word == Some("super") {
+                    found.push(format!(
+                        "`super` not followed by `::` and an item: {next:?}"
+                    ));
+                }
+            }
+            // The standard library, less the parts that open a socket, start
+            // a process or reach the platform, and only by a plain path.
+            "std" | "core" | "alloc" => match next_word {
+                Some("net" | "process" | "os") | None => {
+                    found.push(format!("`{word}` followed by {next:?}"));
+                }
+                Some(_) => {}
+            },
+            // A macro named without a path, from anywhere in the crate.
+            _ if punct(i + 1, '!') && !punct(i + 2, '=') && !KEYWORDS.contains(&word) => {
+                if !MACROS.contains(&word) {
+                    found.push(format!("invokes `{word}!`"));
+                }
+            }
+            // A module loaded from another file: only import.rs may declare
+            // one, only its own five, and never from a path of its choosing.
+            "mod" if punct(i + 2, ';') => {
+                let name = ident(i + 1).unwrap_or("");
+                if !at_root || !IMPORT_MODULES.contains(&name) {
+                    found.push(format!("declares `mod {name};`"));
+                }
+            }
+            "path" if punct(i.wrapping_sub(1), '[') => {
+                found.push("a `#[path]` attribute".to_string());
+            }
+            _ => {}
+        }
+    }
+    found
+}
+
 #[test]
-fn bare_code_drops_comments_literals_and_whitespace() {
-    let source = "use crate :: /* x */ store; // crate::tabs\n\
-                  let a = \"crate::tabs\"; let b = r#\"std::net\"#; let c = '\\'';\n\
-                  let d = 'x'; fn f<'a>() {}";
-    assert_eq!(
-        bare_code(source),
-        "usecrate::store;leta=\"\";letb=\"\";letc='';letd='';fnf<'a>(){}"
-    );
+fn the_reach_check_sees_through_literals_spacing_and_renames() {
+    for (source, at_root) in [
+        ("use crate :: /* x */ tabs;", false),
+        ("use crate\n    ::tabs;", false),
+        ("use crate as root; fn f() { root::tabs::g() }", false),
+        ("use super::{super::tabs};", false),
+        ("use super::super as up;", false),
+        ("use super::super::tabs;", false),
+        ("use super::tabs;", true),
+        ("use std as s;", false),
+        ("use std::net::TcpStream;", false),
+        ("use std::{net};", false),
+        ("use ::std::process::Command;", false),
+        ("use core::net::Ipv4Addr;", false),
+        (
+            "fn f() -> &'static str { return r\"\\\"; } use crate::tabs;",
+            false,
+        ),
+        (
+            "fn f() { let _ = br\"\\\"; crate::tabs::g(); let _ = b'\"'; }",
+            false,
+        ),
+        ("fn f() { let _ = cr#\"x\"#; crate::tabs::g(); }", false),
+        ("fn f() { let _ = '\\''; crate::tabs::g(); }", false),
+        ("fn f<'a>(x: &'a u8) { crate::tabs::g(x) }", false),
+        ("use r#crate::tabs;", false),
+        ("extern crate evreos_net;", false),
+        ("fn f() { evreos_net::connect() }", false),
+        ("fn f() { some_macro!() }", false),
+        ("fn f() { if !some_macro![] {} }", false),
+        ("include!(\"../x.rs\");", false),
+        ("#[path = \"../x.rs\"] mod x;", true),
+        ("mod elsewhere;", true),
+        ("mod json;", false),
+        (
+            "#[cfg(test)]\nmod tests { #[test] fn t() {} }\nfn leak() { crate::tabs::g() }",
+            false,
+        ),
+    ] {
+        assert!(
+            !reach_violations(source, at_root).is_empty(),
+            "{source:?} passed"
+        );
+    }
+    for (source, at_root) in [
+        ("use crate::store::{BookmarkStore};", true),
+        ("use super::store::HistoryStore;", true),
+        ("pub(crate) fn f() {} pub(super) fn g() {}", false),
+        ("use super::{json::{self, Json}, sqlite::Value};", false),
+        (
+            "use std::path::{Path, PathBuf}; fn f() -> String { format!(\"{}\", 1) }",
+            false,
+        ),
+        (
+            "fn f<'a>(x: &'a str) -> char { let _ = \"crate::tabs\"; 'x' }",
+            false,
+        ),
+        ("mod json;", true),
+        (
+            "fn f(a: bool) -> bool { if !a { return !a; } cfg!(windows) }",
+            false,
+        ),
+        (
+            "use crate::store::X;\n#[cfg(test)]\nmod tests { use super::*; include_bytes!(\"f\"); }",
+            true,
+        ),
+    ] {
+        assert_eq!(
+            reach_violations(source, at_root),
+            Vec::<String>::new(),
+            "{source:?}"
+        );
+    }
 }
 
 #[test]
@@ -890,13 +1161,11 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // Reading another browser's files is the local computation FR-007a
     // permits; the import must hold no route by which any of it could leave.
     // The crate as a whole depends on evreos-net, so what is asserted is the
-    // module's own reach: it names no egress crate and no part of the
-    // standard library that opens a socket or starts a process, and its only
-    // way into the rest of this crate is the stores it writes. `crate::` and,
-    // from import.rs, `super::` both lead to the crate root, as
-    // `super::super::` does from a submodule, so each is held to the stores
-    // alone. Paths are matched with comments, literals and whitespace
-    // removed, so neither spacing nor a line break hides one.
+    // module's own reach, token by token rather than by text: it names no
+    // egress crate and no part of the standard library that opens a socket
+    // or starts a process, invokes no macro but the standard library's
+    // formatting and assertion ones, loads no file but its own five modules,
+    // and its only way into the rest of this crate is the stores it writes.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = vec![(src.join("import.rs"), true)];
     for entry in fs::read_dir(src.join("import")).unwrap() {
@@ -904,69 +1173,7 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     }
     assert!(files.len() >= 6, "import.rs and its five modules");
     for (file, at_root) in files {
-        let code = bare_code(&fs::read_to_string(&file).unwrap());
-        // The unit-test module that closes each file is not shipped code,
-        // and its `super::` is the module above it, not the crate root. Only
-        // that module is set aside: any other test-only item is checked.
-        let shipped = match code.find("#[cfg(test)]modtests{") {
-            Some(at) => {
-                // With literals and comments gone, every brace is code, so
-                // the module's own closing brace is where the count returns
-                // to zero; it must be the last character of the file.
-                let open = at + "#[cfg(test)]modtests".len();
-                let mut depth = 0usize;
-                let mut close = None;
-                for (offset, ch) in code[open..].char_indices() {
-                    match ch {
-                        '{' => depth += 1,
-                        '}' => {
-                            depth -= 1;
-                            if depth == 0 {
-                                close = Some(open + offset);
-                                break;
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-                assert_eq!(
-                    close,
-                    Some(code.len() - 1),
-                    "{}: the test module is not the file's last item",
-                    file.display()
-                );
-                &code[..at]
-            }
-            None => &code[..],
-        };
-        for forbidden in [
-            "evreos_net",
-            "std::net",
-            "std::process",
-            "std::os",
-            "std::{",
-            "externcrate",
-        ] {
-            assert!(
-                !shipped.contains(forbidden),
-                "{} names {forbidden}",
-                file.display()
-            );
-        }
-        let root_paths: &[&str] = if at_root {
-            &["crate::", "super::"]
-        } else {
-            &["crate::", "super::super::"]
-        };
-        for root in root_paths {
-            for (at, _) in shipped.match_indices(root) {
-                assert!(
-                    shipped[at + root.len()..].starts_with("store"),
-                    "{} reaches outside the stores: {}",
-                    file.display(),
-                    &shipped[at..(at + 60).min(shipped.len())]
-                );
-            }
-        }
+        let violations = reach_violations(&fs::read_to_string(&file).unwrap(), at_root);
+        assert!(violations.is_empty(), "{}: {violations:?}", file.display());
     }
 }
