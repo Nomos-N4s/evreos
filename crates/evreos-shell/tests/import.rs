@@ -1564,10 +1564,11 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             {
                 found.push(format!("calls `{word}` on something other than the reader"));
             }
-            // The exception above goes by the reader's name, so a rename
-            // with `as` may not take it:
-            // `use crate::store::StoreRegistry as Database;`.
-            "Database" if ident(i.wrapping_sub(1)) == Some("as") => {
+            // The exception above goes by the reader's name, so neither a
+            // rename nor an alias may take it:
+            // `use crate::store::StoreRegistry as Database;` or
+            // `type Database = crate::store::StoreRegistry;`.
+            "Database" if matches!(ident(i.wrapping_sub(1)), Some("as" | "type")) => {
                 found.push("renames something to `Database`".to_string());
             }
             // `write!` on a stream calls its `write_fmt`, which only the
@@ -1761,6 +1762,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ),
         (
             "use crate::store::StoreRegistry as Database; fn f() { Database::open(\"x\"); }",
+            false,
+        ),
+        (
+            "type Database = crate::store::StoreRegistry; fn f() { Database::open(\"x\"); }",
             false,
         ),
         ("use crate::store::hook; #[hook] fn f() {}", false),
