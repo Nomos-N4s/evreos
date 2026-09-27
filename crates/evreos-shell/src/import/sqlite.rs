@@ -783,12 +783,17 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
         let mut tokens = tokenize(definition);
         // A named table constraint, `CONSTRAINT k PRIMARY KEY (id)`, is the
         // constraint it names: the name is set aside and the rest read.
-        if tokens
-            .first()
+        // SQLite takes any number of names in a row, `CONSTRAINT a
+        // CONSTRAINT b PRIMARY KEY (id)`; all are stepped past, then
+        // dropped at once, so a long run of them costs one pass.
+        let mut named = 0;
+        while tokens
+            .get(named)
             .is_some_and(|token| token.is_word("CONSTRAINT"))
         {
-            tokens.drain(..tokens.len().min(2));
+            named += 2;
         }
+        tokens.drain(..named.min(tokens.len()));
         let Some(first) = tokens.first() else {
             continue;
         };
@@ -1282,6 +1287,17 @@ mod tests {
     }
 
     #[test]
+    fn a_long_run_of_constraint_names_is_read_in_one_pass() {
+        let names = "CONSTRAINT k ".repeat(200_000);
+        let sql = format!("CREATE TABLE t(id INTEGER, url TEXT, {names}PRIMARY KEY(id))");
+        let started = std::time::Instant::now();
+        let (columns, alias) = parse_create_table(&sql).unwrap();
+        assert_eq!(columns, ["id", "url"]);
+        assert_eq!(alias, Some(0));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
+    }
+
+    #[test]
     fn a_deeply_bracketed_table_key_is_read_in_one_pass() {
         // Read a level at a time, 200,000 levels took minutes.
         let depth = 200_000;
@@ -1387,6 +1403,16 @@ mod tests {
             ),
             (
                 "CREATE TABLE t(id INTEGER, x, CONSTRAINT a UNIQUE(x) CONSTRAINT b PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, CONSTRAINT a CONSTRAINT b PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, CONSTRAINT a CONSTRAINT b CONSTRAINT c PRIMARY KEY(id))",
                 &["id", "x"],
                 Some(0),
             ),
