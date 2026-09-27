@@ -368,3 +368,71 @@ fn an_application_that_cannot_be_registered_writes_nothing() {
     })
     .unwrap();
 }
+
+/// The tier-1 binding, against the real registry: registering under a
+/// scratch key below the current user's hive writes every value the
+/// registration names, as a string, and unregistering removes every key
+/// and value it wrote. The scratch key stands in for the hive, so the run
+/// lists no browser on the machine it runs on.
+#[cfg(windows)]
+#[test]
+fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
+    use evreos_platform::default_browser::WindowsRegistry;
+    use windows_registry::CURRENT_USER;
+
+    let scratch = format!(
+        r"Software\PlatformRegistrationTest\{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    );
+    let mut registry = WindowsRegistry::below_current_user(&scratch).unwrap();
+    let root = CURRENT_USER.open(&scratch).unwrap();
+    root.create(REGISTERED_APPLICATIONS)
+        .unwrap()
+        .set_string("Other", "kept")
+        .unwrap();
+
+    register(&mut registry, &APP).unwrap();
+    let registration = Registration::of(&APP).unwrap();
+    for value in &registration.values {
+        let key = root.open(&value.key).unwrap();
+        assert_eq!(
+            key.get_type(&value.name).unwrap(),
+            windows_registry::Type::String,
+            "{} [{}]",
+            value.key,
+            value.name
+        );
+        assert_eq!(key.get_string(&value.name).unwrap(), value.data);
+    }
+
+    unregister(&mut registry, &APP).unwrap();
+    for key in &registration.owned_keys {
+        assert!(root.open(key).is_err(), "{key} survived the uninstall");
+    }
+    let registered = root.open(REGISTERED_APPLICATIONS).unwrap();
+    assert!(registered.get_string("SampleBrowser").is_err());
+    assert_eq!(registered.get_string("Other").unwrap(), "kept");
+    // Removing again, and removing a value under a key that is gone, are
+    // not errors.
+    unregister(&mut registry, &APP).unwrap();
+    registry
+        .remove_value(r"Software\Absent\Key", "value")
+        .unwrap();
+
+    drop(registered);
+    drop(root);
+    CURRENT_USER.remove_tree(&scratch).unwrap();
+    assert!(CURRENT_USER.open(&scratch).is_err());
+}
+
+/// The binding opens the current user's hive itself, where registration
+/// writes, without writing anything.
+#[cfg(windows)]
+#[test]
+fn the_windows_registry_opens_the_current_users_hive() {
+    evreos_platform::default_browser::WindowsRegistry::current_user().unwrap();
+}

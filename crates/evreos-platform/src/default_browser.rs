@@ -20,7 +20,8 @@
 //!
 //! Both go through [`Registry`], so the set of values is decided here, on
 //! every platform, and tested on every platform; a platform binding only
-//! stores strings.
+//! stores strings. The tier-1 binding is `WindowsRegistry`, built on Windows
+//! alone.
 //!
 //! No brand name appears here (FR-042). The product name reaches this module
 //! as [`Application::name`], from the shell's brand configuration, and every
@@ -28,6 +29,11 @@
 
 use std::fmt;
 use std::io;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub use self::windows::WindowsRegistry;
 
 /// The browser being registered.
 #[derive(Clone, Copy, Debug)]

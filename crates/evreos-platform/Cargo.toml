@@ -12,5 +12,16 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# Tier 1's registry, for default-browser registration. Microsoft's safe
+# binding: its own dependencies, windows-link, windows-result and
+# windows-strings, are already in this workspace's graph at these versions,
+# so it adds one crate. Its byte cost is stated in the pull request that
+# adds it.
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6.1"
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-registry = "0.6.1"
+
 [lints]
 workspace = true
