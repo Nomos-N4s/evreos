@@ -78,10 +78,14 @@ It reads the tree and fails on:
                 directory.
     timezone
                 the system timezone and the local UTC offset, through every
-                platform API, `/etc/localtime`, the `TZ` variable, the
-                `time` and `chrono` crates' local-time entry points, and
-                `getTimezoneOffset` and `resolvedOptions().timeZone` in
-                script.
+                platform API and libc's `localtime`, `tzname` and
+                `timezone`, `/etc/localtime`, the `TZ` variable, the `time`
+                crate's `now_local` and local offsets, chrono's `Local`
+                wherever a line names it -- by path, in an import list, as
+                `&Local`, `Local.` or `DateTime<Local>` -- jiff's system
+                zone, and `getTimezoneOffset` and `resolvedOptions().timeZone`
+                in script. `Local` is matched in its own case only: the word
+                opens ordinary prose such as "Local State".
     total memory
                 the physical memory the machine carries, through every
                 platform API, `/proc/meminfo`, `sysinfo` and
@@ -307,13 +311,22 @@ SOURCES = {
         ("/etc/timezone", r"/etc/timezone"),
         ("NSTimeZone", r"NSTimeZone"),
         ("CFTimeZoneCopy", r"CFTimeZoneCopy(?:System|Default)"),
-        ("localtime_r", r"localtime_[rs]"),
+        ("localtime", r"localtime(?:_[rs])?"),
+        ("tzname", r"tzname"),
+        ("libc::timezone", r"libc::timezone"),
         ("tm_gmtoff", r"tm_gmtoff"),
         ("tzset", r"tzset"),
         ("current_local_offset", r"current_local_offset"),
         ("local_offset_at", r"local_offset_at"),
-        ("chrono::Local", r"chrono::Local|Local::(?:now|today)"),
-        ("TZ", r"var(?:_os)?\(\s*\"TZ\"\s*\)"),
+        ("now_local", r"now_local"),
+        ("chrono::Local", (
+            r"chrono::(?:offset::)?Local|Local::(?:now|today)"
+            r"|chrono::(?:offset::|prelude::)?\{[^}]*(?-i:\bLocal\b)[^}]*\}"
+            r"|DateTime\s*<\s*(?-i:Local)\s*>|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
+        )),
+        ("TimeZone::system", r"TimeZone::system"),
+        ("Zoned::now", r"Zoned::now"),
+        ("TZ", r'var(?:_os)?\(\s*(?:r#*)?"TZ"#*\s*\)'),
         ("getTimezoneOffset", r"getTimezoneOffset"),
         ("resolvedOptions().timeZone", r"resolvedOptions\(\s*\)\.timeZone"),
     ),

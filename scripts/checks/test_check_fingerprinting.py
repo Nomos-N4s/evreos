@@ -180,6 +180,28 @@ CAUGHT = (
      "let offset = time::UtcOffset::current_local_offset();\n"),
     ("timezone", "TZ",
      'let zone = std::env::var("TZ");\n'),
+    ("timezone", "TZ",
+     'let zone = std::env::var_os(r"TZ");\n'),
+    ("timezone", "now_local",
+     "let now = time::OffsetDateTime::now_local()?;\n"),
+    ("timezone", "chrono::Local",
+     "use chrono::{DateTime, Local, Utc};\n"),
+    ("timezone", "chrono::Local",
+     "let shown: DateTime<Local> = stamp.into();\n"),
+    ("timezone", "chrono::Local",
+     "let shown = stamp.with_timezone(&Local);\n"),
+    ("timezone", "chrono::Local",
+     "let shown = Local.timestamp_opt(secs, 0);\n"),
+    ("timezone", "localtime",
+     "let parts = unsafe { libc::localtime(&t) };\n"),
+    ("timezone", "tzname",
+     "let name = unsafe { libc::tzname[0] };\n"),
+    ("timezone", "TimeZone::system",
+     "let zone = jiff::tz::TimeZone::system();\n"),
+    ("timezone", "Zoned::now",
+     "let now = jiff::Zoned::now();\n"),
+    ("timezone", "libc::timezone",
+     "let west = unsafe { libc::timezone };\n"),
     ("total memory", "GlobalMemoryStatus",
      "GlobalMemoryStatusEx(&mut status);\n"),
     ("total memory", "/proc/meminfo",
@@ -211,6 +233,11 @@ report("a source spelled in another case is the same source",
 problems = tree(with_rust('let key = r"SOFTWARE\\Microsoft\\Cryptography";\n'))[0]
 report("the registry key that holds MachineGuid fails through a raw string",
        mentions(problems, "probe.rs:1", "Cryptography"))
+
+problems = tree(with_rust(
+    'let path = user_data.join("Local State");\nout.push_str("# Local Bookmark Store");\n'
+))[0]
+report("the word Local in ordinary prose is not chrono's Local", problems == [])
 
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
