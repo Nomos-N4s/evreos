@@ -834,8 +834,9 @@ fn millis(time: SystemTime) -> u128 {
 /// browser can read as the start of an authority, after `file:`, after an
 /// empty `file://`, or after a host it reads as empty, which `localhost`
 /// is in any of the spellings a browser decodes to it — and names a user
-/// there is skipped whole, whatever its host, since the credential cannot
-/// be cut from it without changing where it points.
+/// there, as written or once its `.` and `..` segments are resolved, is
+/// skipped whole, whatever its host, since the credential cannot be cut
+/// from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
@@ -887,9 +888,42 @@ pub fn clean_address(raw: &str) -> Option<String> {
     }
 }
 
-/// Whether `path` opens on two or more separators and the segment after
-/// them, which a browser may read as an authority, carries a user name.
+/// Whether `path`, as written or with its dot segments resolved as a browser
+/// resolves them, opens on two or more separators and the segment after them,
+/// which a browser may read as an authority, carries a user name.
+/// `file:///.//u:p@h/` and `file:///a/..//u:p@h/` load as `file:////u:p@h/`.
 fn smuggles_credential(path: &str) -> bool {
+    opens_on_a_user(path) || opens_on_a_user(&resolve_dots(path))
+}
+
+/// `path` with its `.` and `..` segments resolved as a browser resolves a
+/// `file:` path: a `.`, or `%2e` in any case, is dropped, and a `..`, or any
+/// mix of `.` and `%2e`, drops the segment before it. Separators are `/` and
+/// `\`, empty segments are kept, and a query or fragment ends the path.
+fn resolve_dots(path: &str) -> String {
+    let end = path.find(['?', '#']).unwrap_or(path.len());
+    let path = &path[..end];
+    if !path.contains(['/', '\\']) {
+        return path.to_string();
+    }
+    let mut parts = path.split(['/', '\\']);
+    let first = parts.next().unwrap_or("");
+    let mut segments: Vec<&str> = Vec::new();
+    for part in parts {
+        match part.to_ascii_lowercase().as_str() {
+            "." | "%2e" => {}
+            ".." | ".%2e" | "%2e." | "%2e%2e" => {
+                segments.pop();
+            }
+            _ => segments.push(part),
+        }
+    }
+    format!("{first}/{}", segments.join("/"))
+}
+
+/// Whether `path` as written opens on two or more separators and the segment
+/// after them carries a user name.
+fn opens_on_a_user(path: &str) -> bool {
     let segment = path.trim_start_matches(['/', '\\']);
     if path.len() - segment.len() < 2 {
         return false;
@@ -1015,9 +1049,23 @@ mod tests {
             "file://\u{ff4c}\u{ff4f}\u{ff43}\u{ff41}\u{ff4c}\u{ff48}\u{ff4f}\u{ff53}\u{ff54}//u:secret@server/x",
             "file://loca\u{ad}lhost/\\u:secret@server/x",
             "file://server//u:secret@elsewhere/x",
+            "file:///.//u:secret@server/x",
+            "file:/./\\u:secret@server",
+            "file:/.//u:secret@server",
+            "file:///%2e//u:secret@server",
+            "file:///a/..//u:secret@server",
+            "file:///..//u:secret@server",
+            "file:///a/%2E%2e//u:secret@server",
+            "file:///a/.%2e//u:secret@server",
+            "file:///a/%2e.//u:secret@server",
+            "file://localhost/.//u:secret@server",
         ] {
             assert_eq!(clean_address(smuggled), None, "{smuggled}");
         }
+        assert_eq!(
+            clean_address("file:///a/../b@c/x").as_deref(),
+            Some("file:///a/../b@c/x")
+        );
         assert_eq!(
             clean_address("file://localhost/home/a/b.html").as_deref(),
             Some("file://localhost/home/a/b.html")
