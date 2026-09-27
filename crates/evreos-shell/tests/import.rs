@@ -1145,9 +1145,14 @@ fn cargo_metadata(args: &[&str]) -> Json {
         .args(args)
         .output()
         .unwrap();
+    // Offline, cargo resolves the whole workspace from the crates already
+    // fetched, so a cache filled by building this crate alone can lack one
+    // another member needs. Building the workspace first with every
+    // feature, as CI's clippy step does, fetches them all.
     assert!(
         output.status.success(),
-        "{}",
+        "cargo metadata failed offline; build the whole workspace first so \
+         its crates are fetched: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     json::parse(&String::from_utf8(output.stdout).unwrap()).unwrap()
