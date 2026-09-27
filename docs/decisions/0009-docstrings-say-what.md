@@ -27,6 +27,11 @@ beyond what the code it documents does.
 The rule binds a file when a pull request opened after the amendment merges
 edits it. Existing docstrings are brought in line then, not in a sweep.
 
+Where the service issues no withdrawal token, which reading of FR-026a T125
+takes is a founder decision, recorded in this register before the code takes
+it, and the module's documentation cites it. Once a doc comment may not argue
+the reason, nothing else would hold it.
+
 It is stated in the constitution's Development Workflow, and `CLAUDE.md`
 points to it.
 
@@ -52,6 +57,7 @@ points to it.
 
 - The constitution's Development Workflow.
 - `CLAUDE.md`'s Workflow section, which points to it.
+- FR-026a and T125, whose reading of it is a founder decision.
 
 ## Consequences
 
@@ -59,7 +65,8 @@ Binding from the merge of the pull request that amends the constitution.
 Nothing opened before that merge is covered, #106 included. The constitution
 moves to 2.2.0, and six open tasks in `specs/001-evreos-v1/tasks.md` -- T112,
 T114, T124, T125, T137 and T161 -- follow it: the doc comments they prescribe cite a
-reason rather than argue it.
+reason rather than argue it. T125 also waits, where the service issues no
+token, on the founder decision that settles its reading of FR-026a.
 
 What reopens this: a review finding a defect that a docstring's brevity hid.
 

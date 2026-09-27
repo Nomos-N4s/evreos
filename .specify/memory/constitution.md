@@ -15,7 +15,8 @@ Amendment 2.1.0 → 2.2.0 (2026-09-27), MINOR — guidance outside the Core Prin
   - Nothing is relaxed, so the amendment procedure asks for no replacement discipline.
   - Follow-on, in the same pull request: `CLAUDE.md`'s Workflow section points to the new
     bullet, and six open tasks in `specs/001-evreos-v1/tasks.md` — T112, T114, T124, T125,
-    T137 and T161 — have their doc comments cite a reason rather than argue it.
+    T137 and T161 — have their doc comments cite a reason rather than argue it. T125's
+    reading of FR-026a, where the service issues no token, becomes a founder decision.
 
 Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Principles
   expanded:
