@@ -52,7 +52,7 @@ its measurement of them here, as the Status above frames it:
    with its main file**: a read of `places.sqlite` alone missed committed
    rows in 826 of 1,101 trials.
 2. **The reader is in-tree, safe Rust, and costs 0 bytes in the binary this
-   change ships and 104,944 bytes (0.100 MB) once an interface reaches it**,
+   change ships and 106,600 bytes (0.102 MB) once an interface reaches it**,
    against at least 1,112,160 bytes (1.061 MB) for the SQLite library with a
    JSON parser — the option not adopted. Both
    figures are Linux x86-64 deltas; no SC-001 entry can be measured yet, for
@@ -225,7 +225,7 @@ library's for the same filter — visible, visited, `http`, `https` or `file` �
 on every profile the runs produced: 6,613, 5,992, 539, 484 and 8,829 rows. Its
 bookmark counts equal what the DevTools driver created (3,245 and 495) and
 Firefox's four default bookmarks. The reader as this change ships it, run over
-the same stopped profiles after review round 16, reads the same counts.
+the same stopped profiles after review round 17, reads the same counts.
 
 ## What was adopted
 
@@ -272,19 +272,19 @@ the same stopped profiles after review round 16, reads the same counts.
 - **The read runs on the worker pool; the write runs where the stores live.**
   With the browsers stopped, and the reader as this change ships it —
   three runs each through `examples/import_timing.rs`, re-measured after
-  review round 16 on the pull request, and varying by tens of percent from
-  one run to the next — reading took 2–22 ms for the live profiles here,
+  review round 17 on the pull request, and varying by tens of percent from
+  one run to the next — reading took 2–23 ms for the live profiles here,
   once each file was in the file cache (in the round-4 runs, the first read
-  of each Edge profile, from a cold cache, took 278–357 ms), and 36–37 ms
+  of each Edge profile, from a cold cache, took 278–357 ms), and 38–39 ms
   for a synthetic profile of 20,000 bookmarks in 400 folders; against a
   running browser a read retries, and the slowest live trial in the tables
   above took 550 ms. Writing, which
-  happens on the thread that owns the stores, took 1–13 ms for the live
-  profiles and 24–36 ms for the 20,000 bookmarks. Inside the import's batch
+  happens on the thread that owns the stores, took 1–14 ms for the live
+  profiles and 26–37 ms for the 20,000 bookmarks. Inside the import's batch
   a new row finds its parent and position from an index built when the
   batch starts, so the write is linear in the store and the rows it adds
   together, the batch copying, indexing and validating the store once each:
-  50,000 bookmarks in one folder take 74–107 ms. Before review round 2 on
+  50,000 bookmarks in one folder take 80–111 ms. Before review round 2 on
   the pull request each row scanned the whole store, which made the same
   20,000 bookmarks take 264 ms and 50,000 in one folder take 7.0 s.
 
@@ -293,7 +293,7 @@ the same stopped profiles after review round 16, reads the same counts.
 Five release builds of `evreos-shell` under the workspace's release profile
 (`opt-level = "z"`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`,
 `strip = "symbols"`), each measured as the binary's `st_size`. B, C and E
-were re-measured after the fixes review rounds 1 to 16 on the pull
+were re-measured after the fixes review rounds 1 to 17 on the pull
 request required, which changed the readers, the verified copy, the address
 filter, discovery and the bookmark store that C and E reach. `evreos-shell` builds as
 one codegen unit under fat LTO, so a change anywhere in the crate can move
@@ -309,16 +309,16 @@ bytes:
 | --- | --- | --- |
 | A | the merge base, `main` at `aaffd75` | 507,576 |
 | B | this change, as it ships | 507,576 |
-| C | B, with `main` calling `discover` and `ImportJob::run` | 691,824 |
+| C | B, with `main` calling `discover` and `ImportJob::run` | 693,480 |
 | E | B, with `main` making the same store and catalogue calls the import makes, and no import | 586,880 |
 | D | B, with `main` reading a table through `rusqlite` 0.40.2 (`bundled`) and a document through `serde_json` 1.0.151 | 1,619,736 |
 
 - **B − A = 0 bytes.** Nothing in the binary reaches the import yet: no
   interface surface calls it, so the linker keeps none of it. This change
   moves no SC-001 figure today.
-- **C − E = 104,944 bytes (0.100 MB)**: the importer's own cost — both
+- **C − E = 106,600 bytes (0.102 MB)**: the importer's own cost — both
   readers, the verified copy, discovery and the job — once a surface reaches
-  it. C − B, 184,248 bytes, is larger because it also counts the
+  it. C − B, 185,904 bytes, is larger because it also counts the
   stores and the catalogue, which the binary does not reach yet either and
   which every surface that shows history or bookmarks will pull in whether or
   not import exists.
@@ -344,8 +344,8 @@ $ python3 scripts/check-budgets.py --allow-unpinned-runners --allow-unmeasured
 
 **All four SC-001 entries therefore stay unmeasured-with-reason.** Against
 their figures — 20 MB download and 60 MB installed on each tier — the
-importer's reachable cost is 0.50% of the download figure on this
-host, and the library option's floor is 5.30%, 10.6 times as much. These
+importer's reachable cost is 0.51% of the download figure on this
+host, and the library option's floor is 5.30%, 10.4 times as much. These
 are Linux x86-64 deltas, not the tier-1 or tier-2 figure: N10 measured its deltas on
 the tier-1 host, and the same builds on each tier's host are owed with the
 tier runs above. No baseline is written, because no SC-001 entry was
