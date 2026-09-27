@@ -593,6 +593,24 @@ fn a_job_run_again_counts_only_its_new_run() {
 }
 
 #[test]
+fn a_written_job_failed_without_a_new_read_counts_nothing() {
+    // `finish` takes any read, so a job can be failed without
+    // `start_reading`; its counts must not stand for the earlier run.
+    let (root, mut stores, mut job) = import(chrome(), Language::En);
+    assert_eq!(job.counts().history_imported, 1503);
+    let failed = job.finish(
+        Err(ImportError::ProfileMissing),
+        &mut stores,
+        Language::En,
+        SystemTime::now(),
+    );
+    assert!(matches!(failed, Err(ImportError::ProfileMissing)));
+    assert_eq!(job.counts().history_imported, 0);
+    assert_eq!(job.counts().bookmarks_imported, 0);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn a_missing_profile_fails_and_writes_nothing() {
     let root = temp_dir("missing");
     let mut stores = StoreRegistry::open(&root);
