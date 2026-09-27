@@ -558,6 +558,20 @@ report("a Rust file embedded as text is read whole too, not only as Rust",
 report("...and listed once among the files read",
        read.count("crates/x/src/payload.rs") == 1)
 
+problems = tree(passing_tree({
+    "crates/x/Cargo.toml": (
+        CLEAN_MANIFEST.replace("[dependencies]", 'build = "build.txt"\n\n[dependencies]', 1)
+        + '\n[lib]\npath = "src/lib.txt"\n\n[[bin]]\nname = "tool"\npath = "src/tool.txt"\n'
+    ),
+    "crates/x/build.txt": "fn main() { let n = gethostname(); }\n",
+    "crates/x/src/lib.txt": 'pub fn g() { let g = "MachineGuid"; }\n',
+    "crates/x/src/tool.txt": "fn main() { let t = mach_absolute_time(); }\n",
+}))[0]
+report("a crate root or build script a manifest names is read, whatever its suffix",
+       mentions(problems, "crates/x/build.txt:1", "'gethostname'")
+       and mentions(problems, "crates/x/src/lib.txt:1", "'MachineGuid'")
+       and mentions(problems, "crates/x/src/tool.txt:1", "'mach_absolute_time'"))
+
 problems = tree(with_rust('fn f() {}\ninclude!("missing.in");\n#[path = "gone.txt"]\nmod gone;\n'))[0]
 report("a brought file that is not there is reported, not skipped",
        mentions(problems, "probe.rs:2", "missing.in", "no file")

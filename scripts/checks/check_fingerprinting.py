@@ -56,7 +56,9 @@ It reads the tree and fails on:
                 whole, like script, bytes that are not UTF-8 decoded as
                 `String::from_utf8_lossy` decodes them; one outside the tree,
                 or not a file there, is reported, since nothing in it can be
-                answered for.
+                answered for. A crate root or build script a `Cargo.toml`
+                names by `path` or `build` is read as Rust too, since Cargo
+                compiles it whatever its suffix.
                 A literal's `\\x` and `\\u{...}` escapes, and script's
                 `\\uHHHH` too, are decoded before matching, so a name spelled
                 with an escape -- `"/etc/machine\\x2did"` -- is the same name.
@@ -226,9 +228,9 @@ member, which research section 4.3 sets out of FR-036a's scope and out of this
 architecture's reach.
 
 Files other than Rust source, the script and markup suffixes above and
-`Cargo.toml` are not read, unless a Rust file brings one into the build as
-SOURCE describes: Python is the tooling that runs this check and ships in
-nothing, and markdown is where the forbidden sources are quoted.
+`Cargo.toml` are not read, unless a Rust file or a manifest brings one into
+the build as SOURCE describes: Python is the tooling that runs this check and
+ships in nothing, and markdown is where the forbidden sources are quoted.
 Directories are matched with case folded where they must be, the release
 platforms' filesystems folding case. `.git/` is not read, and neither is
 Cargo's build output: a `target/` directory beside a `Cargo.toml`, which
@@ -764,6 +766,25 @@ def sources_in(text, only=None, skip=()):
     return sorted(found, key=lambda item: item[0])
 
 
+def crate_roots(manifest):
+    """The files `manifest` names for Cargo to compile: `[lib]`'s `path`,
+    each `[[bin]]`, `[[test]]`, `[[bench]]` and `[[example]]` `path`, and the
+    package's `build` script, as written."""
+    named = []
+    lib = manifest.get("lib")
+    if isinstance(lib, dict):
+        named.append(lib.get("path"))
+    for key in ("bin", "test", "bench", "example"):
+        targets = manifest.get(key)
+        for target in targets if isinstance(targets, list) else ():
+            if isinstance(target, dict):
+                named.append(target.get("path"))
+    package = manifest.get("package")
+    if isinstance(package, dict):
+        named.append(package.get("build"))
+    return [path for path in named if isinstance(path, str)]
+
+
 def dependencies_in(manifest, inherited=None):
     """Every crate a parsed manifest depends on directly, by its real name.
 
@@ -976,6 +997,8 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 (workspaces[d] for d in (path.parent, *path.parent.parents) if d in workspaces),
                 None,
             )
+            for named in crate_roots(manifest):
+                brought.append(("rust", (path.parent / named,), where))
             for crate in dependencies_in(manifest, inherited):
                 name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
                 if name is not None:
