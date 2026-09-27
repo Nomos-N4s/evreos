@@ -69,9 +69,11 @@ malformed manifest is therefore reported as malformed, whatever its signature.
    already included, and a rollout of 0 holds the release.
 
 An offered update is not applied until its artefact has been read whole and its
-length and SHA-256 match the manifest's. The platform's own code signature on
-the artefact is checked as well before it is applied, in the change that applies
-it.
+length and SHA-256 match the manifest's, and the manifest's `not after` is
+checked again then, once the artefact is fetched, so an offer held while the
+artefact downloads does not outlive its manifest. The platform's own code
+signature on the artefact is checked as well before it is applied, in the change
+that applies it.
 
 ## Keys
 
