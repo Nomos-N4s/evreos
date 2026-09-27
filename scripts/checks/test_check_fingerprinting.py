@@ -476,6 +476,24 @@ report("...as are a property split from screen, optionally chained or bracketed"
        and mentions(problems, "zone.js:8", "'screen.'"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/whole.js": (
+        "const { width, height } = screen\n"
+        "send(width)\r\n"
+        "const { colorDepth } = screen\r\n"
+        "const a = self.screen;\n"
+        "const b = globalThis.screen;\n"
+        "const c = window['screen'];\n"
+    ),
+}))[0]
+report("the screen object taken whole is a read without a semicolon, LF or CRLF",
+       mentions(problems, "whole.js:1", "'window.screen'")
+       and mentions(problems, "whole.js:3", "'window.screen'"))
+report("...and through self, globalThis or a bracketed window",
+       mentions(problems, "whole.js:4", "'window.screen'")
+       and mentions(problems, "whole.js:5", "'window.screen'")
+       and mentions(problems, "whole.js:6", "'window.screen'"))
+
+problems = tree(passing_tree({
     "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",

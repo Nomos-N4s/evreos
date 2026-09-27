@@ -368,7 +368,11 @@ SOURCES = {
         )),
         # The screen object taken whole, as destructuring takes it:
         # `const { width } = window.screen`, `= screen;`.
-        ("window.screen", r"window\s*\??\.\s*screen(?!\s*\??\.\s*\w)|=\s*screen(?=\s*[;,)])"),
+        ("window.screen", (
+            r"(?:window|self|globalThis|top|parent)\s*(?:\??\.\s*screen(?!\s*\??\.\s*\w)"
+            r"|(?:\?\.)?\s*\[\s*[\"'`]screen[\"'`]\s*\])"
+            r"|=\s*screen(?=[ \t]*(?:[;,)}\r\n]|\Z))"
+        )),
         ("getScreenDetails", r"getScreenDetails"),
     ),
     "installed fonts": (
