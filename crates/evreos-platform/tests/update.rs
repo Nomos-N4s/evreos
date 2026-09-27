@@ -218,3 +218,102 @@ fn the_widest_rollout_and_longest_platform_are_accepted() {
     let manifest = VerifiedManifest::verify(&fields.signed(), &key()).unwrap();
     assert_eq!(manifest.rollout(), 1_000_000);
 }
+
+mod rollout {
+    use std::fs;
+    use std::path::PathBuf;
+
+    use evreos_platform::update::rollout::RolloutDraw;
+
+    fn scratch(name: &str) -> PathBuf {
+        let dir =
+            std::env::temp_dir().join(format!("evreos-rollout-{}-{name}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir.join("rollout")
+    }
+
+    #[test]
+    fn a_value_is_drawn_once_and_kept() {
+        let path = scratch("once");
+        let first = RolloutDraw::load_or_draw(&path).unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        let value: u32 = text.trim_end().parse().unwrap();
+        assert!(value < 1_000_000, "{value}");
+        assert_eq!(text, format!("{value}\n"));
+        for _ in 0..3 {
+            assert_eq!(RolloutDraw::load_or_draw(&path).unwrap(), first);
+        }
+        assert!(!path.with_extension("partial").exists());
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_kept_value_decides_inclusion() {
+        let path = scratch("kept");
+        fs::write(&path, "250000\n").unwrap();
+        let draw = RolloutDraw::load_or_draw(&path).unwrap();
+        // Included below the rollout, excluded at or above it.
+        assert!(draw.included(250_001));
+        assert!(!draw.included(250_000));
+        assert!(!draw.included(0));
+        assert!(draw.included(1_000_000));
+        // Widening never drops an install already included.
+        let mut was = false;
+        for rollout in (0..=1_000_000).step_by(50_000) {
+            let now = draw.included(rollout);
+            assert!(now || !was, "rollout {rollout} dropped an included install");
+            was = now;
+        }
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn the_lowest_and_highest_values_decide_at_the_ends() {
+        let path = scratch("ends");
+        fs::write(&path, "0").unwrap();
+        let lowest = RolloutDraw::load_or_draw(&path).unwrap();
+        assert!(lowest.included(1) && !lowest.included(0));
+        fs::write(&path, "999999\n").unwrap();
+        let highest = RolloutDraw::load_or_draw(&path).unwrap();
+        assert!(highest.included(1_000_000) && !highest.included(999_999));
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_value_is_replaced_by_a_new_draw() {
+        let path = scratch("replaced");
+        for text in [
+            "",
+            "1000000\n",
+            "-1\n",
+            "12 34\n",
+            "0x10\n",
+            "250000\n\n",
+            " 5\n",
+        ] {
+            fs::write(&path, text).unwrap();
+            RolloutDraw::load_or_draw(&path).unwrap();
+            let kept = fs::read_to_string(&path).unwrap();
+            let value: u32 = kept.trim_end().parse().unwrap();
+            assert!(value < 1_000_000, "{text:?} left {kept:?}");
+            assert_eq!(kept, format!("{value}\n"), "{text:?}");
+        }
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn draws_spread_across_the_range() {
+        // Not a test of randomness, only that draws are not stuck: a
+        // hundred draws land in more than one tenth of the range.
+        let mut tenths = [false; 10];
+        for index in 0..100 {
+            let path = scratch(&format!("spread-{index}"));
+            let draw = RolloutDraw::load_or_draw(&path).unwrap();
+            let tenth = (0..10).find(|t| draw.included((t + 1) * 100_000)).unwrap();
+            tenths[tenth as usize] = true;
+            let _ = fs::remove_dir_all(path.parent().unwrap());
+        }
+        assert!(tenths.iter().filter(|hit| **hit).count() > 1);
+    }
+}

@@ -19,6 +19,9 @@ publish.workspace = true
 # resolves. Its byte cost is stated in the pull request that adds it.
 [dependencies]
 ed25519-dalek = { version = "2.2.0", default-features = false }
+# The rollout draw's randomness, from the operating system. The shell
+# already links this version through winit's ahash.
+getrandom = { version = "0.3.4", default-features = false }
 
 # Tier 1's bindings, both Microsoft's safe ones: windows-registry for
 # default-browser registration, and windows for the launcher that opens the
