@@ -389,7 +389,8 @@ SOURCES = {
         ("font_kit", r"font_kit"),
         ("queryLocalFonts", r"queryLocalFonts"),
         ("document.fonts", r"document\s*\??\.\s*fonts"),
-        ("/usr/share/fonts", r"/usr/share/fonts"),
+        ("/usr/share/fonts", r"/share/fonts"),
+        ("~/.fonts", r"/\.fonts"),
         ("/Library/Fonts", r"/Library/Fonts"),
         ("Windows\\Fonts", r"Windows[\\/]+Fonts"),
     ),
@@ -520,8 +521,19 @@ SCRIPT_SHAPED = {
 EDGE_BEFORE = r"(?<![A-Za-z0-9_])"
 EDGE_AFTER = r"(?![A-Za-z0-9_])"
 
+# A path-shaped pattern -- one that opens with `/` -- needs no leading edge:
+# the slash delimits it already, and a directory in front of it, as in
+# `/System/Library/Fonts`, must not hide it.
 COMPILED = [
-    (category, name, re.compile(EDGE_BEFORE + "(?:" + pattern + ")" + EDGE_AFTER, re.IGNORECASE))
+    (
+        category,
+        name,
+        re.compile(
+            ("" if pattern.startswith("/") else EDGE_BEFORE)
+            + "(?:" + pattern + ")" + EDGE_AFTER,
+            re.IGNORECASE,
+        ),
+    )
     for category, sources in SOURCES.items()
     for name, pattern in sources
 ]
