@@ -10,8 +10,9 @@
 FR-013 requires that the member can make Evreos their default browser from
 within it. Research §10.2 establishes the tier-1 route: register, then open the
 system's default-apps page. On tier 2 it records only that "a documented API
-call exists but is unverified here", and N12 in research §12.2 lists it among
-the small platform unknowns. T059 asks that the route be established on the
+call exists but is unverified here", and tags it N12. The N12 entry in research
+§12.2 does not list it among the platform unknowns it names, so this record
+states the question itself. T059 asks that the route be established on the
 tier-2 pinned runner rather than assumed. Until it is, `route()` in
 `crates/evreos-platform/src/default_browser.rs` reports
 `Route::Unestablished` on macOS, and `open_settings` returns `Unsupported`
@@ -55,8 +56,12 @@ the tier supports, with a signed build whose `Info.plist` declares `http`,
    holds the default web browser setting on each release, and can it be opened
    directly?
 5. **Binding and cost.** Through which safe binding the adopted call is
-   reached: `objc2-app-kit` is already in the workspace's graph through `wry`,
-   per research §2.8. What does it add to a release build, stated against
+   reached. `objc2-app-kit` is already in the shell's macOS graph: version
+   0.2.2, through `evreos-chrome`'s `accesskit_macos` and through `winit`.
+   Version 0.3.2 is in the workspace's graph too, but only through `wry`
+   0.53.5, which the chrome spike alone uses. Research §2.8 names it among
+   `wry` 0.56.1's dependencies, for an engine crate that does not exist yet.
+   What does the adopted binding add to a release build, stated against
    `budgets.toml` as the tier-1 bindings are at
    `docs/measurements/default-browser-registration.md`?
 
