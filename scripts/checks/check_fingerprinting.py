@@ -57,6 +57,11 @@ It reads the tree and fails on:
                 resolution, colour depth or arrangement, on every platform
                 API the release tiers carry and on the `screen` object in
                 script.
+    installed fonts
+                enumerating the system's font collection, on every platform
+                API, through fontconfig and `fc-list`, through a font
+                library's system-font loader, and by listing a system font
+                directory.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -184,6 +189,28 @@ SOURCES = {
         ("XRRGetScreenResources", r"XRRGetScreenResources(?:Current)?"),
         ("screen.", r"screen\.(?:width|height|availWidth|availHeight|availLeft|availTop|colorDepth|pixelDepth|orientation)"),
         ("getScreenDetails", r"getScreenDetails"),
+    ),
+    "installed fonts": (
+        ("EnumFontFamilies", r"EnumFontFamilies(?:Ex)?[AW]?"),
+        ("EnumFonts", r"EnumFonts[AW]?"),
+        ("GetSystemFontCollection", r"GetSystemFontCollection"),
+        ("IDWriteFontCollection", r"IDWriteFontCollection\d?"),
+        ("CTFontManagerCopyAvailable", r"CTFontManagerCopyAvailable\w+"),
+        ("CTFontCollectionCreateFromAvailableFonts", r"CTFontCollectionCreateFromAvailableFonts"),
+        ("NSFontManager", r"NSFontManager"),
+        ("availableFonts", r"availableFonts"),
+        ("availableFontFamilies", r"availableFontFamilies"),
+        ("FcFontList", r"FcFontList"),
+        ("FcConfigGetFonts", r"FcConfigGetFonts"),
+        ("FcFontSetList", r"FcFontSetList"),
+        ("fc-list", r"fc-list"),
+        ("load_system_fonts", r"load_system_fonts"),
+        ("font_kit", r"font_kit"),
+        ("queryLocalFonts", r"queryLocalFonts"),
+        ("document.fonts", r"document\.fonts"),
+        ("/usr/share/fonts", r"/usr/share/fonts"),
+        ("/Library/Fonts", r"/Library/Fonts"),
+        ("Windows\\Fonts", r"Windows[\\/]+Fonts"),
     ),
 }
 

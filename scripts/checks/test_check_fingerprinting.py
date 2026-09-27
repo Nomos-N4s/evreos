@@ -149,6 +149,10 @@ CAUGHT = (
      "let size = event_loop.primary_monitor().map(|m| m.size());\n"),
     ("screen geometry", "GetSystemMetrics",
      "let width = GetSystemMetrics(SM_CXSCREEN);\n"),
+    ("installed fonts", "EnumFontFamilies",
+     "EnumFontFamiliesExW(dc, &logfont, Some(collect), 0, 0);\n"),
+    ("installed fonts", "load_system_fonts",
+     "database.load_system_fonts();\n"),
 )
 
 for category, name, body in CAUGHT:
