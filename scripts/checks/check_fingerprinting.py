@@ -99,7 +99,9 @@ It reads the tree and fails on:
                 numbers and UUIDs.
     MAC addresses and network characteristics
                 the adapter tables and ioctls that yield a MAC address or the
-                machine's own interface addresses, `/sys/class/net`, Wi-Fi
+                machine's own interface addresses, `/sys/class/net`, the ARP
+                table in `/proc/net/arp`, the `getmac`, `ifconfig`,
+                `ipconfig` and `networksetup` tools, Wi-Fi
                 network identity (BSSID and the WLAN and CoreWLAN
                 interfaces), the connection-type interfaces, and
                 `RTCPeerConnection`, vendor-prefixed or not, which is how
@@ -379,6 +381,11 @@ SOURCES = {
         ("GetIfTable", r"GetIfTable2?"),
         ("SIOCGIFHWADDR", r"SIOCGIFHWADDR"),
         ("/sys/class/net", r"/sys/class/net"),
+        ("/proc/net/arp", r"/proc/net/arp"),
+        ("getmac", r"getmac"),
+        ("ifconfig", r"ifconfig"),
+        ("ipconfig", r"ipconfig"),
+        ("networksetup", r"networksetup"),
         ("getifaddrs", r"getifaddrs"),
         ("mac_address", r"mac_address"),
         ("MacAddress", r"MacAddress"),
