@@ -28,7 +28,9 @@
 //! FR-007a permits. The shipped code of this module and its submodules —
 //! their unit tests aside, each the last item of its file — is held to this:
 //! - it names no dependency of this crate but `evreos-i18n`, for the names of
-//!   its folders, so not `evreos-net`, and no crate through `extern`;
+//!   its folders, so not `evreos-net`, and no crate through `extern`; and
+//!   `evreos-i18n` links no crate by a normal dependency declared for every
+//!   platform;
 //! - it names neither `std::net` nor `std::process`, so opens no socket and
 //!   starts no process, and no part of `std::os` but the Unix
 //!   `OpenOptionsExt`, whose `custom_flags` it may pass `O_NONBLOCK` alone, a
@@ -54,7 +56,9 @@
 //!   character a reader cannot see hides a path.
 //!
 //! The rules state what the code is held to. `tests/import.rs` checks each
-//! of them token by token, in the forms its cases name; a form it does not
+//! of them: the code token by token, in the forms its cases name, and the
+//! dependencies, the catalogue's among them, from cargo's metadata, as the
+//! manifests declare them and as cargo resolves them; a form it does not
 //! refuse is a gap in the check, not a licence in the rule. It reads the
 //! code's tokens, not their meaning: it catches a change that reaches further
 //! by accident or by habit, but it is not a proof against code written to slip

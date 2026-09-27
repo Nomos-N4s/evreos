@@ -1128,6 +1128,11 @@ fn resolve_denied_crates() -> Vec<String> {
         .join("../evreos-i18n/Cargo.toml")
         .canonicalize()
         .unwrap();
+    let links = catalogue_links(&resolved, &catalogue);
+    assert!(
+        links.is_empty(),
+        "the catalogue links crates the import could reach through it: {links:?}"
+    );
     denied_by(&resolved, &catalogue)
 }
 
@@ -1231,6 +1236,73 @@ fn a_dependency_for_some_platforms_is_not_passed_over() {
     assert_eq!(
         platform_specific(&declared, &manifest.canonicalize().unwrap()),
         ["zz", "bar"]
+    );
+    fs::remove_dir_all(dir).unwrap();
+}
+
+/// The crates the catalogue itself links, in `metadata`, a resolved report,
+/// where `catalogue` is its manifest. The import may name the catalogue, so
+/// a crate it linked could be reached through it, re-exported under another
+/// name, and none is allowed.
+fn catalogue_links(metadata: &Json, catalogue: &Path) -> Vec<String> {
+    let str_at =
+        |value: &Json, key: &str| value.get(key).and_then(Json::as_str).map(str::to_string);
+    let array = |value: Option<&Json>| value.and_then(Json::as_array).unwrap_or_default().to_vec();
+    let id = array(metadata.get("packages"))
+        .iter()
+        .find(|package| {
+            str_at(package, "manifest_path")
+                .and_then(|path| Path::new(&path).canonicalize().ok())
+                .as_deref()
+                == Some(catalogue)
+        })
+        .and_then(|package| str_at(package, "id"))
+        .expect("the catalogue's package");
+    let node = array(
+        metadata
+            .get("resolve")
+            .and_then(|resolve| resolve.get("nodes")),
+    )
+    .into_iter()
+    .find(|node| str_at(node, "id").as_deref() == Some(id.as_str()))
+    .expect("the catalogue's node");
+    array(node.get("deps"))
+        .iter()
+        .filter(|dep| {
+            array(dep.get("dep_kinds"))
+                .iter()
+                .any(|kind| kind.get("kind") == Some(&Json::Null))
+        })
+        .filter_map(|dep| str_at(dep, "name"))
+        .collect()
+}
+
+#[test]
+fn a_crate_the_catalogue_links_is_found() {
+    let dir = temp_dir("catalogue-links");
+    let catalogue = dir.join("Cargo.toml");
+    fs::write(&catalogue, "").unwrap();
+    let metadata = |deps: &str| {
+        json::parse(&format!(
+            r#"{{"packages": [{{"id": "cat", "manifest_path": {path:?}}}],
+            "resolve": {{"root": "root", "nodes": [
+                {{"id": "root", "deps": []}},
+                {{"id": "cat", "deps": [{deps}]}}
+            ]}}}}"#,
+            path = catalogue.display().to_string(),
+        ))
+        .unwrap()
+    };
+    let catalogue = catalogue.canonicalize().unwrap();
+    assert!(catalogue_links(&metadata(""), &catalogue).is_empty());
+    let tested =
+        r#"{"name": "trybuild", "pkg": "t", "dep_kinds": [{"kind": "dev", "target": null}]}"#;
+    assert!(catalogue_links(&metadata(tested), &catalogue).is_empty());
+    let linked =
+        r#"{"name": "evreos_net", "pkg": "n", "dep_kinds": [{"kind": null, "target": null}]}"#;
+    assert_eq!(
+        catalogue_links(&metadata(linked), &catalogue),
+        ["evreos_net"]
     );
     fs::remove_dir_all(dir).unwrap();
 }
