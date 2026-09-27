@@ -994,6 +994,13 @@ const MACROS: &[&str] = &[
     "writeln",
 ];
 
+/// Keywords a leading `::` may follow, as in `use ::std`: before `::` they
+/// start a path rather than being a segment of one.
+const PATH_KEYWORDS: &[&str] = &[
+    "as", "break", "const", "dyn", "else", "for", "if", "impl", "in", "let", "match", "move",
+    "mut", "pub", "ref", "return", "static", "type", "use", "where", "while", "yield",
+];
+
 /// Keywords that a `!` may follow as negation, not as a macro call.
 const KEYWORDS: &[&str] = &[
     "as", "break", "else", "if", "in", "let", "match", "move", "mut", "return", "while", "yield",
@@ -1239,7 +1246,16 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
                 }
             }
             // The standard library, less the parts that open a socket, start
-            // a process or reach the platform, and only by a plain path.
+            // a process or reach the platform, and only by a plain path that
+            // it begins: after another segment, as in `self::std` or
+            // `super::std`, it is a name whose meaning the test cannot see.
+            "std" | "core" | "alloc"
+                if i >= 3
+                    && path_sep(i - 2)
+                    && ident(i - 3).is_some_and(|segment| !PATH_KEYWORDS.contains(&segment)) =>
+            {
+                found.push(format!("`{word}` after another path segment"));
+            }
             "std" | "core" | "alloc" => match next_word {
                 // Of the platform's own parts, only `OpenOptionsExt`, the
                 // file-opening options the copy uses to open a store without
@@ -1356,6 +1372,12 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use std::os::unix::net::UnixStream;", false),
         ("use std::os::fd::FromRawFd;", false),
         ("use std::os::{unix::fs};", false),
+        ("use self::std::fs::File;", false),
+        (
+            "fn f() { super::std::fs::remove_file(\"x\").unwrap(); }",
+            false,
+        ),
+        ("use crate::store::core::X;", false),
         ("use std::os::unix::fs::symlink;", false),
         ("use std::os::unix::fs::{OpenOptionsExt, symlink};", false),
         ("use std::os::unix::fs;", false),
@@ -1489,6 +1511,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("fn f() -> u8 { super::g() }", false),
+        ("use ::std::fs::File;", false),
+        ("pub use ::core::fmt::Write;", false),
         (
             "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",
             false,
