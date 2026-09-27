@@ -185,8 +185,11 @@ pub const MAX_STORE_FILE_BYTES: u64 = 1 << 30;
 /// can hold either under a store's name, behind a link or not; neither is a
 /// store, so each is an error rather than a read. The path is checked before
 /// it is opened, and what was opened is checked again, so a pipe or device
-/// swapped in between is refused too; on Unix the open itself cannot block,
-/// since a pipe opened without waiting for a writer returns at once.
+/// swapped in between is refused too. Where [`O_NONBLOCK`] is known, the open
+/// itself cannot block either, since a pipe opened without waiting for a
+/// writer returns at once; on a Unix where it is not, a pipe swapped in
+/// between the check and the open can still hold the open until a writer
+/// comes.
 fn open_if_present(path: &Path) -> io::Result<Option<File>> {
     match fs::metadata(path) {
         Ok(meta) if !meta.is_file() => return Err(not_regular()),
@@ -223,35 +226,41 @@ fn open_regular(path: &Path) -> io::Result<File> {
     }
 }
 
-/// `O_NONBLOCK`, which the standard library does not name, as each Unix
-/// defines it. On a regular file it changes nothing; on a pipe it lets the
-/// open return without a writer. A Unix not listed opens without it, and is
-/// left with the check made before the open.
-#[cfg(any(target_os = "linux", target_os = "android"))]
-const O_NONBLOCK: i32 = 0o4000;
-#[cfg(any(
+/// `O_NONBLOCK`, which the standard library does not name, for the Unix
+/// systems whose value for it is known here: Linux and Android on each
+/// architecture (MIPS and SPARC define their own), and the BSDs and Apple's
+/// systems, which share one. On a regular file it changes nothing; on a pipe
+/// it lets the open return without a writer. Any other Unix opens without
+/// it, `0` here, and is left with the check made before the open.
+#[cfg(unix)]
+const O_NONBLOCK: i32 = if cfg!(any(target_os = "linux", target_os = "android")) {
+    if cfg!(any(
+        target_arch = "mips",
+        target_arch = "mips32r6",
+        target_arch = "mips64",
+        target_arch = "mips64r6"
+    )) {
+        0x0080
+    } else if cfg!(any(target_arch = "sparc", target_arch = "sparc64")) {
+        0x4000
+    } else {
+        0o4000
+    }
+} else if cfg!(any(
     target_os = "macos",
     target_os = "ios",
+    target_os = "tvos",
+    target_os = "watchos",
+    target_os = "visionos",
     target_os = "freebsd",
     target_os = "netbsd",
     target_os = "openbsd",
     target_os = "dragonfly"
-))]
-const O_NONBLOCK: i32 = 0x0004;
-#[cfg(all(
-    unix,
-    not(any(
-        target_os = "linux",
-        target_os = "android",
-        target_os = "macos",
-        target_os = "ios",
-        target_os = "freebsd",
-        target_os = "netbsd",
-        target_os = "openbsd",
-        target_os = "dragonfly"
-    ))
-))]
-const O_NONBLOCK: i32 = 0;
+)) {
+    0x0004
+} else {
+    0
+};
 
 /// The whole of the regular file at `path`, or `None` if it does not exist;
 /// an error if it is not a regular file or holds more than `limit` bytes.
