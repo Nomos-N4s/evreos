@@ -1165,8 +1165,9 @@ fn cargo_metadata(args: &[&str]) -> Json {
     // feature, as CI's clippy step does, fetches them all.
     assert!(
         output.status.success(),
-        "cargo metadata failed offline; build the whole workspace first so \
-         its crates are fetched: {}",
+        "cargo metadata failed offline; build the whole workspace with every \
+         feature first, as `cargo clippy --all-targets --all-features` does, \
+         so its crates are fetched: {}",
         String::from_utf8_lossy(&output.stderr)
     );
     json::parse(&String::from_utf8(output.stdout).unwrap()).unwrap()
