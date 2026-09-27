@@ -442,9 +442,10 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
     use evreos_platform::default_browser::WindowsRegistry;
     use windows_registry::CURRENT_USER;
 
-    const SCRATCH_PARENT: &str = r"Software\PlatformRegistrationTest";
+    // One key per run, directly below Software, so that runs share no key
+    // and removing this run's scratch key can never touch another's.
     let scratch = format!(
-        r"{SCRATCH_PARENT}\{}-{}",
+        r"Software\PlatformRegistrationTest-{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -511,12 +512,6 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
     drop(root);
     CURRENT_USER.remove_tree(&scratch).unwrap();
     assert!(CURRENT_USER.open(&scratch).is_err());
-    // The parent too, once no other run's scratch key is left under it.
-    let parent = CURRENT_USER.open(SCRATCH_PARENT).unwrap();
-    if parent.keys().unwrap().next().is_none() {
-        drop(parent);
-        CURRENT_USER.remove_tree(SCRATCH_PARENT).unwrap();
-    }
 }
 
 /// The binding opens the current user's hive itself, where registration
