@@ -959,9 +959,17 @@ with tempfile.TemporaryDirectory() as tmp:
     (base / "outside" / "lib.rs").write_text('let g = "MachineGuid";\n', encoding="utf-8")
     (root / "crates" / "x" / "loop").symlink_to(root / "crates")
     (root / "crates" / "x" / "out").symlink_to(base / "outside")
-    if Path("/proc/self/mem").exists():
-        (root / "crates" / "x" / "src" / "mem.rs").symlink_to("/proc/self/mem")
+    (root / "crates" / "x" / "src" / "linked.rs").symlink_to(base / "outside" / "lib.rs")
+    (root / "crates" / "x" / "src" / "refused.rs").write_text("", encoding="utf-8")
     (base / "allowlist.txt").write_text("", encoding="utf-8")
+    read_text = Path.read_text
+
+    def refusing(path, *args, **kwargs):
+        if path.name == "refused.rs":
+            raise PermissionError(13, "Permission denied")
+        return read_text(path, *args, **kwargs)
+
+    Path.read_text = refusing
     try:
         problems, read, _ = check.check_tree(root, base / "allowlist.txt")
         report("a directory link that loops ends the walk rather than extending it",
@@ -969,11 +977,15 @@ with tempfile.TemporaryDirectory() as tmp:
         report("a directory link that leads outside the tree is reported, not read",
                mentions(problems, "crates/x/out", "outside the tree")
                and not mentions(problems, "'MachineGuid'"))
-        if Path("/proc/self/mem").exists():
-            report("a file the system refuses to read is reported, not a traceback",
-                   mentions(problems, "crates/x/src/mem.rs", "not readable"))
+        report("...and so is a file link",
+               mentions(problems, "crates/x/src/linked.rs", "outside the tree")
+               and "crates/x/src/linked.rs" not in read)
+        report("a file the system refuses to read is reported, not a traceback",
+               mentions(problems, "crates/x/src/refused.rs", "not readable"))
     except OSError as error:
         report(f"links and unreadable files end in a verdict, not {error!r}", False)
+    finally:
+        Path.read_text = read_text
 
 try:
     tree({"README.md": "nothing this check reads\n"},

@@ -1085,8 +1085,9 @@ def walk(root, problems):
 
     A directory that cannot be listed is reported and not read. A directory
     reached a second time through a symbolic link is not read again, so a
-    link that loops ends the walk rather than extending it, and one that
-    leads outside the tree is reported: nothing there can be answered for.
+    link that loops ends the walk rather than extending it, and a link to a
+    directory or a file outside the tree is reported: nothing there can be
+    answered for.
     """
     kept, seen, files = [root], set(), []
     for directory in kept:
@@ -1103,7 +1104,16 @@ def walk(root, problems):
         except OSError as error:
             problems.append(f"{where}: not a directory this check can list ({error.strerror or error})")
             continue
-        files.extend(path for path in entries if path.is_file())
+        for path in entries:
+            if not path.is_file():
+                continue
+            if path.is_symlink() and not path.resolve().is_relative_to(root):
+                problems.append(
+                    f"{path.relative_to(root).as_posix()}: links outside the tree "
+                    "this check reads, so it is not read"
+                )
+                continue
+            files.append(path)
         beside_manifest = any(
             path.is_file() and folded_in(path.name, [MANIFEST]) for path in entries
         )
