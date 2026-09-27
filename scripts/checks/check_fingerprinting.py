@@ -115,8 +115,10 @@ It reads the tree and fails on:
                 `&Local`, `Local.`, `DateTime<Local>` or `::<Local>` -- and,
                 in a file that glob-imports chrono's prelude or offset
                 module, wherever `Local` stands in code, jiff's system zone,
-                and `getTimezoneOffset` and `resolvedOptions` in script. `Local` is matched in its own case only: the word
-                opens ordinary prose such as "Local State".
+                WinRT's `TimeZoneSettings` and `Calendar::GetTimeZone`, and
+                `getTimezoneOffset` and `resolvedOptions` in script. `Local`
+                is matched in its own case only: the word opens ordinary
+                prose such as "Local State".
     total memory
                 the physical memory the machine carries, through every
                 platform API, `/proc/meminfo`, `sysinfo` and
@@ -444,7 +446,9 @@ SOURCES = {
             r"|DateTime\s*(?:::\s*)?<\s*(?-i:Local)\s*>|::\s*<\s*(?-i:Local)\s*>"
             r"|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
         )),
-        ("TimeZone::system", r"TimeZone::system"),
+        ("TimeZone::system", r"TimeZone::(?:try_)?system"),
+        ("TimeZoneSettings", r"TimeZoneSettings"),
+        ("GetTimeZone", r"GetTimeZone"),
         ("Zoned::now", r"Zoned::now"),
         ("TZ", r'var(?:_os)?\(\s*(?:r#*)?"TZ"#*\s*\)'),
         ("getTimezoneOffset", r"getTimezoneOffset"),
