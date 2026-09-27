@@ -460,7 +460,8 @@ merged); the commit-hygiene checker and its commit-msg hook (Principle I).
 ### I. Sole Authorship and Signed Commits (NON-NEGOTIABLE)
 
 **Satisfied by**: every change reaching `main` through a pull request linked to
-a GitHub issue, one pull request per issue, Conventional Commits subjects
+an issue, a GitHub issue or the Linear issue that tracks the work
+(`decisions/0008`), one pull request per issue, Conventional Commits subjects
 referencing the issue served, and the founder as sole author. Nothing anywhere
 in this repository attributes authorship or assistance to an AI or generator
 tool, and `CLAUDE.md` narrows this further: no session, run or conversation

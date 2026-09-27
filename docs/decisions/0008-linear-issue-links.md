@@ -49,7 +49,8 @@ The link stays mandatory. What changes is which tracker may carry it.
 ## Consequences
 
 Binding from the date above. The constitution moves to 2.1.0, and `CLAUDE.md`,
-the pull request template and `README.md` follow it.
+the pull request template, `README.md` and Principle I's compliance statement
+in `specs/001-evreos-v1/plan.md` follow it.
 
 What replaces the discipline this relaxes, as the amendment procedure asks:
 nothing is withdrawn. Every pull request is still linked to one issue, and every

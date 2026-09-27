@@ -17,8 +17,9 @@ Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Prin
     references its issue, which `scripts/check-commit-hygiene.py` already enforces for
     GitHub and Linear references alike. What is removed is only the need to open a GitHub
     issue that duplicates a Linear one.
-  - Follow-on: `CLAUDE.md`'s Workflow section, the pull request template and `README.md`
-    are aligned in the same pull request.
+  - Follow-on: `CLAUDE.md`'s Workflow section, the pull request template, `README.md` and
+    Principle I's compliance statement in `specs/001-evreos-v1/plan.md` are aligned in
+    the same pull request.
 
 Amendment 1.1.0 → 2.0.0 (2026-09-02), MAJOR — Principle I narrowed by a recorded
   exception:
