@@ -13,13 +13,13 @@
 #
 # Two keys are listed below, on the lines that are not comments, both under
 # the founder's address: the key of the founder's own machine, and a second
-# key the founder made for the cloud environment the founder develops in,
-# whose private half is kept in that environment's settings, so that commits
-# made there are signed. Before a key was listed, the check reported that
-# signing was not yet enabled and skipped; once the keys are on the base
-# branch, every commit in a pull request must be signed by one of them.
-# Removing a line revokes that key, so the cloud key can be withdrawn without
-# touching the other.
+# key the founder made for the cloud environment the founder develops in.
+# Commits made there are signed by it once its private half is configured in
+# that environment's settings; until then they are not. Before a key was
+# listed, the check reported that signing was not yet enabled and skipped;
+# once the keys are on the base branch, every commit in a pull request must be
+# signed by one of them. Removing a line revokes that key, so the cloud key
+# can be withdrawn without touching the other.
 #
 # The history before the keys were listed is not signed by either. Most of
 # its commits carry no signature; 108 carry SSH signatures by two keys not
