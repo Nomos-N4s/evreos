@@ -244,8 +244,31 @@ mod rollout {
         for _ in 0..3 {
             assert_eq!(RolloutDraw::load_or_draw(&path).unwrap(), first);
         }
-        assert!(!path.with_extension("partial").exists());
+        assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
         let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
+    fn installs_drawing_at_once_keep_and_return_one_value() {
+        for round in 0..20 {
+            let path = scratch(&format!("race-{round}"));
+            let start = std::sync::Barrier::new(8);
+            let draws: Vec<RolloutDraw> = std::thread::scope(|scope| {
+                let handles: Vec<_> = (0..8)
+                    .map(|_| {
+                        scope.spawn(|| {
+                            start.wait();
+                            RolloutDraw::load_or_draw(&path).unwrap()
+                        })
+                    })
+                    .collect();
+                handles.into_iter().map(|h| h.join().unwrap()).collect()
+            });
+            let kept = RolloutDraw::load_or_draw(&path).unwrap();
+            assert!(draws.iter().all(|draw| *draw == kept), "round {round}");
+            assert_eq!(fs::read_dir(path.parent().unwrap()).unwrap().count(), 1);
+            let _ = fs::remove_dir_all(path.parent().unwrap());
+        }
     }
 
     #[test]

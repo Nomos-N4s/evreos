@@ -10,8 +10,9 @@
 
 use std::fmt;
 use std::fs;
-use std::io;
-use std::path::Path;
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
 
 use super::manifest::ROLLOUT_WHOLE;
 
@@ -36,21 +37,74 @@ impl RolloutDraw {
     /// then on. The file holds the value in decimal and nothing else. A file
     /// that does not read as a value is replaced by a new draw, which may
     /// move the install in or out of a rollout in progress, once.
+    ///
+    /// A new draw is written to a file of its own and flushed to the disk,
+    /// then linked into place only if no file is there yet. So when two
+    /// processes draw at once for an install that has no file, one value is
+    /// kept and both return it. Replacing a file that is not a value makes
+    /// no such promise: the last process to replace it wins.
     pub fn load_or_draw(path: &Path) -> io::Result<Self> {
-        match fs::read(path) {
-            Ok(bytes) => {
-                if let Some(draw) = Self::parse(&bytes) {
-                    return Ok(draw);
+        let unreadable = match fs::read(path) {
+            Ok(bytes) => match Self::parse(&bytes) {
+                Some(draw) => return Ok(draw),
+                None => true,
+            },
+            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+            Err(error) => return Err(error),
+        };
+        let draw = Self::draw()?;
+        let partial = Self::partial_path(path);
+        let written = Self::write_synced(&partial, draw);
+        let kept = written.and_then(|()| Self::keep(path, &partial, draw, unreadable));
+        let _ = fs::remove_file(&partial);
+        kept
+    }
+
+    /// Keeps `draw`, written at `partial`, at `path`, and returns the value
+    /// kept there.
+    fn keep(path: &Path, partial: &Path, draw: Self, unreadable: bool) -> io::Result<Self> {
+        if unreadable {
+            // A file that is not a value is replaced whole.
+            fs::rename(partial, path)?;
+            return Ok(draw);
+        }
+        match fs::hard_link(partial, path) {
+            Ok(()) => Ok(draw),
+            // Another process kept its draw first: that is the value.
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                match fs::read(path).ok().and_then(|bytes| Self::parse(&bytes)) {
+                    Some(kept) => Ok(kept),
+                    None => {
+                        fs::rename(partial, path)?;
+                        Ok(draw)
+                    }
                 }
             }
-            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
-            Err(error) => return Err(error),
+            // A file system without hard links still gets the value.
+            Err(_) => {
+                fs::rename(partial, path)?;
+                Ok(draw)
+            }
         }
-        let draw = Self::draw()?;
-        let partial = path.with_extension("partial");
-        fs::write(&partial, format!("{}\n", draw.0))?;
-        fs::rename(&partial, path)?;
-        Ok(draw)
+    }
+
+    /// A name beside `path` that no other process, nor another call in this
+    /// one, writes to.
+    fn partial_path(path: &Path) -> PathBuf {
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        let call = CALLS.fetch_add(1, Ordering::Relaxed);
+        let mut name = path.file_name().unwrap_or_default().to_os_string();
+        name.push(format!(".{}-{call}.partial", std::process::id()));
+        path.with_file_name(name)
+    }
+
+    fn write_synced(partial: &Path, draw: Self) -> io::Result<()> {
+        let mut file = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(partial)?;
+        file.write_all(format!("{}\n", draw.0).as_bytes())?;
+        file.sync_all()
     }
 
     /// Whether an update rolled out to `rollout` millionths is offered to
