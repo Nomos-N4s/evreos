@@ -183,7 +183,11 @@ read: the lockfile holds crates other crates use for their own purposes, and
 what this check answers for is what Evreos itself holds.
 
 A derivation spread across files, or behind a wrapper whose name says nothing,
-rests on review. And none of this touches what a SITE does to fingerprint the
+rests on review. So does a source name assembled from pieces -- `concat!`,
+`format!`, a path joined from segments that each name nothing, a name built at
+run time: it is a whole token nowhere the check can see. A literal's escapes
+are decoded and a /proc file joined by its own name is caught, but assembly in
+general is not. And none of this touches what a SITE does to fingerprint the
 member, which research section 4.3 sets out of FR-036a's scope and out of this
 architecture's reach.
 
