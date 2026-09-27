@@ -57,10 +57,15 @@ code brings these crates into its graph on `x86_64-pc-windows-msvc` and
 - **Linked:** `ed25519-dalek`, `ed25519`, `signature`, `curve25519-dalek`,
   `subtle`, `sha2`, `digest`, `block-buffer`, `crypto-common`,
   `generic-array`, `typenum`, `cpufeatures`, `cfg-if` and `getrandom`,
-  fourteen in all. The lockfile already held every one of them, `getrandom`
-  0.3.4 through `winit` on Linux and `sha2` through a test spike's `wry`, but
-  the shell links none of them on Windows or macOS today. The bytes above
-  include them all.
+  fourteen in all. The shell links none of them on Windows or macOS today,
+  and the bytes above include them all. Nine were already in the lockfile,
+  through other crates: `sha2`, `digest`, `block-buffer`, `crypto-common`,
+  `generic-array`, `typenum`, `cpufeatures` and `cfg-if`, with `sha2`
+  through a test spike's `wry`, and `getrandom` 0.3.4 through `winit` on
+  Linux. The other five are new to it,
+  and come with `ed25519-dalek`, which adds seven entries to the lockfile in
+  all: these five, `curve25519-dalek-derive`, and `fiat-crypto`, which
+  nothing links on these targets.
 - **At build time only:** `rustc_version`, `semver` and `version_check`, and
   on Windows `curve25519-dalek-derive` too. None reaches the executable.
 
