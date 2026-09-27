@@ -11,7 +11,7 @@ Principle I makes two requirements NON-NEGOTIABLE, and the constitution's
 preamble requires that anything measurable be gated in CI rather than left to
 intent: every commit is signed, and nothing lands on `main` except through a
 pull request. The first is now checked by `scripts/check-commit-hygiene.py`
-against the founder's public key in `.github/allowed-signers`. The second
+against the founder's public keys in `.github/allowed-signers`. The second
 cannot be checked by anything in this tree. Branch protection is configuration
 the forge holds; no file here can assert it, and no workflow can refuse a push
 that bypasses workflows. What a file can do is record the settings exactly, so
@@ -109,8 +109,8 @@ round and every signature verification that ran against a base that no longer
 exists.
 
 **Merge commits only.** A squash or rebase merge creates new commit objects on
-the forge. A new object cannot carry the founder's signature, because only the
-founder's key can produce one, so the commits the check verified would not be
+the forge. A new object cannot carry the founder's signature, because only a
+listed key can produce one, so the commits the check verified would not be
 the commits that land. Only the merge-commit method leaves the verified
 commits untouched underneath the forge's own merge commit.
 
@@ -189,7 +189,7 @@ The consequence is worth stating in full. The merge commit the forge creates is
 authored with the account's display name, committed by `GitHub
 <noreply@github.com>`, and signed with the forge's own key — not with a key in
 `.github/allowed-signers`, and it never will be, since the forge does not hold
-the founder's key. The signature rule therefore reaches every commit a pull
+a listed key. The signature rule therefore reaches every commit a pull
 request adds and does not reach the merge commit above them. What covers that
 commit is the forge's signature and the settings in this file, which are what
 make it the only thing besides founder-signed commits that can reach `main`.
@@ -203,14 +203,20 @@ address as principal. `.github/workflows/commit-hygiene.yml` passes it the
 copy of `.github/allowed-signers` on the base branch. A file with no key entry
 is reported as "signing is not yet enabled" and skipped — never failed — so
 the mechanism could land before the key without breaking every pull request.
-That is the state as of this record: the file carries no key.
+The founder's keys are now listed, one for the founder's machine and one for
+the cloud environment the founder develops in, so once the file carrying them
+is on `main`, every commit in a pull request must be signed by one of them.
+That includes pull requests already open when it merges: the check reads the
+base branch's copy each time it runs, so an open branch with an unsigned
+commit fails on its next run.
 
-What remains, and who can do it: the founder adds their public key to
-`.github/allowed-signers` in a signed commit and signs every commit from then
-on. The file's own comment gives the git configuration. Nobody else holds the
-key, so nobody else can take this step; a change anyone else makes to that
-file authorises nothing, because the copy the check trusts is the one already
-on `main`.
+What remains: every commit is signed from then on, by one of the listed
+keys. The file's own comment gives the git configuration. The machine key's
+private half is on the founder's machine alone; the cloud key's, once
+configured, is in the cloud environment's settings, so whatever runs in that
+environment can sign with it. A change anyone makes to the file in a pull
+request authorises nothing, because the copy the check trusts is the one
+already on `main`.
 
 Three consequences of trusting the base branch's copy:
 
@@ -218,10 +224,11 @@ Three consequences of trusting the base branch's copy:
   passes as not yet enabled. Enforcement begins with the next pull request
   after it merges. This is what makes enabling the check immediately safe
   rather than a flag day: the range the check reads only ever contains commits
-  made after it, so whatever earlier history carries is out of its reach. Most
-  of that history is in fact signed already — the signatures exist and always
-  have; what has been missing is the key that makes one verifiable against an
-  authorised identity, which is precisely what this file supplies.
+  made after it, so whatever earlier history carries is out of its reach.
+  That history is not signed by the listed keys. Checked when they were
+  listed, most of its commits carried no signature, 108 carried SSH
+  signatures by two keys not in the file, and the forge's commits carried the
+  forge's own PGP signature.
 - A key rotation is two pull requests: one adding the new key, signed with the
   old; one removing the old key, signed with the new.
 - A lost key cannot be replaced by a pull request, because the replacement
@@ -235,6 +242,7 @@ Three consequences of trusting the base branch's copy:
 | Date | State | Verified how |
 | --- | --- | --- |
 | 2026-09-02 | Not applied. `main` carries no protection rule; `.github/allowed-signers` lists no key. | Recorded from the repository state; the forge endpoint above has not been queried by this change. |
+| 2026-09-27 | Not applied. `main` carries no protection rule, and `.github/allowed-signers` on `main` lists no key. CAR-352 adds two keys under the founder's address; from the pull request after it merges, the signature check fails an unsigned commit or one signed by an unlisted key. The check is not a required status, so it blocks nothing until protection is applied. | Recorded from the repository state; the forge endpoint above has not been queried by this change. |
 
 When the settings are applied, add a row naming the date, whether a classic
 rule or a ruleset is in use, and the endpoint output compared. Until a row
