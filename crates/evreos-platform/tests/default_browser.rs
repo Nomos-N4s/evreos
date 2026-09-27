@@ -176,7 +176,7 @@ fn registering_writes_the_browser_entry_and_its_capabilities() {
             "",
             &open,
         ),
-        (REGISTERED_APPLICATIONS, "SampleBrowser", CAPABILITIES),
+        (REGISTERED_APPLICATIONS, "Sample Browser", CAPABILITIES),
     ];
     for (key, name, value) in expected {
         assert_eq!(registry.value(key, name), Some(*value), "{key} [{name}]");
@@ -198,7 +198,7 @@ fn the_registered_applications_value_is_written_last() {
     let last = registration.values.last().unwrap();
     assert_eq!(
         (last.key.as_str(), last.name.as_str()),
-        (REGISTERED_APPLICATIONS, "SampleBrowser")
+        (REGISTERED_APPLICATIONS, "Sample Browser")
     );
 }
 
@@ -217,7 +217,7 @@ fn unregistering_removes_every_key_and_value_and_nothing_else() {
         assert!(!registry.has_key(key), "{key} survived the uninstall");
     }
     assert_eq!(
-        registry.value(REGISTERED_APPLICATIONS, "SampleBrowser"),
+        registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
         None
     );
     assert_eq!(registry.keys, untouched.keys);
@@ -273,9 +273,13 @@ fn keys_and_progids_come_from_the_name_alone() {
 fn an_application_that_cannot_be_registered_writes_nothing() {
     let long = "x".repeat(36);
     let cases: &[(Application<'_>, InvalidApplication)] = &[
+        (Application { name: "", ..APP }, InvalidApplication::Name),
         (
-            Application { name: "", ..APP },
-            InvalidApplication::NameWithoutKey,
+            Application {
+                name: "Sample\tBrowser",
+                ..APP
+            },
+            InvalidApplication::Name,
         ),
         (
             Application {
@@ -432,7 +436,7 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
         assert!(!registry.key_exists(key).unwrap(), "{key}");
     }
     let registered = root.open(REGISTERED_APPLICATIONS).unwrap();
-    assert!(registered.get_string("SampleBrowser").is_err());
+    assert!(registered.get_string("Sample Browser").is_err());
     assert_eq!(registered.get_string("Other").unwrap(), "kept");
     // Removing again, and removing a value under a key that is gone, are
     // not errors.
@@ -499,7 +503,7 @@ fn a_removal_that_fails_does_not_stop_the_others() {
         assert!(!registry.has_key(key), "{key} was left behind");
     }
     assert_eq!(
-        registry.value(REGISTERED_APPLICATIONS, "SampleBrowser"),
+        registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
         None
     );
 }

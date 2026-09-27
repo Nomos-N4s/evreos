@@ -58,6 +58,8 @@ pub struct Application<'a> {
 /// Why an [`Application`] cannot be registered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvalidApplication {
+    /// The name is empty, or holds a control character.
+    Name,
     /// The name holds no ASCII letter or digit to derive a key from.
     NameWithoutKey,
     /// The key derived from the name is longer than a ProgID allows.
@@ -72,6 +74,7 @@ pub enum InvalidApplication {
 impl fmt::Display for InvalidApplication {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+            Self::Name => "the name is empty or holds a control character",
             Self::NameWithoutKey => "the name holds no ASCII letter or digit",
             Self::NameTooLong => "the key derived from the name is too long",
             Self::Description => "the description is empty or holds a control character",
@@ -128,8 +131,12 @@ pub struct Value {
 /// Everything registration writes, and what removing it deletes.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Registration {
-    /// The name the registration is filed under: the product name's ASCII
-    /// letters and digits, in order.
+    /// The product name, as shown. It names the registration's value under
+    /// [`REGISTERED_APPLICATIONS`], which Windows requires to match the
+    /// `ApplicationName` among its capabilities.
+    pub name: String,
+    /// The name the registration's keys are filed under: the product name's
+    /// ASCII letters and digits, in order.
     pub key: String,
     /// Every value written, in the order [`register`] writes them.
     pub values: Vec<Value>,
@@ -140,6 +147,9 @@ pub struct Registration {
 impl Registration {
     /// The registration for `app`, checked before anything is written.
     pub fn of(app: &Application<'_>) -> Result<Self, InvalidApplication> {
+        if app.name.is_empty() || app.name.chars().any(char::is_control) {
+            return Err(InvalidApplication::Name);
+        }
         let key: String = app
             .name
             .chars()
@@ -201,9 +211,10 @@ impl Registration {
         set(&url_class, "URL Protocol", "");
         // Last, so the system never lists capabilities that are not yet all
         // written.
-        set(REGISTERED_APPLICATIONS, &key, &capabilities);
+        set(REGISTERED_APPLICATIONS, app.name, &capabilities);
 
         Ok(Self {
+            name: app.name.to_string(),
             key,
             values,
             owned_keys: vec![client, html_class, url_class],
@@ -250,7 +261,7 @@ fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Resu
     // half removed. Every removal is tried even after one fails, so a
     // failure leaves as little behind as it can, and the first error is
     // the one reported.
-    let mut result = registry.remove_value(REGISTERED_APPLICATIONS, &registration.key);
+    let mut result = registry.remove_value(REGISTERED_APPLICATIONS, &registration.name);
     for key in &registration.owned_keys {
         let removed = registry.remove_key(key);
         if result.is_ok() {
