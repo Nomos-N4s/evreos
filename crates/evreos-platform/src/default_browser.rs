@@ -1,11 +1,11 @@
-//! FR-013: making Evreos the default browser from within it.
+//! FR-013: making the browser the member's default from within it.
 //!
-//! No platform lets a third-party browser make itself the default. On tier 1
-//! (Windows) the most a browser can do is register itself so that it appears
-//! in the system's list of browsers at all, and then open the system's
-//! default-apps page, where the member makes the choice (research §10.2).
-//! This module does both: [`register`], then [`open_settings`]. [`route`]
-//! says which platforms take that route.
+//! Tier 1 (Windows) does not let a third-party browser make itself the
+//! default. The most a browser can do there is register itself so that it
+//! appears in the system's list of browsers at all, and then open the
+//! system's default-apps page, where the member makes the choice (research
+//! §10.2). This module does both: [`register`], then [`open_settings`].
+//! [`route`] says which platforms take that route.
 //!
 //! **Tier 2** (macOS) has no route here. Documented calls exist, but what
 //! they do at the macOS 13 floor is unverified until it is established on the
@@ -24,6 +24,14 @@
 //! share. Neither touches anything else, so an uninstall leaves the
 //! member's own choice of default, and every other browser's registration,
 //! as it found them.
+//!
+//! Microsoft's guidance also has a browser announce a new registration by
+//! calling `SHChangeNotify` with `SHCNE_ASSOCCHANGED`, so that the shell
+//! refreshes what it has cached. That call is reachable from Rust only as an
+//! `unsafe` function, and this crate forbids `unsafe` code, so it is not
+//! made. Whether the system lists the browser without it, on Windows 10 and
+//! 11, is owed to the tier-1 check that
+//! `docs/measurements/default-browser-registration.md` lists.
 //!
 //! Both go through [`Registry`], so the set of values is decided here, on
 //! every platform, and tested on every platform; a platform binding only
@@ -255,8 +263,8 @@ pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Resu
 
 /// Removes what [`register`] wrote for `app`, as an uninstall must.
 ///
-/// Registering an application that was never registered, or removing it
-/// twice, is not an error.
+/// Unregistering an application that was never registered, or unregistering
+/// it twice, is not an error.
 pub fn unregister(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
     remove(registry, &Registration::of(app)?)
 }
