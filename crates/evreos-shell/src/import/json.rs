@@ -1,7 +1,9 @@
-//! A strict JSON parser for Chromium's `Bookmarks` file, and nothing wider.
+//! A strict JSON parser for Chromium's `Bookmarks` and `Local State` files,
+//! and nothing wider.
 //!
-//! Chromium keeps bookmarks as one JSON document; this parses it into a value
-//! tree the Chromium reader walks. It exists for the reason the SQLite reader
+//! Chromium keeps bookmarks as one JSON document, and the names of its
+//! profiles in another; this parses either into a value tree the Chromium
+//! reader and discovery walk. It exists for the reason the SQLite reader
 //! does — the measurement at `docs/measurements/import-profile-read.md` states
 //! the byte cost of each option — and holds to the same rules: every input is
 //! untrusted, so nesting is bounded rather than recursed into without limit,

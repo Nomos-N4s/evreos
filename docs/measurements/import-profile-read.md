@@ -262,9 +262,9 @@ the same stopped profiles after review round 14, reads the same counts.
   on it copies first too, and once the bytes are copied the file format is all
   that is needed. `crates/evreos-shell/src/import/sqlite.rs` reads table
   b-trees, overflow chains, records and the log, and nothing else; the JSON
-  parser beside it reads `Bookmarks`. Both are safe Rust with every offset
-  bounds-checked, depth bounded and page cycles refused, so a malformed store
-  is an error value and never a panic.
+  parser beside it reads `Bookmarks` and `Local State`. Both are safe Rust
+  with every offset bounds-checked, depth bounded and page cycles refused,
+  so a malformed store is an error value and never a panic.
 - **One history row per address, dated at its most recent visit**, from
   Chromium's `urls` and Firefox's `moz_places` — the shape both browsers'
   own importers carry across, rather than every visit.
