@@ -108,6 +108,7 @@ and the amendment cites the record that carries the founder's reasons.
 | [0006](0006-private-window-downloads.md) | Private-window downloads record retention | Decided | 2026-09-25 | FR-007, FR-004, FR-007a, SC-001; T044, T052, T081 |
 | [0007](0007-site-key.md) | Site key definition for permissions and blocking exceptions | Decided | 2026-09-26 | FR-006, FR-008; T048, T049, T069 |
 | [0008](0008-linear-issue-links.md) | A pull request may be linked to its Linear issue alone | Decided | 2026-09-27 | The Development Workflow's issue link; `CLAUDE.md`'s Workflow section |
+| [0009](0009-docstrings-say-what.md) | A docstring says what the code does and cites why | Decided | 2026-09-27 | The Development Workflow; `CLAUDE.md`'s Workflow section |
 
 The next free number is the one after the last row.
 
