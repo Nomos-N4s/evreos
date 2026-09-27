@@ -1418,6 +1418,15 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             | "write_fmt" | "write_vectored" | "write_all_vectored" | "write_at" | "seek_write" => {
                 found.push(format!("names `{word}`, which writes"))
             }
+            // The stores write where they are opened, and each opens at any
+            // path it is given, so the import opens none: it writes only the
+            // stores its caller hands it. `Database::open` is the in-tree
+            // reader's, over bytes already in memory.
+            "open" | "try_open"
+                if path_sep(i.wrapping_sub(2)) && ident(i.wrapping_sub(3)) != Some("Database") =>
+            {
+                found.push(format!("calls `{word}` on something other than the reader"));
+            }
             // `write!` on a stream calls its `write_fmt`, which only the
             // `Write` trait in scope provides; without the name, the one
             // `write!` the import can make is a formatter's. `fmt::Write`,
@@ -1595,6 +1604,18 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             "fn f(o: &std::fs::File) { std::io::Write::write_vectored(o, &[]).ok(); }",
             false,
         ),
+        (
+            "fn f(p: &std::path::Path) { crate::store::BookmarkStore::open(p); }",
+            false,
+        ),
+        (
+            "use crate::store::HistoryStore; fn f(p: &std::path::Path) { HistoryStore::try_open(p).ok(); }",
+            false,
+        ),
+        (
+            "fn f() { <crate::store::StoreRegistry>::open(\"x\"); }",
+            false,
+        ),
         ("use crate::store::hook; #[hook] fn f() {}", false),
         ("#[crate::store::hook] fn f() {}", false),
         ("#[r#inline] fn f() {}", false),
@@ -1724,6 +1745,7 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() -> u8 { super::g() }", false),
         ("use ::std::fs::File;", false),
         ("pub use ::core::fmt::Display;", false),
+        ("fn f(a: &[u8]) { let _ = Database::open(a, None); }", false),
         (
             "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",
             false,

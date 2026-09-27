@@ -41,7 +41,8 @@
 //! - it names nothing of the standard library's that writes, creates,
 //!   removes or renames a file, or changes one's permissions, mode or times,
 //!   nor `Write`, through which `write!` would write a stream: the only files
-//!   it writes are the member's own stores, through `crate::store`;
+//!   it writes are the member's own stores, through `crate::store`, and it
+//!   opens no store itself, so it writes only those its caller hands it;
 //! - it loads no file but its own five modules, through no `#[path]` and no
 //!   `cfg_attr`, invokes no macro by `name!` but a short list of the
 //!   standard library's, uses no attribute but a short list of the
