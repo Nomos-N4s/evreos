@@ -377,11 +377,21 @@ report("a byte-order mark is not a way past the check",
        mentions(problems, "bom.rs:1", "'MachineGuid'"))
 
 problems = tree(passing_tree({
-    "target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
-    "TARGET/vendor/dep.rs": 'let g = "MachineGuid";\n',
+    "crates/x/target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
+    "crates/x/TARGET/vendor/dep.rs": 'let g = "MachineGuid";\n',
     ".cache/dep.rs": 'let g = "MachineGuid";\n',
 }))[0]
-report("target/ in any case and dot-directories are not read", problems == [])
+report("Cargo's target/ beside a manifest, in any case, and dot-directories are "
+       "not read", problems == [])
+
+problems = tree(passing_tree({
+    "crates/x/src/target/mod.rs": 'let g = "MachineGuid";\n',
+    "crates/target/src/lib.rs": 'let g = "MachineGuid";\n',
+}))[0]
+report("a module named target is read, since Cargo builds it",
+       mentions(problems, "crates/x/src/target/mod.rs:1", "'MachineGuid'"))
+report("...and so is a crate named target",
+       mentions(problems, "crates/target/src/lib.rs:1", "'MachineGuid'"))
 
 try:
     tree({"README.md": "nothing this check reads\n"})

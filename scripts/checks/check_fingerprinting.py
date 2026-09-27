@@ -153,8 +153,11 @@ Files other than Rust source, the script and markup suffixes above and
 `Cargo.toml` are not read: Python is the tooling that runs this check and ships
 in nothing, and markdown is where the forbidden sources are quoted.
 Directories are matched with case folded where they must be, the release
-platforms' filesystems folding case. Dot-directories and `target/` are not
-read: nothing under either ships.
+platforms' filesystems folding case. Dot-directories are not read, and neither
+is Cargo's build output: a `target/` directory beside a `Cargo.toml`, which
+holds every vendored dependency's source and ships nothing of this tree's. A
+directory named `target` anywhere else is read like any other, since a module
+or a crate may carry that name and Cargo builds it.
 """
 import argparse
 import re
@@ -626,17 +629,25 @@ def check_tree(root, allowlist_path=ALLOWLIST):
 def walk(root):
     """Every directory under `root` this check reads, `root` included.
 
-    Dot-directories and `target/` are pruned: nothing under either ships,
-    and `target/` holds every vendored dependency's source, which is not
-    this tree's to fix. The fold on `target` is casefs's rule -- `TARGET/`
-    is the same directory on the platforms that build the release.
+    Dot-directories are pruned, and so is Cargo's build output: a `target/`
+    beside a `Cargo.toml`, which holds every vendored dependency's source and
+    is not this tree's to fix. Only there -- `src/target/` is a module and
+    `crates/target/` a crate, and Cargo builds both. The fold on `target` and
+    on the manifest name is casefs's rule -- `TARGET/` is the same directory
+    on the platforms that build the release.
     """
     kept = [root]
     for directory in kept:
-        for path in sorted(directory.iterdir()):
+        entries = sorted(directory.iterdir())
+        beside_manifest = any(
+            path.is_file() and folded_in(path.name, [MANIFEST]) for path in entries
+        )
+        for path in entries:
             if not path.is_dir():
                 continue
-            if path.name.startswith(".") or folded_in(path.name, ["target"]):
+            if path.name.startswith("."):
+                continue
+            if beside_manifest and folded_in(path.name, ["target"]):
                 continue
             kept.append(path)
     return kept
