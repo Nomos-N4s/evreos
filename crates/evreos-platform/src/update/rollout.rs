@@ -71,16 +71,43 @@ impl RolloutDraw {
         (value < ROLLOUT_WHOLE).then_some(Self(value))
     }
 
-    /// A value drawn uniformly from 0 to 999,999, by rejecting the draws
-    /// above the largest multiple of a million a `u32` holds, so that no
-    /// value is likelier than another.
+    /// A value drawn uniformly from 0 to 999,999.
     fn draw() -> io::Result<Self> {
-        const LIMIT: u32 = u32::MAX - (u32::MAX % ROLLOUT_WHOLE);
         loop {
-            let value = getrandom::u32().map_err(|error| io::Error::other(error.to_string()))?;
-            if value < LIMIT {
-                return Ok(Self(value % ROLLOUT_WHOLE));
+            let random = getrandom::u32().map_err(|error| io::Error::other(error.to_string()))?;
+            if let Some(draw) = Self::from_random(random) {
+                return Ok(draw);
             }
         }
+    }
+
+    /// The value a uniformly random `u32` gives, or none when it lies above
+    /// the largest multiple of a million a `u32` holds. Rejecting those, and
+    /// drawing again, is what keeps every value as likely as another.
+    fn from_random(random: u32) -> Option<Self> {
+        const LIMIT: u32 = u32::MAX - (u32::MAX % ROLLOUT_WHOLE);
+        (random < LIMIT).then_some(Self(random % ROLLOUT_WHOLE))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RolloutDraw;
+
+    #[test]
+    fn a_random_value_reduces_below_a_million_or_is_rejected() {
+        let limit = 4_294_000_000;
+        assert_eq!(RolloutDraw::from_random(0), Some(RolloutDraw(0)));
+        assert_eq!(
+            RolloutDraw::from_random(999_999),
+            Some(RolloutDraw(999_999))
+        );
+        assert_eq!(RolloutDraw::from_random(1_000_000), Some(RolloutDraw(0)));
+        assert_eq!(
+            RolloutDraw::from_random(limit - 1),
+            Some(RolloutDraw(999_999))
+        );
+        assert_eq!(RolloutDraw::from_random(limit), None);
+        assert_eq!(RolloutDraw::from_random(u32::MAX), None);
     }
 }
