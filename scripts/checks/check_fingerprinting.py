@@ -60,8 +60,10 @@ It reads the tree and fails on:
                 names by `path` or `build` is read as Rust too, since Cargo
                 compiles it whatever its suffix.
                 A literal's `\\x` and `\\u{...}` escapes, and script's
-                `\\uHHHH` too, are decoded before matching, so a name spelled
-                with an escape -- `"/etc/machine\\x2did"` -- is the same name.
+                `\\uHHHH` too, are decoded before matching and its line
+                continuations joined, so a name spelled with an escape --
+                `"/etc/machine\\x2did"` -- or split by a backslash at a line's
+                end is the same name.
                 Script and markup the shell could ship -- `.js`, `.mjs`,
                 `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
                 whole, comments included: there is no shared scanner for
@@ -561,6 +563,12 @@ SOURCES = {
     ),
 }
 
+# A backslash ending a line inside a literal, which joins the next line to it
+# less its leading whitespace, with the rest of the literal it continues; or
+# an escaped backslash, which is not one.
+CONTINUATION = re.compile(r'\\\\|\\(\r?\n[ \t\r\n]*(?:[^"\\\r\n]|\\[^\r\n]|\\\r?\n[ \t\r\n]*)*)')
+CONTINUED_LINE = re.compile(r"\\\r?\n[ \t\r\n]*")
+
 # An escape that spells one character: `\x2d` and `\u{69}` in a Rust literal,
 # and those and `\u0043` in script. An escaped backslash is matched first, so
 # `\\x2d` stays the four characters it is.
@@ -700,13 +708,21 @@ def read_text(path, lossy=False):
 
 
 def decode_escapes(text):
-    """`text` with each `\\x` and `\\u{...}` escape replaced by the
-    character it spells.
+    """`text` with each string continuation joined and each `\\x` and
+    `\\u{...}` escape replaced by the character it spells.
 
-    An escape that spells a line break is left as written, and so is one that
+    A continuation's line breaks move to the end of the literal it continues,
+    so a read later on that literal's last line is reported on its first. An
+    escape that spells a line break is left as written, and so is one that
     spells no character, so the line a read is reported on is the line it is
     written on.
     """
+    def joined(match):
+        if match.group(1) is None:
+            return match.group(0)
+        run = match.group(0)
+        return CONTINUED_LINE.sub("", run) + "\n" * run.count("\n")
+
     def one(match):
         body = match.group(1)
         if body == "\\":
@@ -718,7 +734,7 @@ def decode_escapes(text):
             return match.group(0)
         return match.group(0) if character in "\r\n" else character
 
-    return ESCAPE.sub(one, text)
+    return ESCAPE.sub(one, CONTINUATION.sub(joined, text))
 
 
 def inline_modules(bare, end):

@@ -345,6 +345,21 @@ report("a source spelled in another case is the same source",
        mentions(problems, "probe.rs:1", "'machine-id'")
        and mentions(problems, "probe.rs:2", "'MachineGuid'"))
 
+problems = tree(with_rust(
+    'let id = read("/etc/machine-\\\n        id");\n'
+    'let g = "Machine\\\r\n    Gu\\\n  id";\n'
+    'let w = "C:\\\\\nMachine";\n'
+    "let n = gethostname();\n"
+))[0]
+report("a name a line continuation splits is the same name, on the line it starts",
+       mentions(problems, "probe.rs:1", "'machine-id'")
+       and mentions(problems, "probe.rs:3", "'MachineGuid'"))
+report("...an escaped backslash ending a line continues nothing",
+       not mentions(problems, "probe.rs:6", "'MachineGuid'")
+       and not mentions(problems, "probe.rs:7", "'MachineGuid'"))
+report("...and the lines after keep their numbers",
+       mentions(problems, "probe.rs:8", "'gethostname'"))
+
 problems = tree(with_rust('let key = r"SOFTWARE\\Microsoft\\Cryptography";\n'))[0]
 report("the registry key that holds MachineGuid fails through a raw string",
        mentions(problems, "probe.rs:1", "Cryptography"))
