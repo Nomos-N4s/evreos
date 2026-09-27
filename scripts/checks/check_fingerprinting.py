@@ -440,7 +440,7 @@ SOURCES = {
         ("now_local", r"now_local"),
         ("chrono::Local", (
             r"chrono::(?:offset::)?(?-i:Local)|(?-i:Local)::(?:now|today)"
-            r"|chrono::(?:offset::|prelude::)?\{[^}]*(?-i:\bLocal\b)[^}]*\}"
+            r"|chrono::(?:offset::|prelude::)?\{[^{}]{0,400}(?-i:\bLocal\b)[^{}]{0,400}\}"
             r"|DateTime\s*(?:::\s*)?<\s*(?-i:Local)\s*>|::\s*<\s*(?-i:Local)\s*>"
             r"|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
         )),

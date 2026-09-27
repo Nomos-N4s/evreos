@@ -16,6 +16,7 @@ Run: python3 scripts/checks/test_check_fingerprinting.py
 import subprocess
 import sys
 import tempfile
+import time
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -325,6 +326,11 @@ problems = tree(with_rust(
     "mod local { pub fn now() -> u32 { 0 } }\nfn a() -> u32 { local::now() + LOCAL::today() }\n"
 ))[0]
 report("a module named local in another case is not chrono's Local", problems == [])
+
+started = time.monotonic()
+check.sources_in("chrono::{ Local, " * 1500)
+report("an unclosed chrono import list cannot stall the check",
+       time.monotonic() - started < 5)
 
 problems = tree(with_rust(
     'let path = user_data.join("Local State");\nout.push_str("# Local Bookmark Store");\n'
