@@ -68,6 +68,10 @@ It reads the tree and fails on:
                 `time` and `chrono` crates' local-time entry points, and
                 `getTimezoneOffset` and `resolvedOptions().timeZone` in
                 script.
+    total memory
+                the physical memory the machine carries, through every
+                platform API, `/proc/meminfo`, `sysinfo` and
+                `navigator.deviceMemory`.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -240,6 +244,21 @@ SOURCES = {
         ("TZ", r"var(?:_os)?\(\s*\"TZ\"\s*\)"),
         ("getTimezoneOffset", r"getTimezoneOffset"),
         ("resolvedOptions().timeZone", r"resolvedOptions\(\s*\)\.timeZone"),
+    ),
+    "total memory": (
+        ("GlobalMemoryStatus", r"GlobalMemoryStatus(?:Ex)?"),
+        ("GetPhysicallyInstalledSystemMemory", r"GetPhysicallyInstalledSystemMemory"),
+        ("ullTotalPhys", r"ullTotalPhys"),
+        ("_SC_PHYS_PAGES", r"_SC_PHYS_PAGES"),
+        ("hw.memsize", r"hw\.memsize"),
+        ("HW_MEMSIZE", r"HW_MEMSIZE"),
+        ("HW_PHYSMEM", r"HW_PHYSMEM"),
+        ("/proc/meminfo", r"/proc/meminfo"),
+        ("sysinfo", r"sysinfo"),
+        ("totalram", r"totalram"),
+        ("total_memory", r"total_memory"),
+        ("physicalMemory", r"physicalMemory"),
+        ("deviceMemory", r"deviceMemory"),
     ),
 }
 

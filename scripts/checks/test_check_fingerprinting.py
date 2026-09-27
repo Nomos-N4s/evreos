@@ -159,6 +159,10 @@ CAUGHT = (
      "let offset = time::UtcOffset::current_local_offset();\n"),
     ("timezone", "TZ",
      'let zone = std::env::var("TZ");\n'),
+    ("total memory", "GlobalMemoryStatus",
+     "GlobalMemoryStatusEx(&mut status);\n"),
+    ("total memory", "/proc/meminfo",
+     'let memory = read_to_string("/proc/meminfo");\n'),
 )
 
 for category, name, body in CAUGHT:
