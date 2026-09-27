@@ -336,6 +336,31 @@ report("a /proc file named by joining its name onto /proc is the same read",
 problems = tree(with_rust("let uptime = started.elapsed();\n"))[0]
 report("...while a field named uptime is not", problems == [])
 
+problems, read = tree(passing_tree({
+    "crates/x/src/probe.rs": (
+        '#[path = "probe_impl.txt"]\nmod probe_impl;\n'
+        'include!("generated.in");\n'
+        'const PROBE: &str = include_str!("probe.js.txt");\n'
+        '// include!("commented.in");\n'
+    ),
+    "crates/x/src/probe_impl.txt": 'let g = "MachineGuid";\n',
+    "crates/x/src/generated.in": "let t = mach_absolute_time();\n",
+    "crates/x/src/probe.js.txt": "send(screen.width);\n",
+    "crates/x/src/commented.in": "let t = mach_absolute_time();\n",
+}))[:2]
+report("a file compiled in through #[path] is read as Rust whatever its suffix",
+       mentions(problems, "crates/x/src/probe_impl.txt:1", "'MachineGuid'"))
+report("...and so is one compiled in through include!",
+       mentions(problems, "crates/x/src/generated.in:1", "'mach_absolute_time'"))
+report("...and one embedded through include_str! is read whole",
+       mentions(problems, "crates/x/src/probe.js.txt:1", "'screen.'"))
+report("...while one named only in a comment is not read",
+       "crates/x/src/commented.in" not in read)
+
+problems = tree(with_rust('include!("../../../../outside.in");\n'))[0]
+report("a file brought in from outside the tree is reported",
+       mentions(problems, "probe.rs", "outside.in", "outside the tree"))
+
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
 

@@ -45,7 +45,11 @@ It reads the tree and fails on:
                 and `navigator.connection` -- are dotted paths an ordinary
                 Rust field access can spell, `self.screen.width` among them,
                 so in Rust they are matched inside string literals only,
-                where an injected script lives. A literal's `\\x` and
+                where an injected script lives. A file a Rust file compiles
+                in through `include!` or `#[path = ...]` is read as Rust
+                whatever its suffix, and one it embeds through `include_str!`
+                is read whole, like script; one outside the tree is reported,
+                since nothing in it can be answered for. A literal's `\\x` and
                 `\\u{...}` escapes are decoded before matching, so a name
                 spelled with an escape -- `"/etc/machine\\x2did"` -- is the
                 same name.
@@ -459,6 +463,16 @@ SOURCES = {
 # characters it is.
 ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\})")
 
+# What a Rust file brings into the build under a name of its own choosing,
+# resolved against that file's directory, as Rust resolves both: a file
+# compiled in as Rust whatever its suffix, and a file embedded as text, which
+# may be a script the shell injects.
+BRINGS = (
+    ("rust", re.compile(r'\binclude!\s*\(\s*r?#*"([^"]+)"')),
+    ("rust", re.compile(r'#\s*\[\s*path\s*=\s*r?#*"([^"]+)"')),
+    ("text", re.compile(r'\binclude_str!\s*\(\s*r?#*"([^"]+)"')),
+)
+
 # The sources shaped as script's dotted paths, which a Rust field access can
 # also spell: in Rust they are matched inside string literals only.
 SCRIPT_SHAPED = {
@@ -702,6 +716,41 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     # sit beneath it.
     workspaces = {}
 
+    # Files a Rust file brings into the build under a name of its own
+    # choosing, as (kind, path, the file that names it): compiled in through
+    # `include!` or `#[path = ...]`, or embedded through `include_str!`. Each
+    # is read after the walk, once, whatever its suffix.
+    brought = []
+
+    def scan_rust(path, where):
+        text = read_text(path)
+        read.append(where)
+        if text is None:
+            problems.append(f"{where}: not valid UTF-8, so it is not Rust this check can read")
+            return
+        code = strip_non_code(text, keep_literals=True)
+        bare = strip_non_code(text)
+        literals = "".join(
+            kept if kept != blank else ("\n" if kept == "\n" else " ")
+            for kept, blank in zip(code, bare)
+        )
+        reads = sources_in(decode_escapes(code), skip=SCRIPT_SHAPED)
+        reads += sources_in(decode_escapes(literals), only=SCRIPT_SHAPED)
+        for number, category, name in sorted(reads, key=lambda item: item[0]):
+            found(where, number, category, name)
+        for kind, pattern in BRINGS:
+            for match in pattern.finditer(code):
+                brought.append((kind, path.parent / match.group(1), where))
+
+    def scan_whole(path, where, what):
+        text = read_text(path)
+        read.append(where)
+        if text is None:
+            problems.append(f"{where}: not valid UTF-8, so it is not {what} this check can read")
+            return
+        for number, category, name in sources_in(text):
+            found(where, number, category, name)
+
     def found(where, number, category, name):
         if (where, name) in allowed:
             used.add((where, name))
@@ -719,29 +768,9 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 continue
             where = path.relative_to(root).as_posix()
             if is_rust_source(path):
-                text = read_text(path)
-                read.append(where)
-                if text is None:
-                    problems.append(f"{where}: not valid UTF-8, so it is not Rust this check can read")
-                    continue
-                code = strip_non_code(text, keep_literals=True)
-                bare = strip_non_code(text)
-                literals = "".join(
-                    kept if kept != blank else ("\n" if kept == "\n" else " ")
-                    for kept, blank in zip(code, bare)
-                )
-                reads = sources_in(decode_escapes(code), skip=SCRIPT_SHAPED)
-                reads += sources_in(decode_escapes(literals), only=SCRIPT_SHAPED)
-                for number, category, name in sorted(reads, key=lambda item: item[0]):
-                    found(where, number, category, name)
+                scan_rust(path, where)
             elif suffix_of(path) in SCRIPT_SUFFIXES:
-                text = read_text(path)
-                read.append(where)
-                if text is None:
-                    problems.append(f"{where}: not valid UTF-8, so it is not script this check can read")
-                    continue
-                for number, category, name in sources_in(text):
-                    found(where, number, category, name)
+                scan_whole(path, where, "script")
             elif folded_in(path.name, [MANIFEST]):
                 text = read_text(path)
                 read.append(where)
@@ -764,6 +793,25 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
                     if name is not None:
                         found(where, 0, DEPENDENCY_SOURCES[name], name)
+
+    while brought:
+        kind, target, by = brought.pop(0)
+        resolved = target.resolve()
+        if not resolved.is_relative_to(root):
+            problems.append(
+                f"{by}: brings {target.name} into the build from outside the tree "
+                "this check reads, so no read in it can be answered for"
+            )
+            continue
+        if not resolved.is_file():
+            continue
+        where = resolved.relative_to(root).as_posix()
+        if where in read:
+            continue
+        if kind == "rust":
+            scan_rust(resolved, where)
+        else:
+            scan_whole(resolved, where, "text")
 
     for (where, name), number in sorted(allowed.items(), key=lambda item: item[1]):
         if (where, name) not in used:
