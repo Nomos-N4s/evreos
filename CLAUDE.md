@@ -74,11 +74,10 @@
       environment the founder develops in), verified from the BASE branch's
       copy so a pull request cannot authorise its own key; every commit in a
       pull request must be signed by one of them. What remains unenforced is
-      what lands: the check runs
-      over `origin/<base>..HEAD`, which never contains the merge commit being
-      created, and `main` carries no branch protection, so only the settings
-      recorded at `docs/governance/branch-protection.md` can gate that. Tracked
-      as #26.
+      what lands: the check runs over `origin/<base>..HEAD`, which never
+      contains the merge commit being created, and `main` carries no branch
+      protection, so only the settings recorded at
+      `docs/governance/branch-protection.md` can gate that. Tracked as #26.
 
 ## Branches
 
