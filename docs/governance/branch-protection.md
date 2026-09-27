@@ -219,9 +219,10 @@ Three consequences of trusting the base branch's copy:
   after it merges. This is what makes enabling the check immediately safe
   rather than a flag day: the range the check reads only ever contains commits
   made after it, so whatever earlier history carries is out of its reach.
-  That history is not signed by the key: checked against it when the key was
-  listed, its commits carried no signature, and the forge's merge commits
-  carried the forge's own.
+  That history is not signed by the listed keys. Checked when they were
+  listed, most of its commits carried no signature, 108 carried SSH
+  signatures by two keys not in the file, and the forge's commits carried the
+  forge's own PGP signature.
 - A key rotation is two pull requests: one adding the new key, signed with the
   old; one removing the old key, signed with the new.
 - A lost key cannot be replaced by a pull request, because the replacement

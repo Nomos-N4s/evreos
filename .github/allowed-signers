@@ -21,8 +21,11 @@
 # Removing a line revokes that key, so the cloud key can be withdrawn without
 # touching the other.
 #
-# The history before the key was listed is not signed by it: its commits
-# carry no signature, and the forge's merge commits carry the forge's own.
+# The history before the keys were listed is not signed by either. Most of
+# its commits carry no signature; 108 carry SSH signatures by two keys not
+# listed here, SHA256:32dP45eSMmVSt/G/CGvcxl/P+MO3Nwj9xeTh/GSA2wc and
+# SHA256:bUAPBsUrjDreefOTHgvB+hK8RpB4fN2rnhgYmm0whOk; and the forge's commits
+# carry the forge's own PGP signature.
 # The check reads only the commits of the pull request in front of it, so
 # that history is out of its reach. From now on, sign every commit. On the
 # founder's machine, once per clone:
