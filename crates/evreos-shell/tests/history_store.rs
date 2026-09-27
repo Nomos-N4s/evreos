@@ -11,7 +11,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, UNIX_EPOCH};
 
-use evreos_shell::store::history::{HistoryEntryId, HistorySource, HistoryStore, WindowKind};
+use evreos_shell::store::history::{
+    HistoryEntryId, HistorySource, HistoryStore, NewHistoryEntry, WindowKind,
+};
 
 static TEST_COUNTER: AtomicU64 = AtomicU64::new(1);
 
@@ -461,5 +463,83 @@ fn no_undo_log_or_journal_on_disk() {
         assert!(!name.contains(".wal"), "no write-ahead log file: {name}");
     }
 
+    let _ = fs::remove_dir_all(&dir);
+}
+
+fn batch_of(count: u64) -> Vec<NewHistoryEntry> {
+    (0..count)
+        .map(|n| NewHistoryEntry {
+            address: format!("https://batch.example/{n}"),
+            title: format!("Batch {n}"),
+            visited_at: UNIX_EPOCH + Duration::from_secs(1_700_000_000 + n),
+            source: HistorySource::imported("Firefox"),
+        })
+        .collect()
+}
+
+#[test]
+fn a_batch_is_recorded_whole_and_survives_restart() {
+    let dir = unique_temp_dir();
+    {
+        let mut store = HistoryStore::open(&dir);
+        store
+            .record("https://before.example", "Before", WindowKind::Normal)
+            .unwrap();
+        let ids = store
+            .record_batch(batch_of(250), WindowKind::Normal)
+            .unwrap();
+        assert_eq!(ids.len(), 250);
+        let unique: std::collections::HashSet<_> = ids.iter().collect();
+        assert_eq!(unique.len(), 250, "every row gets its own identifier");
+        assert_eq!(store.count(), 251);
+    }
+    let reopened = HistoryStore::open(&dir);
+    assert_eq!(reopened.count(), 251);
+    let row = &reopened.search("batch.example/249")[0];
+    assert_eq!(row.source(), &HistorySource::imported("Firefox"));
+    assert_eq!(
+        row.visited_at(),
+        UNIX_EPOCH + Duration::from_secs(1_700_000_249)
+    );
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_private_batch_records_nothing() {
+    let dir = unique_temp_dir();
+    let mut store = HistoryStore::open(&dir);
+    let ids = store
+        .record_batch(batch_of(10), WindowKind::Private)
+        .unwrap();
+    assert!(ids.is_empty());
+    assert!(store.is_empty());
+    assert!(!store.file_path().exists(), "nothing reached disk");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_batch_whose_write_fails_keeps_nothing() {
+    let dir = unique_temp_dir();
+    let mut store = HistoryStore::open(&dir);
+    let kept = store
+        .record("https://kept.example", "Kept", WindowKind::Normal)
+        .unwrap()
+        .unwrap();
+    // A directory where the file's replacement must land fails the write.
+    fs::remove_file(store.file_path()).unwrap();
+    fs::create_dir(store.file_path()).unwrap();
+    assert!(store.record_batch(batch_of(5), WindowKind::Normal).is_err());
+    assert_eq!(store.count(), 1, "the failed batch left no row in memory");
+    assert!(store.get(kept).is_some());
+    fs::remove_dir(store.file_path()).unwrap();
+    let next = store
+        .record("https://next.example", "Next", WindowKind::Normal)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        next,
+        HistoryEntryId::new(kept.as_u64() + 1),
+        "identifiers the failed batch took are handed out again"
+    );
     let _ = fs::remove_dir_all(&dir);
 }

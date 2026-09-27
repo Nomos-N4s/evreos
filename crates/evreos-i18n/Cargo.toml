@@ -13,7 +13,13 @@ publish.workspace = true
 # fluent-bundle on the figures at
 # specs/001-evreos-v1/measurements/n10-catalogue-format.md. A format that
 # costs a dependency enters here, in the change that re-states its byte cost
-# under FR-043, never quietly.
+# under FR-043, never quietly. The import may name this crate, so its reach
+# test in crates/evreos-shell/tests/import.rs fails while this crate
+# declares a normal dependency for some platforms only or links any crate,
+# and lets the import name only `Language` and `catalogue` from it, with no
+# path after `catalogue` and no rename of either, so nothing this crate
+# re-exports reaches the import; a change adding a normal dependency has to
+# rework that check too.
 
 [lints]
 workspace = true

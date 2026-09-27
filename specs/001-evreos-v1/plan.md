@@ -113,10 +113,9 @@ content-blocking conversion for tier 2's compiled rule lists.
 signatures over a fixed-layout, length-prefixed, domain-separated preimage.
 - **An OHTTP-over-HPKE client** for FR-039b, with the key configuration compiled
 into the release rather than fetched.
-- **A localisation format for FR-035** — Fluent is the candidate, one bundle per
-primary language subtag; a plain keyed table is the alternative. This one is
-*indicative*, not established: the byte cost against SC-001 is unmeasured (N10)
-and FR-043 requires the pull request to state it.
+- **A localisation format for FR-035** — a plain keyed table, one catalogue per
+primary language subtag, adopted over Fluent on the N10 measurement at
+`specs/001-evreos-v1/measurements/n10-catalogue-format.md`.
 
 **Storage**: Local files only, in five residence classes the data model fixes.
 Profile-local and never transmitted in any form, derived or not: history,
@@ -133,8 +132,13 @@ directory on tier 2, the serialised `adblock` engine on tier 1) are product data
 materialised at first run and land inside SC-001's installed-footprint
 measurement. Money state is remote-owned: any wallet value held on the device is
 typed as stale and carries the time it was received (FR-026a). FR-012's import
-implies reading Chrome, Firefox and Edge profile stores; that dependency's byte
-cost is unmeasured (N10). No server-side store of anything this client holds.
+reads Chrome, Firefox and Edge profile stores; whether they read reliably while
+their browser runs, and the reader's byte cost, are measured at
+`docs/measurements/import-profile-read.md` as evidence from a Linux
+instrument that quickstart A7 does not admit as a result; the tier-1 and
+tier-2 runs on each tier's pinned runner are what settle them, unless a
+founder decision admits the Linux figures sooner. No server-side store of anything
+this client holds.
 
 **Testing**: `cargo test --all`, `cargo fmt --all --check` and `cargo clippy
 --all-targets --all-features -- -D warnings`, all three run in CI before

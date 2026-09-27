@@ -18,7 +18,8 @@ pub use bookmarks::{
 };
 pub use downloads::{DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore};
 pub use history::{
-    HistoryEntry, HistoryEntryId, HistoryError, HistorySource, HistoryStore, WindowKind,
+    HistoryEntry, HistoryEntryId, HistoryError, HistorySource, HistoryStore, NewHistoryEntry,
+    WindowKind,
 };
 
 use std::path::{Path, PathBuf};

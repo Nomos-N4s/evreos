@@ -1,0 +1,57 @@
+{
+   "checksum": "00000000000000000000000000000000",
+   "roots": {
+      "bookmark_bar": {
+         "children": [
+            {
+               "date_added": "13344473601000000",
+               "guid": "00000000-0000-4000-8000-000000000001",
+               "id": "101",
+               "name": "News",
+               "type": "url",
+               "url": "https://news.example/"
+            }
+         ],
+         "date_added": "13344473601000000",
+         "guid": "00000000-0000-4000-9000-000000000001",
+         "id": "501",
+         "name": "Favorites bar",
+         "type": "folder"
+      },
+      "other": {
+         "children": [
+            {
+               "children": [
+                  {
+                     "date_added": "13344473602000000",
+                     "guid": "00000000-0000-4000-8000-000000000002",
+                     "id": "102",
+                     "name": "Maps",
+                     "type": "url",
+                     "url": "https://maps.example/"
+                  }
+               ],
+               "date_added": "13344473603000000",
+               "guid": "00000000-0000-4000-9000-000000000003",
+               "id": "503",
+               "name": "Travel",
+               "type": "folder"
+            }
+         ],
+         "date_added": "13344473602000000",
+         "guid": "00000000-0000-4000-9000-000000000002",
+         "id": "502",
+         "name": "Other favorites",
+         "type": "folder"
+      },
+      "synced": {
+         "children": [],
+         "date_added": "13344473603000000",
+         "guid": "00000000-0000-4000-9000-000000000003",
+         "id": "503",
+         "name": "Mobile favorites",
+         "type": "folder"
+      }
+   },
+   "version": 1
+}

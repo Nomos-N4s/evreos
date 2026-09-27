@@ -297,3 +297,149 @@ fn no_undo_log_or_journal_on_disk() {
 
     let _ = fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_batch_persists_once_at_its_end() {
+    let dir = unique_temp_dir();
+    {
+        let mut store = BookmarkStore::open(&dir);
+        let folder = store
+            .batch(|store| {
+                let folder = store.create_folder(FolderId::ROOT, "Imported")?;
+                for n in 0..200 {
+                    store.create_bookmark_with_details(
+                        folder,
+                        format!("Item {n}"),
+                        format!("https://batch.example/{n}"),
+                        UNIX_EPOCH + Duration::from_secs(1_700_000_000 + n),
+                        BookmarkSource::imported("Chrome"),
+                    )?;
+                    // Nothing reaches disk until the batch ends.
+                    assert!(!store.file_path().exists());
+                }
+                Ok(folder)
+            })
+            .expect("batch succeeds");
+        assert_eq!(store.bookmarks_in_folder(folder).len(), 200);
+        assert!(store.file_path().exists());
+    }
+    let reopened = BookmarkStore::open(&dir);
+    assert_eq!(reopened.bookmarks().len(), 200);
+    reopened.validate_tree().expect("the tree invariant holds");
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_failed_batch_leaves_the_store_as_it_was() {
+    let dir = unique_temp_dir();
+    let mut store = BookmarkStore::open(&dir);
+    let kept = store.create_folder(FolderId::ROOT, "Kept").unwrap();
+    let result = store.batch(|store| {
+        let folder = store.create_folder(FolderId::ROOT, "Half")?;
+        store.create_bookmark(folder, "One", "https://one.example")?;
+        store.create_bookmark(FolderId::new(9_999), "Orphan", "https://two.example")
+    });
+    assert!(matches!(result, Err(BookmarkError::FolderNotFound(_))));
+    assert_eq!(
+        store.folders().len(),
+        2,
+        "the root and Kept, nothing of Half"
+    );
+    assert!(store.bookmarks().is_empty());
+    assert!(store.get_folder(kept).is_some());
+
+    // The store is usable afterwards, and saves each operation again.
+    store
+        .create_bookmark(kept, "After", "https://after.example")
+        .unwrap();
+    assert_eq!(BookmarkStore::open(&dir).bookmarks().len(), 1);
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_nested_batch_is_part_of_the_outer_one() {
+    let dir = unique_temp_dir();
+    let mut store = BookmarkStore::open(&dir);
+    let result: Result<(), BookmarkError> = store.batch(|store| {
+        store.batch(|inner| {
+            inner.create_folder(FolderId::ROOT, "Inner")?;
+            Ok(())
+        })?;
+        assert!(!store.file_path().exists(), "the inner batch saved nothing");
+        store.create_bookmark(FolderId::new(9_999), "Orphan", "https://x.example")?;
+        Ok(())
+    });
+    assert!(result.is_err());
+    assert_eq!(
+        store.folders().len(),
+        1,
+        "the outer failure undid the inner batch"
+    );
+    assert!(!store.file_path().exists());
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_batch_positions_rows_exactly_as_single_operations_do() {
+    let dir = unique_temp_dir();
+    let mut batched = BookmarkStore::open(&dir.join("batched"));
+    let mut single = BookmarkStore::open(&dir.join("single"));
+    let build = |store: &mut BookmarkStore| -> Result<(), BookmarkError> {
+        let a = store.create_folder(FolderId::ROOT, "A")?;
+        let b = store.create_folder(FolderId::ROOT, "B")?;
+        for n in 0..5 {
+            store.create_bookmark(a, format!("a{n}"), format!("https://a.example/{n}"))?;
+        }
+        let gone = store.create_bookmark(b, "gone", "https://gone.example")?;
+        // A deletion mid-batch drops the batch index; later creates must
+        // still land at the right positions.
+        store.delete_bookmark(gone)?;
+        store.create_bookmark(b, "b0", "https://b.example/0")?;
+        store.create_folder(a, "A1")?;
+        store.create_bookmark(a, "a5", "https://a.example/5")?;
+        Ok(())
+    };
+    batched.batch(build).unwrap();
+    build(&mut single).unwrap();
+    let shape = |store: &BookmarkStore| {
+        let mut rows: Vec<(String, u64, u32)> = store
+            .bookmarks()
+            .iter()
+            .map(|b| (b.title().to_string(), b.parent().as_u64(), b.position()))
+            .collect();
+        rows.extend(store.folders().iter().map(|f| {
+            (
+                f.name().to_string(),
+                f.parent().map_or(0, |p| p.as_u64()),
+                f.position(),
+            )
+        }));
+        rows.sort();
+        rows
+    };
+    assert_eq!(shape(&batched), shape(&single));
+    let _ = fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_file_repeating_a_folder_identifier_is_refused_whatever_its_row_order() {
+    // Folder 5 appears twice, once under the root and once under folder 7,
+    // which is itself under 5: a cycle through the repeated identifier.
+    let rows = [(5, 0), (7, 5), (5, 7)];
+    for order in [[0, 1, 2], [2, 1, 0], [1, 2, 0]] {
+        let dir = unique_temp_dir();
+        let mut text = String::from("[[folder]]\nid = 0\nname = \"Bookmarks\"\nposition = 0\n\n");
+        for &i in &order {
+            let (id, parent) = rows[i];
+            text.push_str(&format!(
+                "[[folder]]\nid = {id}\nparent = {parent}\nname = \"f{id}\"\nposition = 0\n\n"
+            ));
+        }
+        fs::write(dir.join("bookmarks.toml"), text).unwrap();
+        assert!(
+            BookmarkStore::try_open(&dir).is_err(),
+            "order {order:?} was accepted"
+        );
+        let _ = fs::remove_dir_all(&dir);
+    }
+}

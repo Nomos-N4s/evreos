@@ -9,6 +9,7 @@ pub mod brand;
 pub mod error;
 pub mod error_presentation;
 pub mod handoff;
+pub mod import;
 pub mod keymap;
 pub mod log;
 pub mod omnibox;
@@ -34,6 +35,10 @@ pub use error_presentation::{
 pub use handoff::{
     HandOffBrowser, HandOffError, HandOffExecutor, HandOffOffer, HandOffReason,
     MockHandOffExecutor, detect_password_input,
+};
+pub use import::{
+    ImportCounts, ImportError, ImportFailure, ImportJob, ImportScope, ImportState, ImportedData,
+    ProfileLocations, SourceBrowser, SourceProfile,
 };
 pub use keymap::{
     ChromeCommand, CommandCategory, Key, KeyShortcut, Keymap, KeymapError, Modifiers,
@@ -62,7 +67,8 @@ pub use site_key::{SiteKey, SiteKeyError};
 pub use store::{
     Bookmark, BookmarkError, BookmarkFolder, BookmarkId, BookmarkSource, BookmarkStore,
     DownloadEntry, DownloadError, DownloadId, DownloadState, DownloadStore, FolderId, HistoryEntry,
-    HistoryEntryId, HistoryError, HistorySource, HistoryStore, StoreRegistry, WindowKind,
+    HistoryEntryId, HistoryError, HistorySource, HistoryStore, NewHistoryEntry, StoreRegistry,
+    WindowKind,
 };
 pub use suggest::{OpenTab, Suggestion, SuggestionIndex, SuggestionSource};
 pub use tabs::{
