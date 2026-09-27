@@ -1013,21 +1013,34 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
     };
     let punct = |i: usize, ch: char| toks.get(i) == Some(&Tok::Punct(ch));
     let path_sep = |i: usize| punct(i, ':') && punct(i + 1, ':');
-    // Whether token `i` sits inside a path's `{…}` group, as `super` does in
-    // `use super::{json, super::tabs}`: the nearest brace still open before
-    // it follows a `::`. A block's brace, as in `{ super::f() }`, does not.
-    let in_path_group = |i: usize| {
-        let mut depth = 0usize;
-        for j in (0..i).rev() {
-            match toks[j] {
-                Tok::Punct('}') => depth += 1,
-                Tok::Punct('{') if depth > 0 => depth -= 1,
-                Tok::Punct('{') => return j >= 2 && path_sep(j - 2),
+    // Whether each token sits inside a path's `{…}` group, at any depth. A
+    // brace opens such a group when it follows `::` or `use`, or follows `{`
+    // or `,` inside another such group, as the unprefixed inner group of
+    // `use super::{{super::tabs}}` does. A block's brace, as in
+    // `{ super::f() }`, opens none.
+    let in_group: Vec<bool> = {
+        let mut open: Vec<bool> = Vec::new();
+        let mut marks = Vec::with_capacity(toks.len());
+        for (i, tok) in toks.iter().enumerate() {
+            marks.push(open.last().copied().unwrap_or(false));
+            match tok {
+                Tok::Punct('{') => {
+                    let inside = open.last().copied().unwrap_or(false);
+                    let group = (i >= 2 && path_sep(i - 2))
+                        || ident(i.wrapping_sub(1)) == Some("use")
+                        || (inside
+                            && (punct(i.wrapping_sub(1), '{') || punct(i.wrapping_sub(1), ',')));
+                    open.push(group);
+                }
+                Tok::Punct('}') => {
+                    open.pop();
+                }
                 _ => {}
             }
         }
-        false
+        marks
     };
+    let in_path_group = |i: usize| in_group[i];
     let mut found = Vec::new();
 
     // The unit-test module that closes the file is not shipped code, and its
@@ -1209,6 +1222,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use super::\u{200E}super::tabs;", false),
         ("use super::{\u{200F}super::tabs as t};", false),
         ("use super::{json, super::tabs};", false),
+        ("use super::{{super::tabs}};", false),
+        ("use super::{json, {super::tabs as t}};", false),
+        ("use {super::super::tabs};", false),
+        ("use super::{json::{Json, {super::super::tabs}}};", false),
         ("use super::{json::{self, Json}, super::tabs};", false),
         ("fn f() { m\u{200E}!() }", false),
         ("fn f() { let x\u{301} = 1; }", false),
