@@ -259,6 +259,11 @@ pub enum ImportFailure {
     SourceInterrupted,
     /// A store is not in a format this reader understands.
     Unreadable,
+    /// A store could not be read from disk: access to it was refused, it is
+    /// not a regular file, one of its files is over 1 GiB, or the read
+    /// itself failed. A store read whole that is too large to parse is
+    /// [`ImportFailure::Unreadable`].
+    ReadFailed,
     /// Evreos's own stores could not be written. Nothing was imported,
     /// unless the error is [`ImportError::RollbackFailed`], which says the
     /// bookmarks already written remain.
@@ -340,7 +345,8 @@ impl ImportError {
             Self::ProfileMissing => ImportFailure::ProfileMissing,
             Self::SourceBusy { .. } => ImportFailure::SourceBusy,
             Self::SourceInterrupted { .. } => ImportFailure::SourceInterrupted,
-            Self::Unreadable { .. } | Self::Io { .. } => ImportFailure::Unreadable,
+            Self::Unreadable { .. } => ImportFailure::Unreadable,
+            Self::Io { .. } => ImportFailure::ReadFailed,
             Self::Bookmarks(_)
             | Self::History(_)
             | Self::Catalogue(_)

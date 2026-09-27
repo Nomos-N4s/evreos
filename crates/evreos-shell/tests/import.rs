@@ -615,6 +615,40 @@ fn a_corrupt_store_fails_the_import_before_anything_is_written() {
 }
 
 #[test]
+fn a_store_that_cannot_be_read_from_disk_fails_as_a_read_not_a_format() {
+    let source = temp_dir("unread_source");
+    fs::copy(
+        fixtures().join("chrome/Default/Bookmarks"),
+        source.join("Bookmarks"),
+    )
+    .unwrap();
+    // A directory where the history store should be: present, but not a
+    // regular file, so the copy refuses it before reading a byte.
+    fs::create_dir(source.join("History")).unwrap();
+
+    let root = temp_dir("unread_profile");
+    let mut stores = StoreRegistry::open(&root);
+    let profile = SourceProfile::new(SourceBrowser::Chrome, "unread", &source);
+    let mut job = ImportJob::new(profile, ImportScope::ALL).with_policy(quick());
+    let error = job.run(&mut stores, Language::En).unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ImportError::Io {
+                store: "History",
+                ..
+            }
+        ),
+        "{error}"
+    );
+    assert_eq!(job.state(), ImportState::Failed(ImportFailure::ReadFailed));
+    assert!(stores.bookmarks().bookmarks().is_empty());
+    assert!(stores.history().is_empty());
+    fs::remove_dir_all(source).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn a_log_cut_mid_frame_still_reads_to_its_last_whole_commit() {
     let source = temp_dir("torn_log");
     let original = firefox().path;

@@ -86,9 +86,10 @@ succeed there too — expected, not measured. The expectation has a known way
 to fail: Chromium has shipped a lock on Windows that opens its cookie store
 with sharing denied, to keep other processes out of it, and a browser that
 did the same with `History` would refuse even the copy. The import would then
-fail with the store named as unreadable rather than import anything, and the
-tier-1 run is what finds out. The probe below is the instrument for that run:
-it is committed so each pinned runner can take it unchanged.
+fail with the store named as one it could not read rather than import
+anything, and the tier-1 run is what finds out. The probe below is the
+instrument for that run: it is committed so each pinned runner can take it
+unchanged.
 
 ## Method
 
@@ -169,7 +170,8 @@ since changed how the browsers' stores in these runs are read in none of the
 respects the trials measure. Beyond the checks the trials counted, a copy
 must now also be of regular files of at most 1 GiB each, which every store
 here was. The fixes also changed how a store refused at every attempt is
-classified, how malformed input is bounded, how a rowid alias declared with
+classified, how a store that cannot be read is told from one it cannot
+parse, how malformed input is bounded, how a rowid alias declared with
 irregular spacing, through a named constraint or past a comment is found,
 and which addresses at the edges of the filter are kept. And an
 attempt refused at a journal check now reads the files once more, one at
@@ -224,7 +226,7 @@ the same stopped profiles after review round 11, reads the same counts.
 
 - **Verified copy-then-read, in memory** (`snapshot.rs`). Each store's files
   — only regular files, opened without waiting on them, and each of at most
-  1 GiB, or the store is unreadable — are read whole, read again and
+  1 GiB, or the store is not read at all — are read whole, read again and
   compared chunk by chunk, with the rollback
   journal checked for its magic number before and after; up to eight attempts
   with a doubling pause capped at 400 ms, about 1.6 s in all. The copy never
