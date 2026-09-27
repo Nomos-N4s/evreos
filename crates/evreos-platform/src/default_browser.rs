@@ -66,14 +66,15 @@ pub struct Application<'a> {
 /// Why an [`Application`] cannot be registered.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InvalidApplication {
-    /// The name is empty, or holds a control character.
+    /// The name is empty, starts with `@`, or holds a control character.
     Name,
     /// The name's ASCII letters and digits, from which the key is derived,
     /// are none, or start with a digit, which a ProgID may not.
     NameWithoutKey,
     /// The key derived from the name is longer than a ProgID allows.
     NameTooLong,
-    /// The description is empty, or holds a control character.
+    /// The description is empty, starts with `@`, or holds a control
+    /// character.
     Description,
     /// The executable is not an absolute Windows path, or holds a quote, a
     /// `%` or a control character. A quote or a control character would
@@ -85,10 +86,12 @@ pub enum InvalidApplication {
 impl fmt::Display for InvalidApplication {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
-            Self::Name => "the name is empty or holds a control character",
+            Self::Name => "the name is empty, starts with @ or holds a control character",
             Self::NameWithoutKey => "the name yields no key that starts with an ASCII letter",
             Self::NameTooLong => "the key derived from the name is too long",
-            Self::Description => "the description is empty or holds a control character",
+            Self::Description => {
+                "the description is empty, starts with @ or holds a control character"
+            }
             Self::Executable => "the executable is not a plain absolute path",
         })
     }
@@ -166,7 +169,7 @@ pub struct Registration {
 impl Registration {
     /// The registration for `app`, checked before anything is written.
     pub fn of(app: &Application<'_>) -> Result<Self, InvalidApplication> {
-        if app.name.is_empty() || app.name.chars().any(char::is_control) {
+        if !is_plain_text(app.name) {
             return Err(InvalidApplication::Name);
         }
         let key: String = app
@@ -180,7 +183,7 @@ impl Registration {
         if key.len() + HTML_SUFFIX.len().max(URL_SUFFIX.len()) > PROGID_MAX {
             return Err(InvalidApplication::NameTooLong);
         }
-        if app.description.is_empty() || app.description.chars().any(char::is_control) {
+        if !is_plain_text(app.description) {
             return Err(InvalidApplication::Description);
         }
         if !is_plain_absolute(app.executable) {
@@ -319,6 +322,13 @@ fn remove_pointers(
         }
     }
     Ok(())
+}
+
+/// Whether `text` is shown as written: not empty, holding no control
+/// character, and not starting with `@`, which Windows reads as a reference
+/// to a string in a resource file rather than as the string itself.
+fn is_plain_text(text: &str) -> bool {
+    !text.is_empty() && !text.starts_with('@') && !text.chars().any(char::is_control)
 }
 
 /// Whether `path` is an absolute Windows path that can sit between quotes on

@@ -300,6 +300,20 @@ fn an_application_that_cannot_be_registered_writes_nothing() {
         ),
         (
             Application {
+                name: "@C:\\x.dll,-1",
+                ..APP
+            },
+            InvalidApplication::Name,
+        ),
+        (
+            Application {
+                description: "@C:\\x.dll,-1",
+                ..APP
+            },
+            InvalidApplication::Description,
+        ),
+        (
+            Application {
                 name: "7 Browser",
                 ..APP
             },
