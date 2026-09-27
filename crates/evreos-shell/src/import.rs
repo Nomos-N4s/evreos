@@ -21,7 +21,8 @@
 //! `logins.json`, `logins.db` or `key4.db` — is among them. The one place a
 //! credential can hide inside a store that *is* read is an address carrying a
 //! user name and password (`https://user:secret@host/`); [`clean_address`]
-//! removes that part from every imported address before a row is written.
+//! removes that part from every imported address before a row is written, and
+//! skips the one shape of `file:` address it cannot be cut from.
 //!
 //! **The network** — reading another browser's files is the local computation
 //! FR-007a permits. Nothing in this module or its submodules references
