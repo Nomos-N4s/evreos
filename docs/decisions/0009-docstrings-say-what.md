@@ -52,7 +52,9 @@ points to it.
 
 Binding from the merge of the pull request that amends the constitution.
 Nothing opened before that merge is covered, #106 included. The constitution
-moves to 2.2.0.
+moves to 2.2.0, and five open tasks in `specs/001-evreos-v1/tasks.md` -- T112,
+T114, T125, T137 and T161 -- follow it: the doc comments they prescribe cite a
+reason rather than argue it.
 
 What reopens this: a review finding a defect that a docstring's brevity hid.
 
