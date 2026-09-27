@@ -1559,23 +1559,12 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             }
             // The stores write where they are opened, and each opens at any
             // path it is given, so the import opens none: it writes only the
-            // stores its caller hands it. `Database`, the in-tree reader's
-            // name, is passed; the reader reads bytes already in memory, by
-            // `Database::from_bytes`, and has no `open` of its own.
-            "open" | "try_open"
-                if path_sep(i.wrapping_sub(2)) && ident(i.wrapping_sub(3)) != Some("Database") =>
-            {
-                found.push(format!("calls `{word}` on something other than the reader"));
-            }
-            // The exception above goes by the reader's name, so neither a
-            // rename nor an alias may take it:
-            // `use crate::store::StoreRegistry as Database;` or
-            // `type Database = crate::store::StoreRegistry;`. Across the
-            // crate, `nothing_in_the_crate_takes_the_readers_name` refuses the
-            // same renames and aliases, and an item of that name outside the
-            // reader's module.
-            "Database" if matches!(ident(i.wrapping_sub(1)), Some("as" | "type")) => {
-                found.push("renames something to `Database`".to_string());
+            // stores its caller hands it. No `open` or `try_open` after a
+            // path is passed, whatever names the path: the in-tree reader
+            // reads bytes already in memory, by `Database::from_bytes`, and
+            // has no `open` of its own.
+            "open" | "try_open" if path_sep(i.wrapping_sub(2)) => {
+                found.push(format!("calls `{word}` after a path"));
             }
             // `write!` on a stream calls its `write_fmt`, which only the
             // `Write` trait in scope provides; without the name, the one
@@ -1772,6 +1761,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ),
         (
             "type Database = crate::store::StoreRegistry; fn f() { Database::open(\"x\"); }",
+            false,
+        ),
+        ("fn f(a: &[u8]) { let _ = Database::open(a, None); }", false),
+        (
+            "fn f<Database: crate::store::Store>() { Database::try_open(\"x\"); }",
             false,
         ),
         ("use crate::store::hook; #[hook] fn f() {}", false),
@@ -1999,98 +1993,6 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
                 );
             }
         }
-    }
-}
-
-/// Whether `source` gives something the reader's name, `Database`: by a
-/// rename or an alias anywhere, or, outside the reader's own module, by
-/// defining an item under it.
-fn takes_the_readers_name(source: &str, in_the_reader: bool) -> bool {
-    const DEFINES: &[&str] = &[
-        "struct", "enum", "union", "trait", "fn", "mod", "const", "static",
-    ];
-    let toks = tokens(source);
-    let word = |i: usize| match toks.get(i) {
-        Some(Tok::Ident(word)) => Some(word.strip_prefix("r#").unwrap_or(word)),
-        _ => None,
-    };
-    (0..toks.len()).any(|i| {
-        word(i) == Some("Database")
-            && match word(i.wrapping_sub(1)) {
-                Some("as" | "type") => true,
-                Some(before) => !in_the_reader && DEFINES.contains(&before),
-                // `macro_rules! Database`
-                None => {
-                    !in_the_reader
-                        && toks.get(i.wrapping_sub(1)) == Some(&Tok::Punct('!'))
-                        && word(i.wrapping_sub(2)) == Some("macro_rules")
-                }
-            }
-    })
-}
-
-#[test]
-fn the_readers_name_is_taken_only_by_the_reader() {
-    for (source, in_the_reader) in [
-        ("pub use StoreRegistry as Database;", false),
-        ("pub use StoreRegistry as r#Database;", false),
-        ("type Database = crate::store::StoreRegistry;", false),
-        ("pub(crate) type r#Database = StoreRegistry;", false),
-        ("pub struct Database(StoreRegistry);", false),
-        ("pub enum Database {}", false),
-        ("pub union Database { a: u8 }", false),
-        ("pub(crate) trait Database {}", false),
-        ("pub fn Database() {}", false),
-        ("mod Database {}", false),
-        ("pub const Database: StoreRegistry = StoreRegistry;", false),
-        ("static Database: StoreRegistry = StoreRegistry;", false),
-        ("macro_rules! Database { () => {} }", false),
-        ("pub use StoreRegistry as Database;", true),
-        ("type Database = StoreRegistry;", true),
-    ] {
-        assert!(
-            takes_the_readers_name(source, in_the_reader),
-            "{source:?} passed"
-        );
-    }
-    for (source, in_the_reader) in [
-        ("pub struct Database<'a> { main: &'a [u8] }", true),
-        ("fn f(db: &Database) {}", false),
-        ("use super::sqlite::{Database, Value};", false),
-        ("let as_database = 1;", false),
-    ] {
-        assert!(!takes_the_readers_name(source, in_the_reader), "{source:?}");
-    }
-}
-
-#[test]
-fn nothing_in_the_crate_takes_the_readers_name() {
-    // The import may call `open` after `Database`, the in-tree reader, and
-    // nothing else. A rename or an alias to that name anywhere in the crate,
-    // `pub use StoreRegistry as Database;` or `type Database = …;`, or an
-    // item of that name outside the reader's module, such as a store's own
-    // `pub struct Database`, would let one of them through, so none exists.
-    fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
-        for entry in fs::read_dir(dir).unwrap() {
-            let path = entry.unwrap().path();
-            if path.is_dir() {
-                sources(&path, out);
-            } else if path.extension().is_some_and(|ext| ext == "rs") {
-                out.push(path);
-            }
-        }
-    }
-    let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    let mut files = Vec::new();
-    sources(&src, &mut files);
-    assert!(!files.is_empty());
-    let reader = src.join("import").join("sqlite.rs");
-    for file in files {
-        assert!(
-            !takes_the_readers_name(&fs::read_to_string(&file).unwrap(), file == reader),
-            "{} gives something the reader's name, `Database`",
-            file.display()
-        );
     }
 }
 
