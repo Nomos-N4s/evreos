@@ -205,8 +205,10 @@ is reported as "signing is not yet enabled" and skipped — never failed — so
 the mechanism could land before the key without breaking every pull request.
 The founder's keys are now listed, one for the founder's machine and one for
 the cloud environment the founder develops in, so once the file carrying them
-is on `main`, every commit in a later pull request must be signed by one of
-them.
+is on `main`, every commit in a pull request must be signed by one of them.
+That includes pull requests already open when it merges: the check reads the
+base branch's copy each time it runs, so an open branch with an unsigned
+commit fails on its next run.
 
 What remains: every commit is signed from then on, by one of the listed
 keys. The file's own comment gives the git configuration. The machine key's
