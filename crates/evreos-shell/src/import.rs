@@ -832,8 +832,9 @@ fn millis(time: SystemTime) -> u128 {
 /// removed: they are a site credential, which an import never carries
 /// (Q-E5). A `file:` address whose path opens on two separators — which a
 /// browser reads as the start of an authority, whether after `file:` or after
-/// an empty `file://` — and names a user there is skipped whole, since the
-/// credential cannot be cut from it without changing where it points.
+/// a `file://` whose host is empty or `localhost`, which a browser reads as
+/// empty — and names a user there is skipped whole, since the credential
+/// cannot be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
@@ -871,8 +872,12 @@ pub fn clean_address(raw: &str) -> Option<String> {
             let path = &rest[end..];
             // With no host, a path opening on two separators is read as a
             // further authority, as above: a share path is kept, and one
-            // naming a user is refused.
-            if host.is_empty() && smuggles_credential(path) {
+            // naming a user is refused. A `file:` host of `localhost` is no
+            // host: a browser loads `file://localhost//u:p@server/` as
+            // `file:////u:p@server/`.
+            let no_host =
+                host.is_empty() || (scheme == "file" && host.eq_ignore_ascii_case("localhost"));
+            if no_host && smuggles_credential(path) {
                 return None;
             }
             Some(format!("{scheme}://{host}{path}"))
@@ -998,6 +1003,22 @@ mod tests {
         assert_eq!(
             clean_address("file:///home/a@b/x").as_deref(),
             Some("file:///home/a@b/x")
+        );
+        for smuggled in [
+            "file://localhost//u:secret@server/x",
+            "file://LOCALHOST/\\u:secret@server/x",
+            "file://localhost/\\\\u:secret@server\\x",
+            "file://member@localhost//u:secret@server/x",
+        ] {
+            assert_eq!(clean_address(smuggled), None, "{smuggled}");
+        }
+        assert_eq!(
+            clean_address("file://localhost/home/a/b.html").as_deref(),
+            Some("file://localhost/home/a/b.html")
+        );
+        assert_eq!(
+            clean_address("file://localhost//server/share/x").as_deref(),
+            Some("file://localhost//server/share/x")
         );
     }
 
