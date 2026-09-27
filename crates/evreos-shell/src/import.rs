@@ -27,10 +27,11 @@
 //! **The network** — reading another browser's files is the local computation
 //! FR-007a permits. The shipped code of this module and its submodules —
 //! their unit tests aside — names no dependency of this crate but
-//! `evreos-i18n`, for the names of its folders, so not `evreos-net`; reaches
-//! no part of the standard library's platform module but the Unix
-//! `OpenOptionsExt`, so no socket and no process, and no part of this
-//! crate but the stores; loads no file but its own five modules, through no
+//! `evreos-i18n`, for the names of its folders, so not `evreos-net`; names
+//! neither `std::net` nor `std::process`, so opens no socket and starts no
+//! process; reaches no part of the standard library's platform module but
+//! the Unix `OpenOptionsExt`, and no part of this crate but the stores;
+//! loads no file but its own five modules, through no
 //! `#[path]` and no `cfg_attr`; invokes no macro but a short list of the
 //! standard library's; and is written in ASCII outside its literals and
 //! comments, so no character a reader cannot see hides a path.
