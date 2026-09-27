@@ -216,16 +216,42 @@ fn the_widest_rollout_and_longest_platform_are_accepted() {
 
 mod rollout {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use evreos_platform::update::rollout::RolloutDraw;
 
-    fn scratch(name: &str) -> PathBuf {
+    /// A rollout file's path in a directory of its own, removed when the
+    /// test ends, whether it passes or not.
+    struct Scratch(PathBuf);
+
+    impl std::ops::Deref for Scratch {
+        type Target = Path;
+
+        fn deref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl AsRef<Path> for Scratch {
+        fn as_ref(&self) -> &Path {
+            &self.0
+        }
+    }
+
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            if let Some(dir) = self.0.parent() {
+                let _ = fs::remove_dir_all(dir);
+            }
+        }
+    }
+
+    fn scratch(name: &str) -> Scratch {
         let dir =
             std::env::temp_dir().join(format!("evreos-rollout-{}-{name}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
-        dir.join("rollout")
+        Scratch(dir.join("rollout"))
     }
 
     #[test]
