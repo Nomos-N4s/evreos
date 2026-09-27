@@ -1,6 +1,6 @@
 # The crate the shell reaches platform services through: default-browser
-# registration first (FR-013), then the secure credential store, update
-# verification and local rollout evaluation (research §2.8). It holds no
+# registration (FR-013), update verification and local rollout evaluation
+# (FR-014), and later the secure credential store (research §2.8). It holds no
 # `unsafe`: every platform service is reached through a safe binding, and
 # the change that adds a binding states its byte cost against budgets.toml
 # under Principle II.
