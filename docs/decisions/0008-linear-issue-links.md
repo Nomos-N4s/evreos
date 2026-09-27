@@ -57,8 +57,9 @@ The link stays mandatory. What changes is which tracker may carry it.
 Binding from the merge of the pull request that amends the constitution, not
 from the date above; nothing opened before that merge is covered by it. The
 constitution moves to 2.1.0, and `CLAUDE.md`,
-the pull request template, `README.md` and Principle I's compliance statement
-in `specs/001-evreos-v1/plan.md` follow it.
+the pull request template, `README.md`, Principle I's compliance statement
+in `specs/001-evreos-v1/plan.md` and T002's line in `specs/001-evreos-v1/tasks.md`
+follow it.
 
 What replaces the discipline this relaxes, as the amendment procedure asks.
 Every pull request is still linked to one issue, and every commit still
