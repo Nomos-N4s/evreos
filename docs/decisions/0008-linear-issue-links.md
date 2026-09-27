@@ -24,8 +24,8 @@ implementer may not drop it.
 A pull request may be linked either to a GitHub issue or to the Linear issue
 that tracks the work. A Linear-linked pull request names that issue in its body,
 as `Refs CAR-N`, or `Closes CAR-N` where merging finishes it. Each commit
-references the same issue, as it already may. A GitHub issue is not opened for
-work Linear already tracks.
+references the same issue, as it already may. Either kind of issue serves; the
+choice is the author's.
 
 The link stays mandatory. What changes is which tracker may carry it.
 
