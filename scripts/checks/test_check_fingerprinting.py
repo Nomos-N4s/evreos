@@ -84,7 +84,9 @@ def tree(files, allowlist=""):
             else:
                 path.write_text(content, encoding="utf-8")
         allowlist_path = base / "fingerprinting-allowlist.txt"
-        if allowlist is not MISSING:
+        if isinstance(allowlist, bytes):
+            allowlist_path.write_bytes(allowlist)
+        elif allowlist is not MISSING:
             allowlist_path.write_text(allowlist, encoding="utf-8")
         return check.check_tree(root, allowlist_path)
 
@@ -450,6 +452,13 @@ problems = tree(passing_tree({
 report("a source named in a script comment fails, the loud direction by design",
        mentions(problems, "notes.js:1", "'performance.now'"))
 
+# --- the other script suffixes ------------------------------------------------
+
+for suffix in (".htm", ".cjs", ".mts", ".cts"):
+    problems = tree(passing_tree({f"crates/x/ui/probe{suffix}": "performance.now();\n"}))[0]
+    report(f"a {suffix} file is read as script",
+           mentions(problems, f"probe{suffix}:1", "'performance.now'"))
+
 # --- DEPENDENCY ---------------------------------------------------------------
 
 
@@ -491,6 +500,22 @@ problems = tree(passing_tree({
     "crates/x/Cargo.toml": CLEAN_MANIFEST + "sys = { workspace = true }\n",
 }))[0]
 report("a member inheriting a renamed workspace dependency is read under its real name",
+       mentions(problems, "crates/x/Cargo.toml", "'sysinfo'"))
+
+problems = tree(passing_tree({
+    "crates/y/cargo.toml": '[package]\nname = "y"\n\n[dependencies]\nsysinfo = "0.30"\n',
+}))[0]
+report("a manifest named in another case is read",
+       mentions(problems, "crates/y/cargo.toml", "'sysinfo'"))
+
+problems = tree(with_manifest(
+    '\n[dev_dependencies]\nfont-kit = "0.14"\n\n[build_dependencies]\nnum_cpus = "1"\n'
+))[0]
+report("the underscore spellings of the dev and build tables are read",
+       mentions(problems, "'font-kit'") and mentions(problems, "'num_cpus'"))
+
+problems = tree(with_manifest('SysInfo = "0.30"\n'))[0]
+report("a crate name compares with case folded",
        mentions(problems, "crates/x/Cargo.toml", "'sysinfo'"))
 
 problems = tree(passing_tree({"crates/x/Cargo.toml": "[package\nname = \n"}))[0]
@@ -567,6 +592,18 @@ problems = tree(passing_tree(), allowlist="# comments only\n\n   \n")[0]
 report("an allowlist of comments and blank lines is empty and passes", problems == [])
 
 # --- unreadable input and an unreached verdict -------------------------------
+
+problems = tree(passing_tree({"crates/x/ui/bad.js": b"\xff\xfe performance.now()"}))[0]
+report("script that is not UTF-8 fails rather than passing unread",
+       mentions(problems, "bad.js", "not valid UTF-8"))
+
+problems = tree(passing_tree({"crates/x/Cargo.toml": b"\xff\xfe[package]"}))[0]
+report("a manifest that is not UTF-8 fails rather than passing unread",
+       mentions(problems, "crates/x/Cargo.toml", "not valid UTF-8"))
+
+problems = tree(passing_tree(), allowlist=b"\xff\xfe crates/x/src/lib.rs TZ\n")[0]
+report("an allowlist that is not UTF-8 fails rather than passing unread",
+       mentions(problems, "fingerprinting-allowlist.txt", "not valid UTF-8"))
 
 problems = tree(passing_tree({"crates/x/src/bad.rs": b"\xff\xfe MachineGuid"}))[0]
 report("Rust that is not UTF-8 fails rather than passing unread",
@@ -677,6 +714,13 @@ with tempfile.TemporaryDirectory() as tmp:
     empty.mkdir()
     result = run_main("--root", str(empty))
     report("an unreached verdict exits 2", result.returncode == 2)
+
+    (root / "src" / "lib.rs").write_text('let zone = std::env::var("TZ");\n', encoding="utf-8")
+    listed = root / "listed.txt"
+    listed.write_text("src/lib.rs TZ\n", encoding="utf-8")
+    result = run_main("--root", str(root), "--allowlist", str(listed))
+    report("--allowlist names the list the run reads", result.returncode == 0
+           and "1 allowlisted uses" in result.stdout)
 
 print(f"{PASSED}/{PASSED + FAILED} passed")
 sys.exit(1 if FAILED else 0)
