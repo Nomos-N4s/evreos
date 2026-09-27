@@ -70,10 +70,11 @@
       bypasses both. The merge commits on `main` consequently do not satisfy
       Principle I's Conventional-Commits and issue-reference requirement, and
       are not caught. Signatures ARE checked now, against the founder's public
-      key in `.github/allowed-signers`, verified from the BASE branch's copy so
-      a pull request cannot authorise its own key — and while that file lists no
-      key the check reports signing as not yet enabled and skips, which only the
-      founder can change. What remains unenforced is what lands: the check runs
+      keys in `.github/allowed-signers` (the founder's machine and the cloud
+      environment the founder develops in), verified from the BASE branch's
+      copy so a pull request cannot authorise its own key; every commit in a
+      pull request must be signed by one of them. What remains unenforced is
+      what lands: the check runs
       over `origin/<base>..HEAD`, which never contains the merge commit being
       created, and `main` carries no branch protection, so only the settings
       recorded at `docs/governance/branch-protection.md` can gate that. Tracked
