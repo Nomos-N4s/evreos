@@ -158,7 +158,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install the pinned toolchain
+      - name: Install the stable toolchain
         # Installed by name, as the other jobs install theirs, rather than
         # taken from the runner image. The name is the stable channel, which
         # moves with each Rust release; it is not pinned to a version.
