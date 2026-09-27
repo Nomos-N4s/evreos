@@ -183,6 +183,12 @@ the last item research section 4.3 lists -- is not read. ADR-0001 risk 8
 routes it to a founder decision, T061's enumeration leaves it out, and such a
 path is answered for under that decision rather than passed by this check.
 
+The graphics adapter's identity -- the WebGL renderer and vendor strings, a
+DXGI or wgpu adapter's description -- is not read either. It is a device
+characteristic FR-036a covers, but neither T061's enumeration nor research
+section 4.3 names it and no category here carries it, so a read of it rests on
+review until one does.
+
 A crate that reads a characteristic and is reached only transitively is not
 read: the lockfile holds crates other crates use for their own purposes, and
 what this check answers for is what Evreos itself holds.
