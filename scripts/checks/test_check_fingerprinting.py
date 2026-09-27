@@ -572,11 +572,21 @@ problems = tree(passing_tree({"crates/x/src/bad.rs": b"\xff\xfe MachineGuid"}))[
 report("Rust that is not UTF-8 fails rather than passing unread",
        mentions(problems, "bad.rs", "not valid UTF-8"))
 
+# A byte-order mark is stripped where it would otherwise change the verdict:
+# before an allowlist's first entry, where it would glue itself to the path,
+# and before a manifest, which tomllib refuses with one.
+problems = tree(
+    with_rust('let zone = std::env::var("TZ");\n'),
+    allowlist="\ufeffcrates/x/src/probe.rs TZ\n",
+)[0]
+report("a byte-order mark before the allowlist's first entry is not part of its path",
+       problems == [])
+
 problems = tree(passing_tree({
-    "crates/x/src/bom.rs": "﻿let g = \"MachineGuid\";\n",
+    "crates/x/Cargo.toml": "\ufeff" + CLEAN_MANIFEST + 'sysinfo = "0.30"\n',
 }))[0]
-report("a byte-order mark is not a way past the check",
-       mentions(problems, "bom.rs:1", "'MachineGuid'"))
+report("...and one before a manifest is not a way past the dependency clause",
+       mentions(problems, "crates/x/Cargo.toml", "'sysinfo'"))
 
 problems = tree(passing_tree({
     "crates/x/target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
