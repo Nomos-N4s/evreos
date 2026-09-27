@@ -314,15 +314,19 @@ pub const fn route() -> Route {
 /// The tier-1 system page where the member chooses the default browser.
 pub const SETTINGS_PAGE: &str = "ms-settings:defaultapps";
 
-/// Opens [`SETTINGS_PAGE`], after [`register`], for the member to choose
-/// Evreos there. The page is the system's, and Evreos cannot choose for
-/// them.
+/// Asks the system to open [`SETTINGS_PAGE`], after [`register`], for the
+/// member to choose the browser there. The page is the system's, and the
+/// browser cannot choose for them.
 ///
-/// The page is handed to the system's launcher, which opens it on its own;
-/// this returns once the launch has started and does not wait for it, so it
-/// never blocks the thread that calls it. On a platform whose [`route`] is
-/// not [`Route::RegisterThenSettings`] it returns
-/// [`io::ErrorKind::Unsupported`].
+/// The page is handed to the system's launcher, and this returns once the
+/// launcher has taken the request, without waiting for it, so it never
+/// blocks the thread that calls it. An error here means the launcher could
+/// not be reached or the page's address was refused. Whether the page then
+/// opened is reported only by the launcher's own asynchronous result, which
+/// this does not observe: the launcher declines, for one, when no window of
+/// the calling application is visible, so a surface calls this from a
+/// visible window. On a platform whose [`route`] is not
+/// [`Route::RegisterThenSettings`] it returns [`io::ErrorKind::Unsupported`].
 pub fn open_settings() -> io::Result<()> {
     #[cfg(windows)]
     {
