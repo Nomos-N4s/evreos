@@ -41,8 +41,11 @@ impl RolloutDraw {
     /// A new draw is written to a file of its own and flushed to the disk,
     /// then linked into place only if no file is there yet. So when two
     /// processes draw at once for an install that has no file, one value is
-    /// kept and both return it. Replacing a file that is not a value makes
-    /// no such promise: the last process to replace it wins.
+    /// kept and both return it. That holds on a file system with hard links,
+    /// as the ones Windows and macOS install to have. On one without, such
+    /// as FAT, the draw is renamed into place instead, and the last process
+    /// to draw wins. Replacing a file that is not a value makes no such
+    /// promise either: the last process to replace it wins.
     ///
     /// Its errors are the file system's. The file's own absence is never
     /// one, since a new value is drawn then, so an error of kind `NotFound`
