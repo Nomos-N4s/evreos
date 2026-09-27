@@ -68,9 +68,10 @@ impl RolloutDraw {
             Ok(()) => Ok(draw),
             // A file is there already. If it is a value, another process
             // kept its draw first, and that is the value; if it is not, it
-            // is replaced whole.
+            // is replaced whole. A file that cannot be read is neither, and
+            // is left as it is.
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                match fs::read(path).ok().and_then(|bytes| Self::parse(&bytes)) {
+                match Self::parse(&fs::read(path)?) {
                     Some(kept) => Ok(kept),
                     None => {
                         fs::rename(partial, path)?;
