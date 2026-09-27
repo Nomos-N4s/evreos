@@ -770,8 +770,9 @@ fn millis(time: SystemTime) -> u128 {
 /// (`data:`, `blob:`) are not addresses of anywhere the member went, and are
 /// skipped. A user name and password carried in the address's authority are
 /// removed: they are a site credential, which an import never carries
-/// (Q-E5). A `file:` address whose path opens on what a browser reads as a
-/// second authority, and names a user there, is skipped whole, since the
+/// (Q-E5). A `file:` address whose path opens on two separators — which a
+/// browser reads as the start of an authority, whether after `file:` or after
+/// an empty `file://` — and names a user there is skipped whole, since the
 /// credential cannot be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
