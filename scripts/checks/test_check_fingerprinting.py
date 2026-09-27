@@ -507,6 +507,22 @@ report("a file compiled in through cfg_attr's path is read, whichever cfg holds"
        mentions(problems, "crates/x/src/probe_windows.txt:1", "'MachineGuid'")
        and mentions(problems, "crates/x/src/probe_other.txt:1", "'machine-id'"))
 
+problems = tree(passing_tree({
+    "crates/x/src/lib.rs": (
+        'mod outer {\n    fn f() {}\n    #[path = "inner.txt"]\n    mod inner;\n}\n'
+        '#[path = "flat.txt"]\nmod flat;\n'
+    ),
+    "crates/x/src/probe.rs": 'pub mod nested {\n    #[path = "deep.txt"]\n    mod deep;\n}\n',
+    "crates/x/src/outer/inner.txt": 'let g = "MachineGuid";\n',
+    "crates/x/src/flat.txt": "let n = gethostname();\n",
+    "crates/x/src/probe/nested/deep.txt": "let t = mach_absolute_time();\n",
+}))[0]
+report("a #[path] inside an inline module is read from that module's directory",
+       mentions(problems, "crates/x/src/outer/inner.txt:1", "'MachineGuid'")
+       and mentions(problems, "crates/x/src/flat.txt:1", "'gethostname'"))
+report("...under the file's own name when that file is not mod.rs or a crate root",
+       mentions(problems, "crates/x/src/probe/nested/deep.txt:1", "'mach_absolute_time'"))
+
 for label, body in (
     ("a name too long for the system", 'include!("' + "a" * 300 + '.in");\n'),
     ("a NUL", 'const S: &str = include_str!("a\0b");\n'),

@@ -50,7 +50,8 @@ It reads the tree and fails on:
                 so in Rust they are matched inside string literals only,
                 where an injected script lives. A file a Rust file compiles
                 in through `include!` or `#[path = ...]`, `cfg_attr`'s
-                included, is read as Rust whatever its suffix, and one it
+                included and resolved as Rust resolves it inside an inline
+                module, is read as Rust whatever its suffix, and one it
                 embeds through `include_str!` or `include_bytes!` is read
                 whole, like script, bytes that are not UTF-8 decoded as
                 `String::from_utf8_lossy` decodes them; one outside the tree
@@ -575,11 +576,20 @@ BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
 # where BROUGHT_PATH, read from the code with literals kept, begins.
 BRINGS = (
     ("rust", re.compile(r"\binclude!\s*[(\[{]")),
-    ("rust", re.compile(r"#\s*\[\s*(?:cfg_attr\s*\([^\]]*?)?\bpath\s*=")),
+    ("module", re.compile(r"#\s*\[\s*(?:cfg_attr\s*\([^\]]*?)?\bpath\s*=")),
     ("text", re.compile(r"\binclude_str!\s*[(\[{]")),
     ("bytes", re.compile(r"\binclude_bytes!\s*[(\[{]")),
 )
 BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
+
+# An inline module's opening brace, or any other brace, in code with literals
+# blanked.
+BRACE = re.compile(r"\bmod\s+(?:r#)?(\w+)\s*\{|[{}]")
+
+# The files Rust reads a `#[path]` inside an inline module against as it
+# reads `mod.rs`: the directory the file is in. A crate root is one too, but
+# not every crate root is named here, so any other file is tried both ways.
+MOD_RS = {"mod.rs", "lib.rs", "main.rs"}
 
 # The sources shaped as script's dotted paths, which a Rust field access can
 # also spell: in Rust they are matched inside string literals only.
@@ -706,6 +716,31 @@ def decode_escapes(text):
         return match.group(0) if character in "\r\n" else character
 
     return ESCAPE.sub(one, text)
+
+
+def inline_modules(bare, end):
+    """The names of the inline modules whose blocks enclose offset `end` of
+    `bare`, Rust code with comments and literals blanked, outermost first."""
+    blocks = []
+    for match in BRACE.finditer(bare, 0, end):
+        if match.group(0) == "}":
+            if blocks:
+                blocks.pop()
+        else:
+            blocks.append(match.group(1))
+    return [name for name in blocks if name]
+
+
+def module_paths(path, modules, named):
+    """Where Rust looks for the file a `#[path = named]` names, written in
+    the Rust file `path` inside the inline `modules`: the Rust reference's
+    path-attribute rules."""
+    if not modules:
+        return (path.parent / named,)
+    nested = Path(*modules) / named
+    if path.name in MOD_RS:
+        return (path.parent / nested,)
+    return (path.parent / path.stem / nested, path.parent / nested)
 
 
 def sources_in(text, only=None, skip=()):
@@ -843,10 +878,10 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     workspaces = {}
 
     # Files a Rust file brings into the build under a name of its own
-    # choosing, as (kind, path, the file and line that name it): compiled in
-    # through `include!` or `#[path = ...]`, or embedded through
-    # `include_str!` or `include_bytes!`. Each is read after the walk, once,
-    # whatever its suffix.
+    # choosing, as (kind, the paths Rust looks for it at, the file and line
+    # that name it): compiled in through `include!` or `#[path = ...]`, or
+    # embedded through `include_str!` or `include_bytes!`. Each is read after
+    # the walk, once, whatever its suffix.
     brought = []
 
     def scan_rust(path, where):
@@ -873,9 +908,15 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         for kind, pattern in BRINGS:
             for match in pattern.finditer(bare):
                 named = BROUGHT_PATH.match(code, match.end())
-                if named:
-                    number = bare.count("\n", 0, match.start()) + 1
-                    brought.append((kind, path.parent / named.group(1), f"{where}:{number}"))
+                if not named:
+                    continue
+                number = bare.count("\n", 0, match.start()) + 1
+                if kind == "module":
+                    modules = inline_modules(bare, match.start())
+                    candidates = module_paths(path, modules, named.group(1))
+                else:
+                    candidates = (path.parent / named.group(1),)
+                brought.append((kind, candidates, f"{where}:{number}"))
 
     def scan_whole(path, where, what, lossy=False):
         read.append(where)
@@ -929,32 +970,33 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     found(where, 0, DEPENDENCY_SOURCES[name], name)
 
     while brought:
-        kind, target, by = brought.pop(0)
-        try:
-            resolved = target.resolve()
-            is_file = resolved.is_file()
-        except (OSError, RuntimeError, ValueError) as error:
-            reason = getattr(error, "strerror", None) or error
-            problems.append(
-                f"{by}: brings {target.name!r} into the build, but it cannot be "
-                f"resolved ({reason}), so no read in it can be answered for"
-            )
-            continue
-        if not resolved.is_relative_to(root):
-            problems.append(
-                f"{by}: brings {target.name} into the build from outside the tree "
-                "this check reads, so no read in it can be answered for"
-            )
-            continue
-        if not is_file:
-            continue
-        where = resolved.relative_to(root).as_posix()
-        if where in read:
-            continue
-        if kind == "rust":
-            scan_rust(resolved, where)
-        else:
-            scan_whole(resolved, where, "text", lossy=kind == "bytes")
+        kind, candidates, by = brought.pop(0)
+        for target in candidates:
+            try:
+                resolved = target.resolve()
+                is_file = resolved.is_file()
+            except (OSError, RuntimeError, ValueError) as error:
+                reason = getattr(error, "strerror", None) or error
+                problems.append(
+                    f"{by}: brings {target.name!r} into the build, but it cannot be "
+                    f"resolved ({reason}), so no read in it can be answered for"
+                )
+                continue
+            if not resolved.is_relative_to(root):
+                problems.append(
+                    f"{by}: brings {target.name} into the build from outside the tree "
+                    "this check reads, so no read in it can be answered for"
+                )
+                continue
+            if not is_file:
+                continue
+            where = resolved.relative_to(root).as_posix()
+            if where in read:
+                continue
+            if kind in ("rust", "module"):
+                scan_rust(resolved, where)
+            else:
+                scan_whole(resolved, where, "text", lossy=kind == "bytes")
 
     if not read:
         raise CheckError(
