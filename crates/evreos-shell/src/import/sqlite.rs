@@ -912,6 +912,8 @@ enum Token {
     Text(String),
     /// What a pair of parentheses holds, unparsed.
     Group(String),
+    /// Any other character, which ends a word, as `-` does in `DEFAULT-1`.
+    Mark(char),
 }
 
 impl Token {
@@ -922,17 +924,19 @@ impl Token {
     fn name(&self) -> Option<String> {
         match self {
             Self::Word(name) | Self::Quoted(name) | Self::Text(name) => Some(name.clone()),
-            Self::Group(_) => None,
+            Self::Group(_) | Self::Mark(_) => None,
         }
     }
 }
 
 /// `definition` as tokens: a quoted name or string, a parenthesised group
 /// and a bare word are each one token, so nothing inside quotes or
-/// parentheses is read as a keyword.
+/// parentheses is read as a keyword. A word is what SQLite reads as one:
+/// letters, digits, `_`, `$` and any character outside ASCII, which
+/// includes spaces outside ASCII; only ASCII whitespace separates words.
 fn tokenize(definition: &str) -> Vec<Token> {
     let mut tokens = Vec::new();
-    let mut rest = definition.trim_start();
+    let mut rest = definition.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
     while let Some(ch) = rest.chars().next() {
         match ch {
             '"' | '`' | '[' => {
@@ -975,19 +979,24 @@ fn tokenize(definition: &str) -> Vec<Token> {
                 rest = rest.get(end + 1..).unwrap_or("");
             }
             ')' => rest = &rest[1..],
-            _ => {
-                let end = rest
-                    .find(|ch: char| {
-                        ch.is_whitespace() || matches!(ch, '"' | '`' | '[' | '\'' | '(' | ')')
-                    })
-                    .unwrap_or(rest.len());
+            _ if in_word(ch) => {
+                let end = rest.find(|ch: char| !in_word(ch)).unwrap_or(rest.len());
                 tokens.push(Token::Word(rest[..end].to_string()));
                 rest = &rest[end..];
             }
+            _ => {
+                tokens.push(Token::Mark(ch));
+                rest = &rest[ch.len_utf8()..];
+            }
         }
-        rest = rest.trim_start();
+        rest = rest.trim_start_matches(|ch: char| ch.is_ascii_whitespace());
     }
     tokens
+}
+
+/// Whether SQLite reads `ch` as part of a bare word.
+fn in_word(ch: char) -> bool {
+    ch.is_ascii_alphanumeric() || ch == '_' || ch == '$' || !ch.is_ascii()
 }
 
 /// The first `target` in `sql` outside a string or a quoted name.
@@ -1353,6 +1362,26 @@ mod tests {
                 "CREATE TABLE t(id INTEGER, url TEXT, PRIMARY KEY((id)))",
                 &["id", "url"],
                 Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER DEFAULT-1 PRIMARY KEY, u TEXT)",
+                &["id", "u"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER DEFAULT+1 PRIMARY KEY, u TEXT)",
+                &["id", "u"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER\u{a0}PRIMARY KEY, u TEXT)",
+                &["id", "u"],
+                None,
+            ),
+            (
+                "CREATE TABLE t(id\u{2003}INTEGER PRIMARY KEY, u TEXT)",
+                &["id\u{2003}INTEGER", "u"],
+                None,
             ),
             (
                 "CREATE TABLE t(a INTEGER, b TEXT, UNIQUE(a), CHECK(a>0))",
