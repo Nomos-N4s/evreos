@@ -106,6 +106,11 @@
   rules are stated there and NOT restated here — a stricter copy in this file
   would be void wherever the two disagreed, which is how this note came to
   exist.
+- What a docstring or code comment may say is governed by the Development
+  Workflow section of `.specify/memory/constitution.md` (`decisions/0009`),
+  stated there and NOT restated here. It overrides matching the surrounding
+  comment density: a file whose docstrings argue their rules at length is not a
+  model to copy.
 - The first four bullets of this section restate rules the constitution also
   states. That is deliberate and it is the narrower case: they are short
   reminders of settled rules that no reviewer has to weigh wording against, kept
