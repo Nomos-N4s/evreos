@@ -256,6 +256,18 @@ CAUGHT = (
      "QueryPerformanceFrequency(&mut frequency);\n"),
     ("high-resolution timing correlator", "mach_absolute_time",
      "let now = unsafe { mach_absolute_time() };\n"),
+    ("high-resolution timing correlator", "CLOCK_UPTIME_RAW",
+     "let up = unsafe { clock_gettime(CLOCK_UPTIME_RAW, &mut ts) };\n"),
+    ("high-resolution timing correlator", "clock_gettime_nsec_np",
+     "let up = unsafe { clock_gettime_nsec_np(8) };\n"),
+    ("high-resolution timing correlator", "QueryInterruptTime",
+     "unsafe { QueryUnbiasedInterruptTime(&mut ticks) };\n"),
+    ("high-resolution timing correlator", "systemUptime",
+     "let up = NSProcessInfo::processInfo().systemUptime();\n"),
+    ("processor model or count", "processorCount",
+     "let cores = unsafe { GetActiveProcessorCount(ALL_PROCESSOR_GROUPS) };\n"),
+    ("processor model or count", "processorCount",
+     "let cores = NSProcessInfo::processInfo().activeProcessorCount();\n"),
 )
 
 for category, name, body in CAUGHT:

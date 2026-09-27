@@ -102,7 +102,8 @@ It reads the tree and fails on:
                 the processor's brand string, CPUID, the registry and sysctl
                 keys that name the processor, `/proc/cpuinfo`, and the
                 processor count -- `available_parallelism`, `num_cpus`,
-                `hardwareConcurrency` and their platform equivalents -- and
+                `hardwareConcurrency` and their platform equivalents,
+                `GetActiveProcessorCount` and its family among them -- and
                 the Windows `PROCESSOR_IDENTIFIER`, `PROCESSOR_REVISION`,
                 `PROCESSOR_LEVEL` and `NUMBER_OF_PROCESSORS` variables. The
                 task names the model; the count is read here too because
@@ -114,8 +115,10 @@ It reads the tree and fails on:
                 machine rather than an interval the shell measured: `rdtsc`,
                 `QueryPerformanceCounter` and `QueryPerformanceFrequency`,
                 `mach_absolute_time` and its continuous twin,
-                `CLOCK_MONOTONIC_RAW`, `CLOCK_BOOTTIME`, `GetTickCount`, the
-                boot time and uptime, and `performance.now` and
+                `CLOCK_MONOTONIC_RAW`, `CLOCK_BOOTTIME`, `CLOCK_UPTIME_RAW`,
+                `clock_gettime_nsec_np`, `GetTickCount`, the Windows
+                interrupt-time counters, the boot time and uptime --
+                `systemUptime` on macOS among them -- and `performance.now` and
                 `performance.timeOrigin` in script -- the class research
                 section 4.3 names.
 
@@ -402,7 +405,7 @@ SOURCES = {
         ("PROCESSOR_REVISION", r"(?-i:PROCESSOR_REVISION)"),
         ("PROCESSOR_LEVEL", r"(?-i:PROCESSOR_LEVEL)"),
         ("NUMBER_OF_PROCESSORS", r"(?-i:NUMBER_OF_PROCESSORS)"),
-        ("processorCount", r"(?:active)?processorCount"),
+        ("processorCount", r"(?:Get|KeQuery)?(?:Active|Maximum)?ProcessorCount"),
     ),
     "high-resolution timing correlator": (
         ("rdtsc", r"_*rdtscp?"),
@@ -412,6 +415,10 @@ SOURCES = {
         ("mach_continuous_time", r"mach_continuous_time"),
         ("CLOCK_MONOTONIC_RAW", r"CLOCK_MONOTONIC_RAW"),
         ("CLOCK_BOOTTIME", r"CLOCK_BOOTTIME"),
+        ("CLOCK_UPTIME_RAW", r"CLOCK_UPTIME_RAW"),
+        ("clock_gettime_nsec_np", r"clock_gettime_nsec_np"),
+        ("QueryInterruptTime", r"Query(?:Unbiased)?InterruptTime(?:Precise)?"),
+        ("systemUptime", r"systemUptime"),
         ("GetTickCount", r"GetTickCount(?:64)?"),
         ("/proc/uptime", r"/proc/uptime"),
         ("kern.boottime", r"kern\.boottime"),
