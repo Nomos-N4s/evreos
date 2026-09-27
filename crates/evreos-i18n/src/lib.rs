@@ -36,9 +36,9 @@
 //! crate's API names the format — a later adoption of Fluent is a change to
 //! the parser and the three files, re-stating its byte cost under FR-043,
 //! and every caller resolves through the same two calls. A normal
-//! dependency it brings for every platform also fails `evreos-shell`'s
-//! import reach test, which holds this crate to linking no such
-//! dependency, so that change reworks the test too.
+//! dependency it brings also fails `evreos-shell`'s import reach test,
+//! which holds this crate to declaring none for some platforms only and
+//! linking none, so that change reworks the test too.
 
 #![forbid(unsafe_code)]
 

@@ -14,9 +14,10 @@ publish.workspace = true
 # specs/001-evreos-v1/measurements/n10-catalogue-format.md. A format that
 # costs a dependency enters here, in the change that re-states its byte cost
 # under FR-043, never quietly. The import may name this crate, so its reach
-# test in crates/evreos-shell/tests/import.rs fails while this crate links a
-# crate by a normal dependency declared for every platform, which the import
-# could reach through it; a change adding one has to rework that check too.
+# test in crates/evreos-shell/tests/import.rs fails while this crate
+# declares a normal dependency for some platforms only or links any crate,
+# either of which the import could reach through it; a change adding one
+# has to rework that check too.
 
 [lints]
 workspace = true

@@ -1128,6 +1128,15 @@ fn resolve_denied_crates() -> Vec<String> {
         .join("../evreos-i18n/Cargo.toml")
         .canonicalize()
         .unwrap();
+    // The catalogue's own dependencies are held the same way: one declared
+    // for some platforms only may be missing from the host's graph, and one
+    // in it links a crate the import could reach through the catalogue.
+    let specific = platform_specific(&declared, &catalogue);
+    assert!(
+        specific.is_empty(),
+        "the catalogue declares a dependency for some platforms only, which the \
+         import could reach through it there: {specific:?}"
+    );
     let links = catalogue_links(&resolved, &catalogue);
     assert!(
         links.is_empty(),
