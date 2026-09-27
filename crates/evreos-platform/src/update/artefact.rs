@@ -53,9 +53,9 @@ impl std::error::Error for ArtefactRefusal {}
 
 /// Reads the artefact from `reader` to its end and checks its length and
 /// SHA-256 against the manifest `offer` holds, which only a manifest
-/// [`decide`](super::decide) offered to this install can reach. Reading stops as soon as it passes the
-/// manifest's length, so an artefact far longer than stated is not read
-/// whole.
+/// [`decide`](super::decide) offered to this install can reach. Reading
+/// stops as soon as it passes the manifest's length, so an artefact far
+/// longer than stated is not read whole.
 ///
 /// `now`, in seconds since 1970-01-01 UTC, is checked against the
 /// manifest's `not after` again before anything is read, since an offer

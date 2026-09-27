@@ -5,8 +5,9 @@
 //! and is offered an update only when that value is below the rollout
 //! (research §10.1). The value never leaves the machine: it belongs in the
 //! data model's residence class L, which does not yet name it, and nothing
-//! that plans an update check takes it. It comes from the operating system's randomness, never from anything
-//! about the machine, which FR-036a forbids deriving a correlator from.
+//! that plans an update check takes it. It comes from the operating
+//! system's randomness, never from anything about the machine, which
+//! FR-036a forbids deriving a correlator from.
 
 use std::fmt;
 use std::fs;
