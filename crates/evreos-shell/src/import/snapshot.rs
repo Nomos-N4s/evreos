@@ -726,6 +726,34 @@ mod tests {
         std::fs::remove_dir_all(&dir).unwrap();
     }
 
+    /// The reach test holds `custom_flags` to this one name; this holds the
+    /// name to the value the platform gives `O_NONBLOCK`, and to no bit that
+    /// creates, truncates, appends or opens for writing.
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        not(any(
+            target_arch = "mips",
+            target_arch = "mips32r6",
+            target_arch = "mips64",
+            target_arch = "mips64r6",
+            target_arch = "sparc",
+            target_arch = "sparc64"
+        ))
+    ))]
+    #[test]
+    fn the_open_flag_is_o_nonblock_and_nothing_else() {
+        const O_WRONLY: i32 = 0o1;
+        const O_RDWR: i32 = 0o2;
+        const O_CREAT: i32 = 0o100;
+        const O_TRUNC: i32 = 0o1000;
+        const O_APPEND: i32 = 0o2000;
+        assert_eq!(O_NONBLOCK, 0o4000);
+        assert_eq!(
+            O_NONBLOCK & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND),
+            0
+        );
+    }
+
     #[test]
     fn the_disk_source_reads_only_a_bounded_regular_file() {
         let dir = std::env::temp_dir().join(format!(

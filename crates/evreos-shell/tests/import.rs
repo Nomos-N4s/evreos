@@ -1043,6 +1043,13 @@ fn the_reach_check_denies_every_dependency_but_the_catalogue() {
 /// stores, the standard library's computation, or its own directory. `at_root`
 /// is true for `import.rs`, whose `super` is the crate root.
 fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
+    reach_violations_in(source, at_root, false)
+}
+
+/// As [`reach_violations`], for a file that may define `O_NONBLOCK`: only the
+/// copy's module may, once, as a `const` whose value its own test pins on
+/// Linux and Android outside MIPS and SPARC.
+fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<String> {
     let denied = denied_crates();
     let toks = tokens(source);
     // An identifier as it names things, `r#` and all removed; and whether it
@@ -1137,6 +1144,7 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
         }
     }
 
+    let mut flag_definitions = 0;
     for i in 0..end {
         // A glob brings in names the checks below then see bare, with
         // nothing to say where they came from: `use std::fs::*;` makes
@@ -1238,7 +1246,22 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             {
                 found.push("`custom_flags` with anything but `O_NONBLOCK`".to_string());
             }
-            "mode" if punct(i.wrapping_sub(1), '.') => {
+            // The flag the copy passes is named, not given a value here, so
+            // what the name holds is held too: it is the one `const` the
+            // copy's module defines, and nothing may rebind or shadow it.
+            "O_NONBLOCK" => {
+                let passed = punct(i.wrapping_sub(1), '(')
+                    && ident(i.wrapping_sub(2)) == Some("custom_flags")
+                    && punct(i + 1, ')');
+                let defined = ident(i.wrapping_sub(1)) == Some("const");
+                if defined {
+                    flag_definitions += 1;
+                }
+                if !(passed || (defined && defines_flag)) {
+                    found.push("names `O_NONBLOCK` other than to pass it".to_string());
+                }
+            }
+            "mode" if punct(i.wrapping_sub(1), '.') || punct(i.wrapping_sub(1), ':') => {
                 found.push("sets a file's mode".to_string());
             }
             // A macro named without a path, from anywhere in the crate.
@@ -1268,6 +1291,9 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             "cfg_attr" => found.push("a `cfg_attr` attribute".to_string()),
             _ => {}
         }
+    }
+    if flag_definitions > 1 {
+        found.push("defines `O_NONBLOCK` more than once".to_string());
     }
     found
 }
@@ -1375,6 +1401,26 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ),
         (
             "fn f(o: &mut std::fs::OpenOptions) { o.mode(0o755); }",
+            false,
+        ),
+        (
+            "const O_NONBLOCK: i32 = 0o1100; fn f(o: &mut OpenOptions) { o.custom_flags(O_NONBLOCK); }",
+            false,
+        ),
+        (
+            "mod flags { pub const O_NONBLOCK: i32 = 0o1100; } use flags::O_NONBLOCK;",
+            false,
+        ),
+        (
+            "fn f(o: &mut OpenOptions, O_NONBLOCK: i32) { o.custom_flags(O_NONBLOCK); }",
+            false,
+        ),
+        (
+            "fn f(o: &mut OpenOptions) { let O_NONBLOCK = 0o1100; o.custom_flags(O_NONBLOCK); }",
+            false,
+        ),
+        (
+            "fn f(o: &mut OpenOptions) { OpenOptionsExt::mode(o, 0o777); }",
             false,
         ),
         (
@@ -1502,7 +1548,9 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     }
     assert!(files.len() >= 6, "import.rs and its five modules");
     for (file, at_root) in files {
-        let violations = reach_violations(&fs::read_to_string(&file).unwrap(), at_root);
+        let defines_flag = file.file_name().is_some_and(|name| name == "snapshot.rs");
+        let violations =
+            reach_violations_in(&fs::read_to_string(&file).unwrap(), at_root, defines_flag);
         assert!(violations.is_empty(), "{}: {violations:?}", file.display());
     }
 }
