@@ -757,12 +757,13 @@ fn be_u32(bytes: &[u8], at: usize) -> Result<u32, SqliteError> {
         .ok_or_else(|| corrupt(format!("a 32-bit field at {at} lies outside its page")))
 }
 
-/// The column names of a `CREATE TABLE` statement, in declaration order, and
-/// the index of the `INTEGER PRIMARY KEY` column if there is one.
+/// The column names of a `CREATE TABLE` statement whose values a row's
+/// record holds, in declaration order, and the index of the `INTEGER PRIMARY
+/// KEY` column if there is one. A virtual generated column is computed, not
+/// stored, so it is left out.
 fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteError> {
     let sql = &strip_comments(sql);
-    let open = sql
-        .find('(')
+    let open = find_outside_quotes(sql, '(')
         .ok_or_else(|| SqliteError::Unsupported("a table defined without a column list".into()))?;
     let close = sql
         .rfind(')')
@@ -775,59 +776,96 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
     }
 
     let mut columns = Vec::new();
-    let mut declared_types = Vec::new();
+    let mut integer = Vec::new();
     let mut alias = None;
     let mut table_key: Option<String> = None;
     for definition in split_top_level(&sql[open + 1..close]) {
-        let mut definition = definition.trim();
+        let mut tokens = tokenize(definition);
         // A named table constraint, `CONSTRAINT k PRIMARY KEY (id)`, is the
         // constraint it names: the name is set aside and the rest read.
-        if definition
-            .get(..10)
-            .is_some_and(|word| word.eq_ignore_ascii_case("CONSTRAINT"))
-            && definition[10..].starts_with(char::is_whitespace)
+        if tokens
+            .first()
+            .is_some_and(|token| token.is_word("CONSTRAINT"))
         {
-            definition = unquote(&definition[10..]).1.trim();
+            tokens.drain(..tokens.len().min(2));
         }
-        let upper = definition.to_ascii_uppercase();
-        let first = upper.split_whitespace().next().unwrap_or("");
-        if matches!(first, "UNIQUE" | "CHECK" | "FOREIGN") {
+        let Some(first) = tokens.first() else {
+            continue;
+        };
+        if ["UNIQUE", "CHECK", "FOREIGN"]
+            .iter()
+            .any(|word| first.is_word(word))
+        {
             continue;
         }
-        if first == "PRIMARY" || upper.starts_with("PRIMARY(") {
+        if first.is_word("PRIMARY") {
             // A table-level key over one column makes that column the rowid
             // alias when the column is declared INTEGER.
-            let open = definition.find('(');
-            let close = open.and_then(|open| definition.rfind(')').filter(|close| *close > open));
-            if let (Some(open), Some(close)) = (open, close) {
-                let inner: Vec<&str> = definition[open + 1..close].split(',').collect();
-                if inner.len() == 1 {
-                    let name = inner[0].split_whitespace().next().unwrap_or("");
-                    table_key = Some(unquote(name).0);
+            if let Some(Token::Group(inner)) = tokens.iter().find(|t| matches!(t, Token::Group(_)))
+            {
+                let keyed = split_top_level(inner);
+                if keyed.len() == 1 {
+                    if let Some(name) = tokenize(keyed[0]).first().and_then(Token::name) {
+                        table_key = Some(name);
+                    }
                 }
             }
             continue;
         }
-        let (name, rest) = unquote(definition);
-        if name.is_empty() {
-            return Err(corrupt("a column with no name"));
+        let name = first
+            .name()
+            .ok_or_else(|| corrupt("a column with no name"))?;
+        // The declared type is the names after the column's up to the first
+        // constraint, and a size in parentheses after them, which makes it
+        // another type: `INTEGER(8)` is not `INTEGER`.
+        let mut at = 1;
+        let mut declared = Vec::new();
+        while let Some(token) = tokens.get(at) {
+            let word = match token {
+                Token::Word(word)
+                    if !CONSTRAINT_WORDS
+                        .iter()
+                        .any(|kw| word.eq_ignore_ascii_case(kw)) =>
+                {
+                    word
+                }
+                Token::Quoted(word) => word,
+                _ => break,
+            };
+            declared.push(word.to_ascii_uppercase());
+            at += 1;
         }
-        // Collapsed to single spaces, so `PRIMARY  KEY` matches as SQLite reads it.
-        let rest_upper = rest
-            .to_ascii_uppercase()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ");
-        let declared = rest_upper
-            .split_whitespace()
-            .next()
-            .unwrap_or("")
-            .to_string();
-        let is_key = rest_upper.contains("PRIMARY KEY") && !rest_upper.contains("PRIMARY KEY DESC");
-        if declared == "INTEGER" && is_key {
+        if matches!(tokens.get(at), Some(Token::Group(_))) {
+            declared.push("()".into());
+            at += 1;
+        }
+        let constraints = &tokens[at..];
+        let key_at = constraints
+            .windows(2)
+            .position(|pair| pair[0].is_word("PRIMARY") && pair[1].is_word("KEY"));
+        let descending = key_at.is_some_and(|key| {
+            constraints
+                .get(key + 2)
+                .is_some_and(|token| token.is_word("DESC"))
+        });
+        let generated_at = constraints
+            .windows(2)
+            .position(|pair| pair[0].is_word("AS") && matches!(pair[1], Token::Group(_)));
+        if let Some(generated) = generated_at {
+            let stored = constraints
+                .get(generated + 2)
+                .is_some_and(|token| token.is_word("STORED"));
+            if !stored {
+                continue;
+            }
+        }
+        // SQLite makes a column the rowid alias only when its type is the
+        // one word INTEGER, so not `INT` nor `INTEGER UNSIGNED`.
+        let is_integer = declared == ["INTEGER"];
+        if is_integer && key_at.is_some() && !descending {
             alias = Some(columns.len());
         }
-        declared_types.push(declared);
+        integer.push(is_integer);
         columns.push(name);
     }
     if alias.is_none() {
@@ -835,10 +873,134 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
             alias = columns
                 .iter()
                 .position(|column| column.eq_ignore_ascii_case(&key))
-                .filter(|index| declared_types[*index] == "INTEGER");
+                .filter(|index| integer[*index]);
         }
     }
     Ok((columns, alias))
+}
+
+/// The words that begin a column constraint, and so end a declared type.
+const CONSTRAINT_WORDS: &[&str] = &[
+    "CONSTRAINT",
+    "PRIMARY",
+    "NOT",
+    "NULL",
+    "UNIQUE",
+    "CHECK",
+    "DEFAULT",
+    "COLLATE",
+    "REFERENCES",
+    "GENERATED",
+    "AS",
+];
+
+/// One token of a column or constraint definition.
+#[derive(Debug, Clone, PartialEq)]
+enum Token {
+    /// A bare word, as written.
+    Word(String),
+    /// A name quoted with `"`, `` ` `` or `[`, unquoted.
+    Quoted(String),
+    /// A string in single quotes, unquoted, which SQLite also reads as a
+    /// name where a name is expected.
+    Text(String),
+    /// What a pair of parentheses holds, unparsed.
+    Group(String),
+}
+
+impl Token {
+    fn is_word(&self, word: &str) -> bool {
+        matches!(self, Self::Word(own) if own.eq_ignore_ascii_case(word))
+    }
+
+    fn name(&self) -> Option<String> {
+        match self {
+            Self::Word(name) | Self::Quoted(name) | Self::Text(name) => Some(name.clone()),
+            Self::Group(_) => None,
+        }
+    }
+}
+
+/// `definition` as tokens: a quoted name or string, a parenthesised group
+/// and a bare word are each one token, so nothing inside quotes or
+/// parentheses is read as a keyword.
+fn tokenize(definition: &str) -> Vec<Token> {
+    let mut tokens = Vec::new();
+    let mut rest = definition.trim_start();
+    while let Some(ch) = rest.chars().next() {
+        match ch {
+            '"' | '`' | '[' => {
+                let (name, after) = unquote(rest);
+                tokens.push(Token::Quoted(name));
+                rest = after;
+            }
+            '\'' => {
+                let (text, after) = unquote(rest);
+                tokens.push(Token::Text(text));
+                rest = after;
+            }
+            '(' => {
+                let mut depth = 0usize;
+                let mut quote: Option<char> = None;
+                let mut end = rest.len();
+                for (index, ch) in rest.char_indices() {
+                    match quote {
+                        Some(open) => {
+                            let close = if open == '[' { ']' } else { open };
+                            if ch == close {
+                                quote = None;
+                            }
+                        }
+                        None => match ch {
+                            '"' | '\'' | '`' | '[' => quote = Some(ch),
+                            '(' => depth += 1,
+                            ')' => {
+                                depth -= 1;
+                                if depth == 0 {
+                                    end = index;
+                                    break;
+                                }
+                            }
+                            _ => {}
+                        },
+                    }
+                }
+                tokens.push(Token::Group(rest[1..end].to_string()));
+                rest = rest.get(end + 1..).unwrap_or("");
+            }
+            ')' => rest = &rest[1..],
+            _ => {
+                let end = rest
+                    .find(|ch: char| {
+                        ch.is_whitespace() || matches!(ch, '"' | '`' | '[' | '\'' | '(' | ')')
+                    })
+                    .unwrap_or(rest.len());
+                tokens.push(Token::Word(rest[..end].to_string()));
+                rest = &rest[end..];
+            }
+        }
+        rest = rest.trim_start();
+    }
+    tokens
+}
+
+/// The first `target` in `sql` outside a string or a quoted name.
+fn find_outside_quotes(sql: &str, target: char) -> Option<usize> {
+    let mut quote: Option<char> = None;
+    for (index, ch) in sql.char_indices() {
+        match quote {
+            Some(open) => {
+                let close = if open == '[' { ']' } else { open };
+                if ch == close {
+                    quote = None;
+                }
+            }
+            None if ch == target => return Some(index),
+            None if matches!(ch, '"' | '\'' | '`' | '[') => quote = Some(ch),
+            None => {}
+        }
+    }
+    None
 }
 
 /// `sql` with its comments, `-- …` to the end of a line and `/* … */`, each
@@ -1095,6 +1257,82 @@ mod tests {
         let (columns, _) =
             parse_create_table("CREATE TABLE t(\"a--b\" TEXT, 'c/*d' TEXT)").unwrap();
         assert_eq!(columns, ["a--b", "c/*d"], "comment marks inside quotes");
+    }
+
+    #[test]
+    fn create_table_parsing_agrees_with_sqlite_on_irregular_schemas() {
+        // Each expectation is what SQLite 3.45 reports for the statement:
+        // the columns `PRAGMA table_xinfo` lists as stored, and the one a
+        // row inserted with NULL there fills with its rowid.
+        let cases: &[(&str, &[&str], Option<usize>)] = &[
+            (
+                "CREATE TABLE t(a, b INTEGER UNSIGNED PRIMARY KEY)",
+                &["a", "b"],
+                None,
+            ),
+            (
+                "CREATE TABLE t(a, b INTEGER DEFAULT 'PRIMARY KEY')",
+                &["a", "b"],
+                None,
+            ),
+            ("CREATE TABLE t(id INT PRIMARY KEY, x)", &["id", "x"], None),
+            (
+                "CREATE TABLE t(id INTEGER(8) PRIMARY KEY, x)",
+                &["id", "x"],
+                None,
+            ),
+            (
+                "CREATE TABLE t(id \"INTEGER\" PRIMARY KEY, x)",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id integer primary key desc, x)",
+                &["id", "x"],
+                None,
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x TEXT, CONSTRAINT\"k\"PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(a TEXT, b INTEGER, CONSTRAINT[k]PRIMARY KEY(b))",
+                &["a", "b"],
+                Some(1),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER PRIMARY KEY, g TEXT AS ('gen') VIRTUAL, url TEXT)",
+                &["id", "url"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER PRIMARY KEY, g AS (1), url TEXT)",
+                &["id", "url"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER PRIMARY KEY, \
+                 g TEXT GENERATED ALWAYS AS (1) STORED, url TEXT)",
+                &["id", "g", "url"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE \"x(y\"(id INTEGER PRIMARY KEY, u TEXT)",
+                &["id", "u"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(a INTEGER, b TEXT, UNIQUE(a), CHECK(a>0))",
+                &["a", "b"],
+                None,
+            ),
+        ];
+        for &(sql, columns, alias) in cases {
+            let (found, found_alias) = parse_create_table(sql).unwrap();
+            assert_eq!(found, columns, "{sql}");
+            assert_eq!(found_alias, alias, "{sql}");
+        }
     }
 
     #[test]

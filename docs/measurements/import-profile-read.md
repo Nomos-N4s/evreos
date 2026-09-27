@@ -173,7 +173,10 @@ here was. The fixes also changed how a store refused at every attempt is
 classified, how a store that cannot be read is told from one it cannot
 parse, how malformed input is bounded, how a rowid alias declared with
 irregular spacing, through a named constraint or past a comment is found,
-and which addresses at the edges of the filter are kept. And an
+which declared types make one, that a key word inside a string makes
+none, where the column list begins when the table's name holds a
+parenthesis, which generated columns a row stores, and which addresses at
+the edges of the filter are kept. And an
 attempt refused at a journal check now reads the files once more, one at
 a time, to fingerprint them. That lengthens only those
 attempts, not the ones retried because the files moved, so the slowest
