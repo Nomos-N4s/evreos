@@ -27,9 +27,9 @@ impl RolloutDraw {
     /// that does not read as a value is replaced by a new draw, which may
     /// move the install in or out of a rollout in progress, once.
     pub fn load_or_draw(path: &Path) -> io::Result<Self> {
-        match fs::read_to_string(path) {
-            Ok(text) => {
-                if let Some(draw) = Self::parse(&text) {
+        match fs::read(path) {
+            Ok(bytes) => {
+                if let Some(draw) = Self::parse(&bytes) {
                     return Ok(draw);
                 }
             }
@@ -50,12 +50,14 @@ impl RolloutDraw {
         self.0 < rollout
     }
 
-    fn parse(text: &str) -> Option<Self> {
-        let digits = text.strip_suffix('\n').unwrap_or(text);
-        if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
+    /// The value in `bytes`, read as bytes rather than text so that a file
+    /// which is not even text is a file that does not read as a value.
+    fn parse(bytes: &[u8]) -> Option<Self> {
+        let digits = bytes.strip_suffix(b"\n").unwrap_or(bytes);
+        if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
             return None;
         }
-        let value: u32 = digits.parse().ok()?;
+        let value: u32 = std::str::from_utf8(digits).ok()?.parse().ok()?;
         (value < ROLLOUT_WHOLE).then_some(Self(value))
     }
 

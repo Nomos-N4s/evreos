@@ -284,13 +284,15 @@ mod rollout {
     fn a_file_that_is_not_a_value_is_replaced_by_a_new_draw() {
         let path = scratch("replaced");
         for text in [
-            "",
-            "1000000\n",
-            "-1\n",
-            "12 34\n",
-            "0x10\n",
-            "250000\n\n",
-            " 5\n",
+            &b""[..],
+            b"1000000\n",
+            b"-1\n",
+            b"12 34\n",
+            b"0x10\n",
+            b"250000\n\n",
+            b" 5\n",
+            b"\xff\xfe1\n",
+            b"25\xff\n",
         ] {
             fs::write(&path, text).unwrap();
             RolloutDraw::load_or_draw(&path).unwrap();
