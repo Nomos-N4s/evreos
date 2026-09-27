@@ -27,6 +27,8 @@ struct Memory {
     writes: usize,
     /// Fails every removal of this key, leaving it in place.
     stuck: Option<String>,
+    /// Fails every removal of a value of this name, leaving it in place.
+    stuck_value: Option<String>,
 }
 
 fn fold(key: &str) -> String {
@@ -100,6 +102,13 @@ impl Registry for Memory {
     }
 
     fn remove_value(&mut self, key: &str, name: &str) -> io::Result<()> {
+        if self
+            .stuck_value
+            .as_deref()
+            .is_some_and(|stuck| fold(stuck) == fold(name))
+        {
+            return Err(io::Error::other("value removal refused"));
+        }
         if let Some(values) = self.keys.get_mut(&fold(key)) {
             values.remove(&fold(name));
         }
@@ -688,4 +697,58 @@ fn on_an_empty_hive_only_empty_parent_keys_are_left() {
     register(&mut registry, &APP).unwrap();
     unregister(&mut registry, &APP).unwrap();
     left(&registry);
+}
+
+#[test]
+fn a_value_removal_that_fails_does_not_stop_the_others() {
+    // A stale value from an earlier name, and the current one, both point
+    // at the capabilities; removing the current one fails.
+    let mut registry = with_neighbours();
+    register(&mut registry, &APP).unwrap();
+    registry
+        .set_string(REGISTERED_APPLICATIONS, "Sample-Browser", CAPABILITIES)
+        .unwrap();
+    registry.stuck_value = Some("Sample Browser".to_string());
+
+    let error = unregister(&mut registry, &APP).unwrap_err();
+    assert_eq!(error.to_string(), "value removal refused");
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "Sample-Browser"),
+        None
+    );
+    assert!(!registry.has_key(CLIENT));
+}
+
+#[test]
+fn another_applications_value_of_the_same_name_is_not_removed() {
+    const OTHERS: &str = r"Software\Clients\StartMenuInternet\Elsewhere\Capabilities";
+    for fail_at in [None, Some(0)] {
+        let mut registry = with_neighbours();
+        registry
+            .set_string(REGISTERED_APPLICATIONS, "Sample Browser", OTHERS)
+            .unwrap();
+        registry.writes = 0;
+        registry.fail_at = fail_at;
+        if fail_at.is_some() {
+            // A first registration that fails before its own value is
+            // written is undone without touching the other one.
+            register(&mut registry, &APP).unwrap_err();
+        } else {
+            register(&mut registry, &APP).unwrap();
+            unregister(&mut registry, &APP).unwrap();
+        }
+        if fail_at.is_none() {
+            // Registration wrote its own value over the other's, which a
+            // same-named value cannot avoid; an uninstall then removes it.
+            assert_eq!(
+                registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
+                None
+            );
+        } else {
+            assert_eq!(
+                registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
+                Some(OTHERS)
+            );
+        }
+    }
 }

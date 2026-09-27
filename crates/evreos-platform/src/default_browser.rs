@@ -267,7 +267,7 @@ pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Resu
     for value in &registration.values {
         if let Err(error) = registry.set_string(&value.key, &value.name, &value.data) {
             if first {
-                let _ = registry.remove_value(REGISTERED_APPLICATIONS, &registration.name);
+                let _ = remove_pointers(registry, &registration, None);
                 for (key, existed) in registration.owned_keys.iter().zip(&existed) {
                     if !existed {
                         let _ = registry.remove_key(key);
@@ -292,13 +292,13 @@ pub fn unregister(registry: &mut impl Registry, app: &Application<'_>) -> io::Re
 }
 
 fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Result<()> {
-    // The pointer first, so the system never lists capabilities that are
+    // The pointers first, so the system never lists capabilities that are
     // half removed. Every removal is tried even after one fails, so a
     // failure leaves as little behind as it can, and the first error is
-    // the one reported.
-    let mut result = registry
-        .remove_value(REGISTERED_APPLICATIONS, &registration.name)
-        .and_then(|()| remove_pointers(registry, registration, None));
+    // the one reported. Only values pointing at this registration's
+    // capabilities are removed: another application's value of the same
+    // name is not this registration's.
+    let mut result = remove_pointers(registry, registration, None);
     for key in &registration.owned_keys {
         let removed = registry.remove_key(key);
         if result.is_ok() {
@@ -309,19 +309,24 @@ fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Resu
 }
 
 /// Removes every value under [`REGISTERED_APPLICATIONS`] that points at this
-/// registration's capabilities, but the one named `keep`.
+/// registration's capabilities, but the one named `keep`. Every removal is
+/// tried even after one fails, and the first error is the one reported.
 fn remove_pointers(
     registry: &mut impl Registry,
     registration: &Registration,
     keep: Option<&str>,
 ) -> io::Result<()> {
+    let mut result = Ok(());
     for (name, data) in registry.string_values(REGISTERED_APPLICATIONS)? {
         let kept = keep.is_some_and(|keep| keep.eq_ignore_ascii_case(&name));
         if !kept && data.eq_ignore_ascii_case(&registration.capabilities) {
-            registry.remove_value(REGISTERED_APPLICATIONS, &name)?;
+            let removed = registry.remove_value(REGISTERED_APPLICATIONS, &name);
+            if result.is_ok() {
+                result = removed;
+            }
         }
     }
-    Ok(())
+    result
 }
 
 /// Whether `text` is shown as written: not empty, holding no control
