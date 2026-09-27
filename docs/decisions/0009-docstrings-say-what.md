@@ -10,10 +10,10 @@
 How much a docstring or code comment may say. Three of the six checks under
 `scripts/checks/` carry module docstrings of a hundred lines or more, which
 restate the specification and argue their rules afresh. New code copies that
-density. Every such sentence is a claim
-a reviewer must check against another document, and it goes stale when either
-side changes. The rule belongs in the constitution, which only a recorded
-founder decision can amend, so an implementer may not decide it.
+density. Every such sentence is a claim a reviewer must check against another
+document, and it goes stale when either side changes. The rule belongs in the
+constitution, which only a recorded founder decision can amend, so an
+implementer may not decide it.
 
 ## Decision
 
@@ -64,9 +64,9 @@ points to it.
 Binding from the merge of the pull request that amends the constitution.
 Nothing opened before that merge is covered, #106 included. The constitution
 moves to 2.2.0, and six open tasks in `specs/001-evreos-v1/tasks.md` -- T112,
-T114, T124, T125, T137 and T161 -- follow it: the doc comments they prescribe cite a
-reason rather than argue it. T125 also waits, where the service issues no
-token, on the founder decision that settles its reading of FR-026a.
+T114, T124, T125, T137 and T161 -- follow it: the doc comments they prescribe
+cite a reason rather than argue it. T125 also waits, where the service issues
+no token, on the founder decision that settles its reading of FR-026a.
 
 What reopens this: a review finding a defect that a docstring's brevity hid.
 
