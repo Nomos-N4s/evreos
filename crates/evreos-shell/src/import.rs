@@ -30,8 +30,10 @@
 //! `evreos-i18n`, for the names of its folders, so not `evreos-net`; reaches
 //! no part of the standard library's platform module but the Unix
 //! `OpenOptionsExt`, so no socket and no process, and no part of this
-//! crate but the stores; it loads no file but its own five modules, and
-//! invokes no macro but a short list of the standard library's.
+//! crate but the stores; loads no file but its own five modules, through no
+//! `#[path]` and no `cfg_attr`; invokes no macro but a short list of the
+//! standard library's; and is written in ASCII outside its literals and
+//! comments, so no character a reader cannot see hides a path.
 //! `tests/import.rs` asserts each of these token by token.
 //!
 //! # How a running browser's store is read
