@@ -102,8 +102,8 @@ It reads the tree and fails on:
                 machine's own interface addresses, `/sys/class/net`, Wi-Fi
                 network identity (BSSID and the WLAN and CoreWLAN
                 interfaces), the connection-type interfaces, and
-                `RTCPeerConnection`, which is how script learns local
-                addresses.
+                `RTCPeerConnection`, vendor-prefixed or not, which is how
+                script learns local addresses.
     screen geometry
                 enumerating monitors or screens and reading their size,
                 resolution, colour depth or arrangement, on every platform
@@ -388,7 +388,7 @@ SOURCES = {
         ("navigator.connection", (
             r"navigator\s*" + member("connection") + "|" + destructured("connection", "navigator")
         )),
-        ("RTCPeerConnection", r"RTCPeerConnection"),
+        ("RTCPeerConnection", r"(?:webkit|moz)?RTCPeerConnection"),
         ("WlanQueryInterface", r"WlanQueryInterface"),
         ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
         ("CWWiFiClient", r"CWWiFiClient"),
