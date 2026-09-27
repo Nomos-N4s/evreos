@@ -313,7 +313,7 @@ SOURCES = {
         ("IOPlatformExpertDevice", r"IOPlatformExpertDevice"),
         ("gethostuuid", r"gethostuuid"),
         ("kern.uuid", r"kern\.uuid"),
-        ("/sys/class/dmi", r"/sys/(?:class|devices/virtual)/dmi"),
+        ("/sys/class/dmi", r"/sys/(?:class|devices/virtual|firmware)/dmi"),
         ("product_uuid", r"product_uuid"),
         ("product_serial", r"product_serial"),
         ("board_serial", r"board_serial"),

@@ -199,6 +199,8 @@ CAUGHT = (
      'let uuid = Command::new("ioreg").args(["-rd1", "-c", "IOPlatformDevice"]).output();\n'),
     ("machine and volume identifier", "getHighEntropyValues",
      'let hints = "navigator.userAgentData.getHighEntropyValues([\'model\'])";\n'),
+    ("machine and volume identifier", "/sys/class/dmi",
+     'let table = read("/sys/firmware/dmi/tables/DMI")?;\n'),
     ("machine and volume identifier", "HW_MODEL",
      "let mib = [libc::CTL_HW, libc::HW_MODEL];\n"),
     ("machine and volume identifier", "HW_MACHINE",
