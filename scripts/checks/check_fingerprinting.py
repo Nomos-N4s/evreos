@@ -20,10 +20,13 @@ the build wherever it appears, whatever is done with the value afterwards.
 Hashing it, salting it, rotating the salt, keeping it in memory only, or never
 sending it changes nothing here, which is exactly FR-036a's point: the check
 does not ask how long a value lives, so a rotating salt has nothing to argue
-with. The update client, the staged-rollout draw and the shell therefore hold
-no value derived from these sources while this check passes -- the draw is a
-random number (`getrandom`), which is not a characteristic of the device and
-is not read here.
+with. What a pass shows is that no direct read of these sources appears
+anywhere the check reads -- the update client, the staged-rollout draw and the
+shell among them; the draw is a random number (`getrandom`), which is not a
+characteristic of the device and is not read here. That none of them holds a
+value derived from these sources is the check and review together: the routes
+a scanner cannot see are listed under WHAT THIS DOES NOT CATCH, and rest on
+review.
 
 A use that is not a derivation -- and there will be some: a history view that
 shows local time needs the timezone -- is not waved through by a pattern. It is
