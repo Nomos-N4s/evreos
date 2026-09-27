@@ -52,7 +52,8 @@ impl RolloutDraw {
     ///
     /// Its errors are the file system's. The file's own absence is never
     /// one, since a new value is drawn then, so an error of kind `NotFound`
-    /// means the directory `path` names is missing.
+    /// means the directory `path` names is missing, or that `path` is a
+    /// link to a file that is not there, which is left for whoever made it.
     pub fn load_or_draw(path: &Path) -> io::Result<Self> {
         match fs::read(path) {
             Ok(bytes) => {
