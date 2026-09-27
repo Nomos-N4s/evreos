@@ -43,6 +43,10 @@ impl RolloutDraw {
     /// processes draw at once for an install that has no file, one value is
     /// kept and both return it. Replacing a file that is not a value makes
     /// no such promise: the last process to replace it wins.
+    ///
+    /// Its errors are the file system's. The file's own absence is never
+    /// one, since a new value is drawn then, so an error of kind `NotFound`
+    /// means the directory `path` names is missing.
     pub fn load_or_draw(path: &Path) -> io::Result<Self> {
         match fs::read(path) {
             Ok(bytes) => {
@@ -54,9 +58,8 @@ impl RolloutDraw {
             Err(error) => return Err(error),
         }
         let draw = Self::draw()?;
-        let partial = Self::partial_path(path);
-        let written = Self::write_synced(&partial, draw);
-        let kept = written.and_then(|()| Self::keep(path, &partial, draw));
+        let partial = Self::write_partial(path, draw)?;
+        let kept = Self::keep(path, &partial, draw);
         let _ = fs::remove_file(&partial);
         kept
     }
@@ -87,23 +90,42 @@ impl RolloutDraw {
         }
     }
 
-    /// A name beside `path` that no other process, nor another call in this
-    /// one, writes to.
+    /// Writes `draw` to a new file beside `path`, flushed to the disk, and
+    /// returns its path. A name another call left behind, from a process
+    /// that ended before removing it, is passed over and left as it is.
+    fn write_partial(path: &Path, draw: Self) -> io::Result<PathBuf> {
+        loop {
+            let partial = Self::partial_path(path);
+            let mut file = match fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(&partial)
+            {
+                Ok(file) => file,
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => continue,
+                Err(error) => return Err(error),
+            };
+            let written = file
+                .write_all(format!("{}\n", draw.0).as_bytes())
+                .and_then(|()| file.sync_all());
+            return match written {
+                Ok(()) => Ok(partial),
+                Err(error) => {
+                    let _ = fs::remove_file(&partial);
+                    Err(error)
+                }
+            };
+        }
+    }
+
+    /// A name beside `path` that no other running process, nor another call
+    /// in this one, writes to.
     fn partial_path(path: &Path) -> PathBuf {
         static CALLS: AtomicU32 = AtomicU32::new(0);
         let call = CALLS.fetch_add(1, Ordering::Relaxed);
         let mut name = path.file_name().unwrap_or_default().to_os_string();
         name.push(format!(".{}-{call}.partial", std::process::id()));
         path.with_file_name(name)
-    }
-
-    fn write_synced(partial: &Path, draw: Self) -> io::Result<()> {
-        let mut file = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(partial)?;
-        file.write_all(format!("{}\n", draw.0).as_bytes())?;
-        file.sync_all()
     }
 
     /// Whether an update rolled out to `rollout` millionths is offered to

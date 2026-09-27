@@ -323,6 +323,32 @@ mod rollout {
     }
 
     #[test]
+    fn partial_files_left_behind_are_passed_over_and_kept() {
+        // Names this process would write its new draw to, as a process that
+        // ended before removing them could have left them.
+        let path = scratch("leftover");
+        let dir = path.parent().unwrap();
+        let pid = std::process::id();
+        for call in 0..2_000 {
+            fs::write(dir.join(format!("rollout.{pid}-{call}.partial")), "left").unwrap();
+        }
+        let draw = RolloutDraw::load_or_draw(&path).unwrap();
+        assert_eq!(RolloutDraw::load_or_draw(&path).unwrap(), draw);
+        assert_eq!(fs::read_dir(dir).unwrap().count(), 2_001);
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_missing_directory_is_the_one_not_found_error() {
+        let path = scratch("missing");
+        let dir = path.parent().unwrap().to_path_buf();
+        fs::remove_dir_all(&dir).unwrap();
+        let error = RolloutDraw::load_or_draw(&path).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(!dir.exists());
+    }
+
+    #[test]
     fn debug_output_leaves_the_value_out() {
         let path = scratch("debug");
         fs::write(&path, "123456\n").unwrap();
