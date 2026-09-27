@@ -139,7 +139,7 @@ report("the committed allowlist is readable", check_problems == [])
 
 # --- the table itself ---------------------------------------------------------
 
-names = [name for _, name, _ in check.COMPILED]
+names = [name for _, name, _, _ in check.COMPILED]
 report("every source name is unique", len(names) == len(set(names)))
 report("no source name holds whitespace, which an entry could not spell",
        all(name.split() == [name] for name in names))

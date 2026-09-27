@@ -647,8 +647,17 @@ SCRIPT_SHAPED = {
 EDGE_BEFORE = r"(?:(?<![A-Za-z0-9_])|(?![A-Za-z0-9_]))"
 EDGE_AFTER = r"(?:(?![A-Za-z0-9_])|(?<![A-Za-z0-9_]))"
 
+# Each source's pattern twice: bare, which the regex engine can search for by
+# its literal prefix, and with its edges, which it cannot. A match with edges
+# is a bare match at the same place, so the edges are tried only where a bare
+# match starts.
 COMPILED = [
-    (category, name, re.compile(EDGE_BEFORE + "(?:" + pattern + ")" + EDGE_AFTER, re.IGNORECASE))
+    (
+        category,
+        name,
+        re.compile(pattern, re.IGNORECASE),
+        re.compile(EDGE_BEFORE + "(?:" + pattern + ")" + EDGE_AFTER, re.IGNORECASE),
+    )
     for category, sources in SOURCES.items()
     for name, pattern in sources
 ]
@@ -703,7 +712,7 @@ def fold_crate(name):
 FOLDED_DEPENDENCY_SOURCES = {fold_crate(name): name for name in DEPENDENCY_SOURCES}
 
 # Every name an allowlist entry may spell: a source's, or a dependency's.
-KNOWN_NAMES = {name for _, name, _ in COMPILED} | set(DEPENDENCY_SOURCES)
+KNOWN_NAMES = {name for _, name, _, _ in COMPILED} | set(DEPENDENCY_SOURCES)
 
 
 class CheckError(Exception):
@@ -810,13 +819,19 @@ def sources_in(text, only=None, skip=()):
     is still one read, reported on the line it starts.
     """
     found = []
-    for category, name, pattern in COMPILED:
+    for category, name, bare, edged in COMPILED:
         if (only is not None and name not in only) or name in skip:
             continue
-        for match in pattern.finditer(text):
+        start = 0
+        while (candidate := bare.search(text, start)) is not None:
+            match = edged.match(text, candidate.start())
+            if match is None:
+                start = candidate.start() + 1
+                continue
             number = text.count("\n", 0, match.start()) + 1
             if (number, category, name) not in found:
                 found.append((number, category, name))
+            start = max(match.end(), match.start() + 1)
     return sorted(found, key=lambda item: item[0])
 
 
