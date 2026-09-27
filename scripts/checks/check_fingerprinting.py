@@ -32,6 +32,12 @@ It reads the tree and fails on:
                 rustlex: the paths and registry names these reads use live
                 inside strings, so blanking strings would blank the evidence,
                 and a script the shell injects is a string too.
+                Script and markup the shell could ship -- `.js`, `.mjs`,
+                `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
+                whole, comments included: there is no shared scanner for
+                those languages, and a mention in a comment failing loudly is
+                the safer direction than a read hidden behind a string that
+                looks like a comment opener.
                 Every source is matched as a whole token with case folded,
                 because registry names and paths are case-insensitive on the
                 release platforms and a spelling nobody used is still the same
@@ -114,9 +120,9 @@ rests on review. And none of this touches what a SITE does to fingerprint the
 member, which research section 4.3 sets out of FR-036a's scope and out of this
 architecture's reach.
 
-Files other than Rust source are not read: Python is the tooling that runs this
-check and ships in nothing, and markdown is where the forbidden sources are
-quoted.
+Files other than Rust source and the script and markup suffixes above are not
+read: Python is the tooling that runs this check and ships in nothing, and
+markdown is where the forbidden sources are quoted.
 Directories are matched with case folded where they must be, the release
 platforms' filesystems folding case. Dot-directories and `target/` are not
 read: nothing under either ships.
@@ -130,8 +136,11 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
 
 sys.path.insert(0, str(HERE))
-from casefs import folded_in, is_rust_source  # noqa: E402
+from casefs import folded_in, is_rust_source, suffix_of  # noqa: E402
 from rustlex import strip_non_code  # noqa: E402
+
+# Script and markup the shell could ship, read whole.
+SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".html", ".htm")
 
 # Every source, by category. A source is (name, pattern): the name is what a
 # failure reports and what an allowlist entry spells, the pattern is matched as
@@ -407,10 +416,20 @@ def check_tree(root):
                 for number, line in enumerate(code.splitlines(), 1):
                     for category, name in sources_in(line):
                         found(where, number, category, name)
+            elif suffix_of(path) in SCRIPT_SUFFIXES:
+                text = read_text(path)
+                read.append(where)
+                if text is None:
+                    problems.append(f"{where}: not valid UTF-8, so it is not script this check can read")
+                    continue
+                for number, line in enumerate(text.splitlines(), 1):
+                    for category, name in sources_in(line):
+                        found(where, number, category, name)
 
     if not problems and not read:
         raise CheckError(
-            f"{root}: no Rust source; a check over nothing is not a pass"
+            f"{root}: no Rust source or script; a check over nothing is not a "
+            "pass"
         )
     return problems, sorted(read)
 

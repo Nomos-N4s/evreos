@@ -8,8 +8,8 @@ The same read hashed under a rotating salt fails too, because FR-036a binds on
 the derivation and not on what it produces.
 
 The sources quoted in this file are Python string literals; the check reads
-Rust source, never Python, so quoting them here is not a breach and needs no
-assembly trick.
+Rust source, script and markup, never Python, so quoting them here is not a
+breach and needs no assembly trick.
 
 Run: python3 scripts/checks/test_check_fingerprinting.py
 """
@@ -221,6 +221,35 @@ problems = tree(with_rust(
 ))[0]
 report("a rollout bucket drawn from a timing counter and a salt fails",
        mentions(problems, "high-resolution timing correlator", "'mach_absolute_time'"))
+
+# --- SOURCE: script and markup ------------------------------------------------
+
+problems, read = tree(passing_tree({
+    "crates/x/ui/chrome.mjs": "const started = performance.now();\n",
+}))[:2]
+report("performance.now in shipped script fails",
+       mentions(problems, "crates/x/ui/chrome.mjs:1", "'performance.now'"))
+report("...and the script is read", "crates/x/ui/chrome.mjs" in read)
+
+problems = tree(passing_tree({
+    "crates/x/ui/index.html": "<script>send(screen.width, navigator.hardwareConcurrency)</script>\n",
+}))[0]
+report("screen geometry in markup fails",
+       mentions(problems, "index.html:1", "screen geometry"))
+report("...and so does the processor count on the same line",
+       mentions(problems, "index.html:1", "'hardwareConcurrency'"))
+
+problems = tree(passing_tree({
+    "crates/x/ui/zone.TS": "const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;\n",
+}))[0]
+report("a script suffix in another case is still read",
+       mentions(problems, "zone.TS:1", "timezone"))
+
+problems = tree(passing_tree({
+    "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
+}))[0]
+report("a source named in a script comment fails, the loud direction by design",
+       mentions(problems, "notes.js:1", "'performance.now'"))
 
 # --- unreadable input and an unreached verdict -------------------------------
 
