@@ -323,10 +323,10 @@ of them requires a MAJOR amendment to this constitution:
 - Commits are atomic: exactly one logical change per commit, each standing, building and
   reverting on its own.
 - A docstring or code comment states what the code does — its inputs, outputs, effects
-  and limits — briefly. The reason for a rule lives in the document that makes it, the
-  specification, a decision record or an ADR, and is cited by its identifier, never
-  paraphrased or argued afresh; no docstring claims a guarantee beyond what the code it
-  documents does. A file is held to this when a pull request opened after this amendment
+  and limits — briefly. The reason for a rule lives in the document that makes it — this
+  constitution, the specification or its plan and research, a decision record, an ADR or
+  `CLAUDE.md` — and is cited by its identifier, never paraphrased or argued afresh; no
+  docstring claims a guarantee beyond what the code it documents does. A file is held to this when a pull request opened after this amendment
   merges edits it (`decisions/0009`).
 - Every pull request that adds or changes a feature states the byte and millisecond cost
   of its change against the budgets in Principle II, as that principle requires. A red
