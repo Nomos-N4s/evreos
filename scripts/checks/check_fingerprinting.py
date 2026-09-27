@@ -156,9 +156,9 @@ It reads the tree and fails on:
                 `CLOCK_BOOTTIME`, `CLOCK_UPTIME_RAW`, `clock_gettime_nsec_np`,
                 `GetTickCount`, `timeGetTime`, the Windows interrupt-time
                 counters, the boot time and uptime -- `systemUptime` on macOS
-                among them -- and `performance.now` and
-                `performance.timeOrigin` in script -- the class research
-                section 4.3 names.
+                and the `btime` line of `/proc/stat` among them -- and
+                `performance.now` and `performance.timeOrigin` in script --
+                the class research section 4.3 names.
 
   DEPENDENCY    a direct dependency, in any table of any `Cargo.toml` --
                 ordinary, dev, build, target-specific or the workspace's own
@@ -556,6 +556,7 @@ SOURCES = {
         ("GetTickCount", r"GetTickCount(?:64)?"),
         ("timeGetTime", r"timeGetTime"),
         ("/proc/uptime", r'/proc/uptime|"uptime"'),
+        ("/proc/stat", r'/proc/stat|"btime"'),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
         ("performance.now", r"performance\s*" + member("now") + "|" + destructured("now", "performance")),
