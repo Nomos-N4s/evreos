@@ -344,6 +344,28 @@ report("a script suffix in another case is still read",
        mentions(problems, "zone.TS:1", "timezone"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/zone.js": (
+        "const zone = Intl.DateTimeFormat()\n"
+        "  .resolvedOptions()\n"
+        "  .timeZone;\n"
+        "const { width, height } = window.screen;\n"
+        "const depth = screen\n  .colorDepth;\n"
+        "const tall = screen?.availHeight;\n"
+        "const wide = screen['availWidth'];\n"
+        "const { colorDepth } = screen;\n"
+    ),
+}))[0]
+report("a chain a formatter breaks across lines is one read, on the line it starts",
+       mentions(problems, "zone.js:2", "'resolvedOptions'"))
+report("...and the screen object taken whole by destructuring is a read",
+       mentions(problems, "zone.js:4", "'window.screen'")
+       and mentions(problems, "zone.js:9", "'window.screen'"))
+report("...as are a property split from screen, optionally chained or bracketed",
+       mentions(problems, "zone.js:5", "'screen.'")
+       and mentions(problems, "zone.js:7", "'screen.'")
+       and mentions(problems, "zone.js:8", "'screen.'"))
+
+problems = tree(passing_tree({
     "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",

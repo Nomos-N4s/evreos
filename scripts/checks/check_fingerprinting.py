@@ -78,7 +78,11 @@ It reads the tree and fails on:
                 enumerating monitors or screens and reading their size,
                 resolution, colour depth or arrangement, on every platform
                 API the release tiers carry and on the `screen` object in
-                script.
+                script, whether a property is read off it -- dotted,
+                optionally chained or bracketed -- or the object is taken
+                whole, as destructuring takes it. Every dotted script
+                source allows whitespace and a line break between its
+                parts, as a formatter writes a long chain.
     installed fonts
                 enumerating the system's font collection, on every platform
                 API, through fontconfig and `fc-list`, through a font
@@ -91,8 +95,8 @@ It reads the tree and fails on:
                 crate's `now_local` and local offsets, chrono's `Local`
                 wherever a line names it -- by path, in an import list, as
                 `&Local`, `Local.` or `DateTime<Local>` -- jiff's system
-                zone, and `getTimezoneOffset` and `resolvedOptions().timeZone`
-                in script. `Local` is matched in its own case only: the word
+                zone, and `getTimezoneOffset` and `resolvedOptions` in
+                script. `Local` is matched in its own case only: the word
                 opens ordinary prose such as "Local State".
     total memory
                 the physical memory the machine carries, through every
@@ -284,7 +288,7 @@ SOURCES = {
         ("PhysicalAddress", r"PhysicalAddress"),
         ("GetHostNames", r"GetHostNames"),
         ("NetworkInformation", r"NetworkInformation"),
-        ("navigator.connection", r"navigator\.connection"),
+        ("navigator.connection", r"navigator\s*\??\.\s*connection"),
         ("RTCPeerConnection", r"RTCPeerConnection"),
         ("WlanQueryInterface", r"WlanQueryInterface"),
         ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
@@ -313,7 +317,15 @@ SOURCES = {
         ("XDisplayWidth", r"XDisplayWidth"),
         ("XDisplayHeight", r"XDisplayHeight"),
         ("XRRGetScreenResources", r"XRRGetScreenResources(?:Current)?"),
-        ("screen.", r"screen\.(?:width|height|availWidth|availHeight|availLeft|availTop|colorDepth|pixelDepth|orientation)"),
+        ("screen.", (
+            r"screen\s*(?:\??\.\s*(?:{0})|\[\s*[\"'](?:{0})[\"']\s*\])".format(
+                "width|height|availWidth|availHeight|availLeft|availTop"
+                "|colorDepth|pixelDepth|orientation"
+            )
+        )),
+        # The screen object taken whole, as destructuring takes it:
+        # `const { width } = window.screen`, `= screen;`.
+        ("window.screen", r"window\s*\??\.\s*screen(?!\s*\??\.\s*\w)|=\s*screen(?=\s*[;,)])"),
         ("getScreenDetails", r"getScreenDetails"),
     ),
     "installed fonts": (
@@ -333,7 +345,7 @@ SOURCES = {
         ("load_system_fonts", r"load_system_fonts"),
         ("font_kit", r"font_kit"),
         ("queryLocalFonts", r"queryLocalFonts"),
-        ("document.fonts", r"document\.fonts"),
+        ("document.fonts", r"document\s*\??\.\s*fonts"),
         ("/usr/share/fonts", r"/usr/share/fonts"),
         ("/Library/Fonts", r"/Library/Fonts"),
         ("Windows\\Fonts", r"Windows[\\/]+Fonts"),
@@ -364,7 +376,9 @@ SOURCES = {
         ("Zoned::now", r"Zoned::now"),
         ("TZ", r'var(?:_os)?\(\s*(?:r#*)?"TZ"#*\s*\)'),
         ("getTimezoneOffset", r"getTimezoneOffset"),
-        ("resolvedOptions().timeZone", r"resolvedOptions\(\s*\)\.timeZone"),
+        # The whole options object carries the zone, so the call is the read
+        # whether `.timeZone` follows it or a destructuring takes it.
+        ("resolvedOptions", r"resolvedOptions"),
     ),
     "total memory": (
         ("GlobalMemoryStatus", r"GlobalMemoryStatus(?:Ex)?"),
@@ -423,8 +437,8 @@ SOURCES = {
         ("/proc/uptime", r"/proc/uptime"),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
-        ("performance.now", r"performance\.now"),
-        ("performance.timeOrigin", r"performance\.timeOrigin"),
+        ("performance.now", r"performance\s*\??\.\s*now"),
+        ("performance.timeOrigin", r"performance\s*\??\.\s*timeOrigin"),
     ),
 }
 
@@ -510,14 +524,21 @@ def read_text(path):
         return None
 
 
-def sources_in(line):
-    """Every (category, name) of a source read on `line`, in table order,
-    each once."""
+def sources_in(text):
+    """Every (line number, category, name) of a source read in `text`, in
+    line order and then table order, each source once per line.
+
+    Matched over the whole text rather than line by line, so a chain a
+    formatter breaks across lines -- `screen` on one, `.width` on the next --
+    is still one read, reported on the line it starts.
+    """
     found = []
     for category, name, pattern in COMPILED:
-        if pattern.search(line) and (category, name) not in found:
-            found.append((category, name))
-    return found
+        for match in pattern.finditer(text):
+            number = text.count("\n", 0, match.start()) + 1
+            if (number, category, name) not in found:
+                found.append((number, category, name))
+    return sorted(found, key=lambda item: item[0])
 
 
 def dependencies_in(manifest, inherited=None):
@@ -651,18 +672,16 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     problems.append(f"{where}: not valid UTF-8, so it is not Rust this check can read")
                     continue
                 code = strip_non_code(text, keep_literals=True)
-                for number, line in enumerate(code.splitlines(), 1):
-                    for category, name in sources_in(line):
-                        found(where, number, category, name)
+                for number, category, name in sources_in(code):
+                    found(where, number, category, name)
             elif suffix_of(path) in SCRIPT_SUFFIXES:
                 text = read_text(path)
                 read.append(where)
                 if text is None:
                     problems.append(f"{where}: not valid UTF-8, so it is not script this check can read")
                     continue
-                for number, line in enumerate(text.splitlines(), 1):
-                    for category, name in sources_in(line):
-                        found(where, number, category, name)
+                for number, category, name in sources_in(text):
+                    found(where, number, category, name)
             elif folded_in(path.name, [MANIFEST]):
                 text = read_text(path)
                 read.append(where)
