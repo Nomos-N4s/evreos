@@ -44,7 +44,8 @@
 //!   `crate::store`;
 //! - it loads no file but its own five modules, through no `#[path]` and no
 //!   `cfg_attr`, and invokes no macro by `name!` but a short list of the
-//!   standard library's, which no `macro_rules!` in the crate may shadow;
+//!   standard library's, which it names by no path and no rename, and
+//!   whose names no macro in the crate may take;
 //! - it is written in ASCII outside its literals and comments, so no
 //!   character a reader cannot see hides a path.
 //!

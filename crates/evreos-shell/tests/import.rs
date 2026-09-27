@@ -1355,6 +1355,18 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             "mode" if punct(i.wrapping_sub(1), '.') || punct(i.wrapping_sub(1), ':') => {
                 found.push("sets a file's mode".to_string());
             }
+            // A name the import may invoke as a macro is the standard
+            // library's only while nothing brings in another under it: a
+            // path that ends in it, `use crate::store::format;` or
+            // `crate::store::format!()`, or a rename to it, could reach a
+            // macro the stores re-export.
+            _ if MACROS.contains(&word)
+                && (path_sep(i.wrapping_sub(2))
+                    || in_path_group(i)
+                    || matches!(ident(i.wrapping_sub(1)), Some("use" | "as"))) =>
+            {
+                found.push(format!("names `{word}` by a path or a rename"));
+            }
             // A macro named without a path, from anywhere in the crate.
             // A raw identifier is never a keyword, so `r#match!` is a macro,
             // and none of the standard library's is invoked that way.
@@ -1448,6 +1460,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { if !some_macro![] {} }", false),
         ("fn f() { r#match!() }", false),
         ("fn f() -> String { r#format!(\"x\") }", false),
+        ("use crate::store::format;", false),
+        ("use crate::store::{format};", false),
+        ("use crate::store::{Store, format as f};", false),
+        ("fn f() -> String { crate::store::format!(\"x\") }", false),
+        ("use crate::store::fmt as format;", false),
         ("include!(\"../x.rs\");", false),
         ("#[path = \"../x.rs\"] mod x;", true),
         (
@@ -1591,8 +1608,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
 
 #[test]
 fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
-    // The import's macros are allowed by name. A `macro_rules!` of the same
-    // name anywhere in this crate, or macros brought in by `#[macro_use]`,
+    // The import's macros are allowed by name. A macro given one of their
+    // names anywhere in this crate, or macros brought in by `#[macro_use]`,
     // could stand in for one of them inside the import, so neither exists.
     fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
         for entry in fs::read_dir(dir).unwrap() {
@@ -1618,15 +1635,23 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
                 _ => continue,
             };
             assert_ne!(word, "macro_use", "{}", file.display());
-            if word == "macro_rules" && toks.get(i + 1) == Some(&Tok::Punct('!')) {
-                if let Some(Tok::Ident(name)) = toks.get(i + 2) {
-                    let name = name.strip_prefix("r#").unwrap_or(name);
-                    assert!(
-                        !MACROS.contains(&name),
-                        "{} defines `{name}!`, which the import may invoke",
-                        file.display()
-                    );
-                }
+            // A macro can take one of those names by being defined under it,
+            // by `macro_rules!` or `macro`, or by being renamed to it with
+            // `as`, as a re-export would be.
+            let named = if word == "macro_rules" && toks.get(i + 1) == Some(&Tok::Punct('!')) {
+                toks.get(i + 2)
+            } else if word == "macro" || word == "as" {
+                toks.get(i + 1)
+            } else {
+                None
+            };
+            if let Some(Tok::Ident(name)) = named {
+                let name = name.strip_prefix("r#").unwrap_or(name);
+                assert!(
+                    !MACROS.contains(&name),
+                    "{} gives a macro the name `{name}`, which the import may invoke",
+                    file.display()
+                );
             }
         }
     }
