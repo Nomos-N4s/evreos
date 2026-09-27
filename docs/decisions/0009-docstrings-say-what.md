@@ -7,10 +7,10 @@
 
 ## Question
 
-How much a docstring or code comment may say. The checks under
-`scripts/checks/` carry module docstrings of a hundred lines and more that
-restate the specification, argue each rule afresh, and state what a passing
-check guarantees. New code copies that density. Every such sentence is a claim
+How much a docstring or code comment may say. Three of the seven checks under
+`scripts/checks/` carry module docstrings of a hundred lines or more, which
+restate the specification and argue their rules afresh. New code copies that
+density. Every such sentence is a claim
 a reviewer must check against another document, and it goes stale when either
 side changes. The rule belongs in the constitution, which only a recorded
 founder decision can amend, so an implementer may not decide it.
