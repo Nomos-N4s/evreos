@@ -165,15 +165,17 @@ which the reader honours as the format specifies.
 
 These runs, and the synthetic ones below, used the reader as this change
 first committed it, before the review rounds on the pull request. The fixes
-since changed neither what a copy must pass to be accepted nor how the
-browsers' stores in these runs are read. They changed how a store refused at
-every attempt is classified, how malformed input is bounded, how a rowid
-alias declared with irregular spacing is found, and which addresses
-at the edges of the filter are kept; and an attempt refused at a journal
-check now reads the files once more to fingerprint them, which lengthens only
-those attempts, not the ones retried because the files moved, so the slowest
-times below that retried on a hot journal would be somewhat longer. The tier runs measure the
-reader as it ships.
+since changed how the browsers' stores in these runs are read in none of the
+respects the trials measure. Beyond the checks the trials counted, a copy
+must now also be of regular files of at most 1 GiB each, which every store
+here was. The fixes also changed how a store refused at every attempt is
+classified, how malformed input is bounded, how a rowid alias declared with
+irregular spacing is found, and which addresses at the edges of the filter
+are kept. And an attempt refused at a journal check now reads the files once
+more, one at a time, to fingerprint them. That lengthens only those
+attempts, not the ones retried because the files moved, so the slowest
+times below that retried on a hot journal would be somewhat longer. The tier
+runs measure the reader as it ships.
 
 | 60 s each | Trials | Failed | Accepted copy torn | Attempts (attempts: trials) | Retry causes | Slowest |
 | --- | --- | --- | --- | --- | --- | --- |
@@ -220,12 +222,16 @@ the same stopped profiles after review round 6, reads the same counts.
 ## What was adopted
 
 - **Verified copy-then-read, in memory** (`snapshot.rs`). Each store's files
-  are read whole, read again and compared chunk by chunk, with the rollback
+  — only regular files, opened without waiting on them, and each of at most
+  1 GiB, or the store is unreadable — are read whole, read again and
+  compared chunk by chunk, with the rollback
   journal checked for its magic number before and after; up to eight attempts
   with a doubling pause capped at 400 ms, about 1.6 s in all. The copy never
   touches disk, so a crash mid-import leaves no copy of another browser's
   history behind. The cost is memory: the store's size, for as long as the
-  read takes. A `History` or `places.sqlite` runs to tens of megabytes on a
+  read takes, and never more than 1 GiB for any one of its files; a copy
+  refused for an open write lets go of what it held before it reads the
+  files again, one at a time, to fingerprint them. A `History` or `places.sqlite` runs to tens of megabytes on a
   profile used for years. SC-004's condition — ten tabs, sampled through a
   soak — does not include an import, so no entry measures this; it is
   recorded so the harness that measures SC-004 does not meet it unannounced.
