@@ -763,8 +763,11 @@ fn millis(time: SystemTime) -> u128 {
 /// `file`. Browser-internal pages (`chrome:`, `edge:`, `about:`), Firefox's
 /// `place:` queries, extension pages, script (`javascript:`) and inline data
 /// (`data:`, `blob:`) are not addresses of anywhere the member went, and are
-/// skipped. A user name and password carried in the address are removed:
-/// they are a site credential, which an import never carries (Q-E5).
+/// skipped. A user name and password carried in the address's authority are
+/// removed: they are a site credential, which an import never carries
+/// (Q-E5). A `file:` address whose path opens on what a browser reads as a
+/// second authority, and names a user there, is skipped whole, since the
+/// credential cannot be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
@@ -776,14 +779,17 @@ pub fn clean_address(raw: &str) -> Option<String> {
         "http" | "https" | "file" => {
             let after = &raw[colon + 1..];
             let Some(rest) = after.strip_prefix("//") else {
-                // Only `file:/path` is a path with no authority, so no
-                // credential. A browser reads `\\` and `/\` as the start
-                // of an authority, where a user name and password can sit,
-                // and any other shape is not an address it loads.
-                let plain_path = scheme == "file"
-                    && after.starts_with('/')
-                    && !after[1..].starts_with(['/', '\\']);
-                return plain_path.then(|| format!("file:{after}"));
+                // A `file:` address with no `//` is a path, `file:/path`, or
+                // opens on two separators, which a browser reads as the
+                // start of an authority, where a user name and password can
+                // sit. The same rule as below holds for it: a share path is
+                // kept, and one naming a user is refused. Any other shape is
+                // not an address a browser loads.
+                let opens_share = after.len() - after.trim_start_matches(['/', '\\']).len() >= 2;
+                let loadable = scheme == "file"
+                    && (after.starts_with('/') || opens_share)
+                    && !smuggles_credential(after);
+                return loadable.then(|| format!("file:{after}"));
             };
             // A browser ends the authority at a backslash too, for these
             // schemes; ending it there keeps the host the one it loaded.
@@ -798,7 +804,8 @@ pub fn clean_address(raw: &str) -> Option<String> {
             }
             let path = &rest[end..];
             // With no host, a path opening on two separators is read as a
-            // further authority, as above, and one naming a user is refused.
+            // further authority, as above: a share path is kept, and one
+            // naming a user is refused.
             if host.is_empty() && smuggles_credential(path) {
                 return None;
             }
@@ -905,6 +912,14 @@ mod tests {
 
     #[test]
     fn a_hostless_file_address_keeps_a_share_path_that_names_no_user() {
+        assert_eq!(
+            clean_address("file:\\\\server\\share\\x").as_deref(),
+            Some("file:\\\\server\\share\\x")
+        );
+        assert_eq!(
+            clean_address("file:/\\server/x").as_deref(),
+            Some("file:/\\server/x")
+        );
         assert_eq!(
             clean_address("file:////server/share/x").as_deref(),
             Some("file:////server/share/x")
