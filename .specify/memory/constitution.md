@@ -12,11 +12,15 @@ Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Prin
   - What changed: the Development Workflow's first bullet. A pull request is linked to an
     issue, on GitHub or in Linear. Recorded at `decisions/0008`, which the amendment
     procedure requires.
-  - What replaces the discipline relaxed, as the amendment procedure asks: nothing is
-    withdrawn. The link stays mandatory for every pull request, and every commit still
-    references its issue, which `scripts/check-commit-hygiene.py` already enforces for
-    GitHub and Linear references alike. What is removed is only the need to open a GitHub
-    issue that duplicates a Linear one.
+  - What replaces the discipline relaxed, as the amendment procedure asks. The link stays
+    mandatory for every pull request, and every commit still references its issue, which
+    `scripts/check-commit-hygiene.py` enforces for GitHub and Linear references alike. A
+    pull request linked to its Linear issue alone gives up three things a GitHub issue
+    gave, and each is named in `decisions/0008` with what stands in for it: GitHub's own
+    link between the pull request and its issue, replaced by the Linear integration's
+    link-back comment; the issue's closing on merge, which `Closes CAR-N` leaves to that
+    integration; and the issue's being readable by anyone who can read the repository,
+    since the Linear workspace is private to the founder's team.
   - Follow-on: `CLAUDE.md`'s Workflow section, the pull request template, `README.md` and
     Principle I's compliance statement in `specs/001-evreos-v1/plan.md` are aligned in
     the same pull request.

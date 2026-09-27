@@ -60,14 +60,24 @@ constitution moves to 2.1.0, and `CLAUDE.md`,
 the pull request template, `README.md` and Principle I's compliance statement
 in `specs/001-evreos-v1/plan.md` follow it.
 
-What replaces the discipline this relaxes, as the amendment procedure asks:
-nothing is withdrawn. Every pull request is still linked to one issue, and every
-commit still references it, which the hygiene check enforces as before; the
-issue may now be a Linear one. The pull request's link rests on review, as it
-did before, because the check never read the body for it.
+What replaces the discipline this relaxes, as the amendment procedure asks.
+Every pull request is still linked to one issue, and every commit still
+references it, which the hygiene check enforces as before; the issue may now be
+a Linear one. The pull request's link rests on review, as it did before,
+because the check never read the body for it. A Linear link gives up three
+things a GitHub issue gave:
 
-What reopens this: the work moving off Linear, or a Linear issue no longer
-being readable by whoever reviews the pull request.
+- GitHub's own link between the pull request and its issue. The Linear
+  integration posts a link-back comment on the pull request instead, as it did
+  on #102 and #103.
+- The issue's closing when the pull request merges. `Closes CAR-N` leaves that
+  to the Linear integration, and `Refs CAR-N` closes nothing, as it never did.
+- The issue's being readable by anyone who can read the repository. The Linear
+  workspace is private to the founder's team, so a reviewer outside it reads
+  the pull request body, which states the issue's scope, and not the issue.
+
+What reopens this: the work moving off Linear, or the repository gaining a
+reviewer who must read the issues and cannot read the Linear workspace.
 
 ## Corrections
 
