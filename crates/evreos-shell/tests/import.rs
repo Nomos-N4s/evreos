@@ -1099,6 +1099,9 @@ const ALLOWED_CRATE: &str = "evreos_i18n";
 /// The package the catalogue's dependency must name.
 const ALLOWED_PACKAGE: &str = "evreos-i18n";
 
+/// The path the catalogue's dependency must be read from.
+const ALLOWED_PATH: &str = "../evreos-i18n";
+
 /// Every dependency of this crate the import may not name, as its code spells
 /// them, read from its manifest.
 fn denied_crates() -> Vec<String> {
@@ -1122,11 +1125,14 @@ fn denied_crates() -> Vec<String> {
 /// renames another, `evreos-i18n = { package = "evreos-net" }`, or takes its
 /// package from the workspace's manifest, which this one cannot show, is
 /// denied like any other. So is one naming its package in a multi-line
-/// string, which is read as empty. Development and build dependencies do
-/// not reach the library.
+/// string, which is read as empty, and one not read from the catalogue's
+/// own directory, `path = "../evreos-i18n"`, or read from a `git` source or a
+/// registry as well, any of which could hold another crate of that name.
+/// Development and build dependencies do not reach the library.
 fn denied_in(manifest: &str) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
+    let mut sourced = Vec::new();
     let mut pending = String::new();
     for line in without_multiline_strings(manifest).lines() {
         pending.push_str(&line[..outside_strings(line, '#').unwrap_or(line.len())]);
@@ -1141,12 +1147,50 @@ fn denied_in(manifest: &str) -> Vec<String> {
             let end = outside_strings(header, ']').unwrap_or(header.len());
             table = toml_key(&header[..end]);
             deny_dependency(&table, &mut denied);
+            note_catalogue(&table, None, &mut sourced, &mut denied);
         } else if let Some(at) = outside_strings(line, '=') {
             let path: Vec<String> = table.iter().cloned().chain(toml_key(&line[..at])).collect();
-            deny_in_value(&path, line[at + 1..].trim(), &mut denied);
+            deny_in_value(&path, line[at + 1..].trim(), &mut sourced, &mut denied);
         }
     }
+    if sourced.iter().any(|(_, from_its_path)| !from_its_path) {
+        deny(ALLOWED_CRATE.to_string(), &mut denied);
+    }
     denied
+}
+
+/// Where the key `path` declares the catalogue, notes the declaration in
+/// `sourced`, marked once `path = "../evreos-i18n"` is read under it, and
+/// denies the catalogue at once for a `git`, `registry` or `registry-index`
+/// under it. `value` is the key's value, or `None` for a table header.
+fn note_catalogue(
+    path: &[String],
+    value: Option<&str>,
+    sourced: &mut Vec<(Vec<String>, bool)>,
+    denied: &mut Vec<String>,
+) {
+    let Some(at) = dependency_at(path) else {
+        return;
+    };
+    if path[at].replace('-', "_") != ALLOWED_CRATE {
+        return;
+    }
+    let declaration = &path[..=at];
+    let index = match sourced.iter().position(|(key, _)| key == declaration) {
+        Some(index) => index,
+        None => {
+            sourced.push((declaration.to_vec(), false));
+            sourced.len() - 1
+        }
+    };
+    if path.len() != at + 2 {
+        return;
+    }
+    match (path[at + 1].as_str(), value) {
+        ("path", Some(value)) if toml_key(value) == [ALLOWED_PATH] => sourced[index].1 = true,
+        ("git" | "registry" | "registry-index", _) => deny(ALLOWED_CRATE.to_string(), denied),
+        _ => {}
+    }
 }
 
 /// How many brackets and braces `text` leaves open outside its strings.
@@ -1262,8 +1306,14 @@ fn deny(name: String, denied: &mut Vec<String>) {
 /// names `foo` as `[dependencies] foo = "1"` does. A `package` other than
 /// the catalogue's, or a `workspace` key, under the catalogue's name denies
 /// that name too.
-fn deny_in_value(path: &[String], value: &str, denied: &mut Vec<String>) {
+fn deny_in_value(
+    path: &[String],
+    value: &str,
+    sourced: &mut Vec<(Vec<String>, bool)>,
+    denied: &mut Vec<String>,
+) {
     deny_dependency(path, denied);
+    note_catalogue(path, Some(value), sourced, denied);
     if let Some(at) = dependency_at(path) {
         let renamed = match path[at + 1..].first().map(String::as_str) {
             Some("package") => toml_key(value) != [ALLOWED_PACKAGE],
@@ -1280,7 +1330,7 @@ fn deny_in_value(path: &[String], value: &str, denied: &mut Vec<String>) {
     for entry in inline_entries(inner) {
         if let Some(at) = outside_strings(entry, '=') {
             let key: Vec<String> = path.iter().cloned().chain(toml_key(&entry[..at])).collect();
-            deny_in_value(&key, entry[at + 1..].trim(), denied);
+            deny_in_value(&key, entry[at + 1..].trim(), sourced, denied);
         }
     }
 }
@@ -1413,7 +1463,7 @@ fn each_listed_form_of_dependency_table_is_read() {
         dependencies = { inline = \"1\", \"inline\\u002dtwo\" = { path = \"{,}\" } }\n\
         [package]\nname = \"x\" # not a dependency\n\
         [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
-        evreos-i18n = { path = \"i\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
+        evreos-i18n = { path = \"../evreos-i18n\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
         'lit\\\\x' = \"1\"\n\
         ok = { version = \"a\\\"#b\" } # c = 1\n\
         [dependencies . spaced]\nversion = \"1\"\n\
@@ -1455,7 +1505,7 @@ fn a_multiline_string_in_the_manifest_hides_no_table() {
     // A header inside a multi-line string would otherwise move the reader
     // into a table the manifest never opened.
     let manifest = r#"[dependencies]
-evreos-i18n = { path = "i", note = """
+evreos-i18n = { path = "../evreos-i18n", note = """
 [dev-dependencies]
 """ }
 evreos-net = { path = "n" }
@@ -1524,10 +1574,36 @@ fn the_catalogue_is_allowed_only_as_its_own_package() {
         assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
     }
     for manifest in [
-        "[dependencies]\nevreos-i18n = { path = \"i\" }\n",
-        "[dependencies]\nevreos-i18n = { path = \"i\", package = \"evreos-i18n\" }\n",
-        "[dependencies.evreos-i18n]\npackage = 'evreos-i18n'\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-i18n\" }\n",
+        "[dependencies.evreos-i18n]\npath = '../evreos-i18n'\npackage = 'evreos-i18n'\n",
         "[dev-dependencies]\nevreos-i18n = { package = \"evreos-net\" }\n",
+    ] {
+        assert!(denied_in(manifest).is_empty(), "{manifest:?}");
+    }
+}
+
+#[test]
+fn the_catalogue_is_allowed_only_from_its_own_directory() {
+    // Another source could hold another crate under the catalogue's name.
+    for manifest in [
+        "[dependencies]\nevreos-i18n = \"1\"\n",
+        "[dependencies]\nevreos-i18n = { version = \"1\" }\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-net\" }\n",
+        "[dependencies]\nevreos-i18n = { git = \"https://example.invalid/i18n\" }\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", registry = \"other\" }\n",
+        "[dependencies.evreos-i18n]\nversion = \"1\"\n",
+        "[dependencies]\nevreos-i18n.git = \"https://example.invalid/i18n\"\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n\
+         [target.'cfg(unix)'.dependencies]\nevreos-i18n = \"1\"\n",
+    ] {
+        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
+    }
+    for manifest in [
+        "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\n",
+        "[dependencies.evreos-i18n]\npath = '../evreos-i18n'\nversion = \"1\"\n",
+        "[target.'cfg(unix)'.dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n",
+        "[dev-dependencies]\nevreos-i18n = \"1\"\n",
     ] {
         assert!(denied_in(manifest).is_empty(), "{manifest:?}");
     }
