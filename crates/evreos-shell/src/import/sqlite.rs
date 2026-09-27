@@ -806,12 +806,12 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
                 let keyed = split_top_level(inner);
                 if keyed.len() == 1 {
                     // Parentheses around the name, `PRIMARY KEY((id))`,
-                    // leave it the column's.
-                    let mut first = tokenize(keyed[0]).into_iter().next();
-                    while let Some(Token::Group(inner)) = &first {
-                        first = tokenize(inner).into_iter().next();
-                    }
-                    if let Some(name) = first.as_ref().and_then(Token::name) {
+                    // leave it the column's. They are stepped over in one
+                    // pass, not parsed a level at a time, which a schema
+                    // nested deep enough would make take hours.
+                    let inner = keyed[0]
+                        .trim_start_matches(|ch: char| ch == '(' || ch.is_ascii_whitespace());
+                    if let Some(name) = tokenize(inner).first().and_then(Token::name) {
                         table_key = Some(name);
                     }
                 }
@@ -1263,6 +1263,22 @@ mod tests {
         let (columns, _) =
             parse_create_table("CREATE TABLE t(\"a--b\" TEXT, 'c/*d' TEXT)").unwrap();
         assert_eq!(columns, ["a--b", "c/*d"], "comment marks inside quotes");
+    }
+
+    #[test]
+    fn a_deeply_bracketed_table_key_is_read_in_one_pass() {
+        // Read a level at a time, 200,000 levels took minutes.
+        let depth = 200_000;
+        let sql = format!(
+            "CREATE TABLE t(id INTEGER, url TEXT, PRIMARY KEY({}id{}))",
+            "(".repeat(depth),
+            ")".repeat(depth)
+        );
+        let started = std::time::Instant::now();
+        let (columns, alias) = parse_create_table(&sql).unwrap();
+        assert_eq!(columns, ["id", "url"]);
+        assert_eq!(alias, Some(0));
+        assert!(started.elapsed() < std::time::Duration::from_secs(5));
     }
 
     #[test]
