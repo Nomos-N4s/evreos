@@ -764,8 +764,11 @@ mod tests {
                 .is_ok_and(|status| status.success());
             if made {
                 assert!(Disk.read(&pipe).is_err(), "a pipe, which would block");
-                // A pipe swapped in after the path was checked: the open
-                // itself must return, not wait for a writer.
+            }
+            // A pipe swapped in after the path was checked: where the flag's
+            // value is known, the open itself must return, not wait for a
+            // writer. Where it is not, the documentation says it can wait.
+            if made && O_NONBLOCK != 0 {
                 let (sent, received) = std::sync::mpsc::channel();
                 let swapped = pipe.clone();
                 std::thread::spawn(move || {
