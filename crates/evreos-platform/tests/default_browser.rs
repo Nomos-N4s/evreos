@@ -793,3 +793,27 @@ fn a_rename_in_another_case_stays_listed() {
         .collect();
     assert_eq!(pointers, [("Élan Browser".to_string(), capabilities)]);
 }
+
+#[test]
+fn a_first_registration_whose_last_removal_fails_is_undone() {
+    // A stale value from an earlier name points at the capabilities, and
+    // its removal after the last write is refused: the first registration
+    // is undone, all but the value that could not be removed.
+    let mut registry = with_neighbours();
+    registry
+        .set_string(REGISTERED_APPLICATIONS, "Sample-Browser", CAPABILITIES)
+        .unwrap();
+    registry.stuck_value = Some("Sample-Browser".to_string());
+
+    let error = register(&mut registry, &APP).unwrap_err();
+    assert_eq!(error.to_string(), "value removal refused");
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
+        None
+    );
+    assert!(!registry.has_key(CLIENT));
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "Sample-Browser"),
+        Some(CAPABILITIES)
+    );
+}
