@@ -227,6 +227,8 @@ CAUGHT = (
      'const PROBE: &str = "const pc = new mozRTCPeerConnection({});";\n'),
     ("MAC address or network characteristic", "GetAdaptersAddresses",
      "let adapters = GetAdaptersAddresses(AF_UNSPEC, 0, None, buffer, &mut size);\n"),
+    ("MAC address or network characteristic", "datalink::interfaces",
+     "for interface in pnet::datalink::interfaces() { send(interface.mac); }\n"),
     ("MAC address or network characteristic", "/proc/net/arp",
      'let neighbours = read_to_string("/proc/net/arp")?;\n'),
     ("MAC address or network characteristic", "getmac",

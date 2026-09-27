@@ -382,6 +382,7 @@ SOURCES = {
         ("SIOCGIFHWADDR", r"SIOCGIFHWADDR"),
         ("/sys/class/net", r"/sys/class/net"),
         ("/proc/net/arp", r"/proc/net/arp"),
+        ("datalink::interfaces", r"datalink::interfaces"),
         ("getmac", r"getmac"),
         ("ifconfig", r"ifconfig"),
         ("ipconfig", r"ipconfig"),
