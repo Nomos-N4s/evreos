@@ -77,13 +77,13 @@ that applies it.
 
 ## Keys
 
-The verifying key is 32 bytes, pinned in the shipped binary as a build constant:
-residence class B in `specs/001-evreos-v1/data-model.md`, which does not yet
-name it as it names the trust root and the receiving service's key. It cannot be
-fetched, replaced or extended at runtime. It is rotated only by a release that
-pins the new key, signed under the old one. Which key, who holds it and how it
-is kept belong to the signing procedure T171 records, not to this document.
-Until it records one, no key is pinned: the client takes the key as a
+The verifying key is 32 bytes, to be pinned in the shipped binary as a build
+constant: residence class B in `specs/001-evreos-v1/data-model.md`, which does
+not yet name it as it names the trust root and the receiving service's key. It
+cannot be fetched, replaced or extended at runtime. It is rotated only by a
+release that pins the new key, signed under the old one. Which key, who holds it
+and how it is kept belong to the signing procedure T171 records, not to this
+document. Until it records one, no key is pinned: the client takes the key as a
 parameter, which the shell will supply from that constant.
 
 ## What is not in the manifest
