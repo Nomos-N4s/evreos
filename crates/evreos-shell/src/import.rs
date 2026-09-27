@@ -828,15 +828,15 @@ fn millis(time: SystemTime) -> u128 {
 /// `file`. Browser-internal pages (`chrome:`, `edge:`, `about:`), Firefox's
 /// `place:` queries, extension pages, script (`javascript:`) and inline data
 /// (`data:`, `blob:`) are not addresses of anywhere the member went, and are
-/// skipped. A user name and password carried in the address's authority are
-/// removed: they are a site credential, which an import never carries
-/// (Q-E5). A `file:` address whose path opens on two separators — which a
-/// browser can read as the start of an authority, after `file:`, after an
-/// empty `file://`, or after a host it reads as empty, which `localhost`
-/// is in any of the spellings a browser decodes to it — and names a user
-/// there, as written or once its `.` and `..` segments are resolved, is
-/// skipped whole, whatever its host, since the credential cannot be cut
-/// from it without changing where it points.
+/// skipped. The address's authority opens on any two separators, `//`,
+/// `\\`, `/\` or `\/`, as a browser opens it, and a user name and password in
+/// it are removed: they are a site credential, which an import never carries
+/// (Q-E5). A `file:` address whose path, as written or once its `.` and `..`
+/// segments are resolved, opens on two separators and names a user in the
+/// segment after them is skipped whole, whatever its host: a browser reads
+/// that segment as a further authority when the host is empty, or one it
+/// reads as empty, as `localhost` is in any spelling it decodes to, and the
+/// credential cannot be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
@@ -847,17 +847,19 @@ pub fn clean_address(raw: &str) -> Option<String> {
     match scheme.as_str() {
         "http" | "https" | "file" => {
             let after = &raw[colon + 1..];
-            let Some(rest) = after.strip_prefix("//") else {
-                // A `file:` address with no `//` is a path, `file:/path`, or
-                // opens on two separators, which a browser reads as the
-                // start of an authority, where a user name and password can
-                // sit. The same rule as below holds for it: a share path is
-                // kept, and one naming a user is refused. Any other shape is
-                // not an address a browser loads.
-                let opens_share = after.len() - after.trim_start_matches(['/', '\\']).len() >= 2;
-                let loadable = scheme == "file"
-                    && (after.starts_with('/') || opens_share)
-                    && !smuggles_credential(after);
+            // A browser opens the authority on any two separators, `//`,
+            // `\\`, `/\` or `\/`, for these schemes, and reads what follows
+            // as a host, which may be one it reads as none.
+            let opens_authority =
+                after.starts_with(['/', '\\']) && after[1..].starts_with(['/', '\\']);
+            let Some(rest) = opens_authority.then(|| &after[2..]) else {
+                // A `file:` address that does not open an authority is a
+                // path, `file:/path`. One that opens on two separators once
+                // its dot segments are resolved, `file:/.//u:p@h`, is read as
+                // an authority after all, and is skipped if it names a user
+                // there. Any other shape is not an address a browser loads.
+                let loadable =
+                    scheme == "file" && after.starts_with('/') && !smuggles_credential(after);
                 return loadable.then(|| format!("file:{after}"));
             };
             // A browser ends the authority at a backslash too, for these
@@ -873,9 +875,9 @@ pub fn clean_address(raw: &str) -> Option<String> {
             }
             let path = &rest[end..];
             // With no host, a path opening on two separators is read as a
-            // further authority, as above: a share path is kept, and one
-            // naming a user is refused. A browser reads a `file:` host of
-            // `localhost` as none, and decodes the host first, so
+            // further authority: a share path is kept, and one naming a user
+            // is refused. A browser reads a `file:` host of `localhost` as
+            // none, and decodes the host first, so
             // `file://localhos%74//u:p@server/` loads as
             // `file:////u:p@server/`. No spelling of the host is trusted: for
             // a `file:` address the rule holds whatever the host.
@@ -1010,8 +1012,6 @@ mod tests {
             "no scheme",
             "",
             "https://exa\nmple.com",
-            "file:/\\u:secret@server/x",
-            "file:\\\\u:secret@server\\x",
             "file:u:secret@server/x",
             "file:////u:secret@server/x",
             "file://\\\\u:secret@server\\x",
@@ -1022,14 +1022,24 @@ mod tests {
     }
 
     #[test]
-    fn a_hostless_file_address_keeps_a_share_path_that_names_no_user() {
+    fn a_file_address_is_kept_cut_or_skipped_by_where_it_names_a_user() {
         assert_eq!(
             clean_address("file:\\\\server\\share\\x").as_deref(),
-            Some("file:\\\\server\\share\\x")
+            Some("file://server\\share\\x")
         );
         assert_eq!(
             clean_address("file:/\\server/x").as_deref(),
-            Some("file:/\\server/x")
+            Some("file://server/x")
+        );
+        // Any two separators open an authority, whose user name and
+        // password are cut as they are after `//`.
+        assert_eq!(
+            clean_address("file:/\\u:secret@server/x").as_deref(),
+            Some("file://server/x")
+        );
+        assert_eq!(
+            clean_address("file:\\\\u:secret@server\\x").as_deref(),
+            Some("file://server\\x")
         );
         assert_eq!(
             clean_address("file:////server/share/x").as_deref(),
@@ -1058,6 +1068,8 @@ mod tests {
             "file:///a/%2E%2e//u:secret@server",
             "file:///a/.%2e//u:secret@server",
             "file:///a/%2e.//u:secret@server",
+            "file:/\\localhost\\b@c\\.%2e\\/b@c",
+            "file:\\/a//%2e\\u:secret@server",
             "file://localhost/.//u:secret@server",
         ] {
             assert_eq!(clean_address(smuggled), None, "{smuggled}");
