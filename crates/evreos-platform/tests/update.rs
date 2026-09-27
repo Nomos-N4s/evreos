@@ -317,3 +317,156 @@ mod rollout {
         assert!(tenths.iter().filter(|hit| **hit).count() > 1);
     }
 }
+
+mod decide {
+    use std::fs;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    use evreos_platform::update::manifest::{Refusal, Version};
+    use evreos_platform::update::rollout::RolloutDraw;
+    use evreos_platform::update::{CheckRefusal, Decision, Installed, decide};
+
+    use super::{Fields, OTHER_SEED, key};
+
+    const NOW: u64 = 3_000_000_000;
+
+    fn draw(value: u32) -> RolloutDraw {
+        // Each call its own directory: tests run at once, and two drawing the
+        // same value must not remove each other's file.
+        static CALLS: AtomicU32 = AtomicU32::new(0);
+        let call = CALLS.fetch_add(1, Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!("evreos-decide-{}-{call}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("rollout");
+        fs::write(&path, format!("{value}\n")).unwrap();
+        let draw = RolloutDraw::load_or_draw(&path).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        draw
+    }
+
+    fn installed(version: [u32; 3]) -> Installed<'static> {
+        Installed {
+            platform: "windows-x86_64",
+            version: Version {
+                major: version[0],
+                minor: version[1],
+                patch: version[2],
+            },
+        }
+    }
+
+    fn decided(
+        fields: &Fields,
+        version: [u32; 3],
+        draw_value: u32,
+    ) -> Result<Decision, CheckRefusal> {
+        decide(
+            &fields.signed(),
+            &key(),
+            installed(version),
+            NOW,
+            draw(draw_value),
+        )
+    }
+
+    #[test]
+    fn a_newer_version_is_offered_to_an_install_inside_the_rollout() {
+        // Rollout 250,000 millionths: the install drawing 249,999 is in,
+        // the one drawing 250,000 is not.
+        let fields = Fields::default();
+        match decided(&fields, [1, 2, 2], 249_999).unwrap() {
+            Decision::Offered(manifest) => assert_eq!(manifest.rollout(), 250_000),
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            decided(&fields, [1, 2, 2], 250_000),
+            Ok(Decision::NotIncluded)
+        );
+        assert_eq!(
+            decided(
+                &Fields {
+                    rollout: 0,
+                    ..Fields::default()
+                },
+                [1, 0, 0],
+                0
+            ),
+            Ok(Decision::NotIncluded)
+        );
+    }
+
+    #[test]
+    fn the_installed_version_is_up_to_date_whatever_the_rollout() {
+        assert_eq!(
+            decided(&Fields::default(), [1, 2, 3], 0),
+            Ok(Decision::UpToDate)
+        );
+        assert_eq!(
+            decided(&Fields::default(), [1, 2, 3], 999_999),
+            Ok(Decision::UpToDate)
+        );
+    }
+
+    #[test]
+    fn an_older_version_is_refused_as_a_downgrade_even_rolled_out_to_all() {
+        // Versions compare by major, then minor, then patch, as numbers:
+        // 1.9.9 is older than 1.10.0 and 2.0.0, newer than 1.9.8.
+        let manifest = Fields {
+            version: [1, 9, 9],
+            rollout: 1_000_000,
+            ..Fields::default()
+        };
+        for installed in [[1, 9, 10], [1, 10, 0], [2, 0, 0]] {
+            assert_eq!(
+                decided(&manifest, installed, 0),
+                Err(CheckRefusal::Downgrade),
+                "{installed:?}"
+            );
+        }
+        assert!(matches!(
+            decided(&manifest, [1, 9, 8], 0),
+            Ok(Decision::Offered(_))
+        ));
+    }
+
+    #[test]
+    fn a_manifest_for_another_platform_or_past_its_expiry_is_refused() {
+        let other = Fields {
+            platform: b"macos-aarch64".to_vec(),
+            ..Fields::default()
+        };
+        assert_eq!(decided(&other, [1, 0, 0], 0), Err(CheckRefusal::Platform));
+        let expiring = Fields {
+            not_after: NOW,
+            ..Fields::default()
+        };
+        assert!(decided(&expiring, [1, 0, 0], 0).is_ok());
+        let expired = Fields {
+            not_after: NOW - 1,
+            ..Fields::default()
+        };
+        assert_eq!(decided(&expired, [1, 0, 0], 0), Err(CheckRefusal::Expired));
+    }
+
+    #[test]
+    fn verification_failure_comes_before_every_other_check() {
+        // Another key, and every other check failing too: the signature is
+        // what is reported, since nothing unverified is looked at.
+        let everything_wrong = Fields {
+            platform: b"macos-aarch64".to_vec(),
+            not_after: 0,
+            version: [0, 0, 1],
+            ..Fields::default()
+        };
+        assert_eq!(
+            decide(
+                &everything_wrong.signed_with(&OTHER_SEED),
+                &key(),
+                installed([1, 0, 0]),
+                NOW,
+                draw(0)
+            ),
+            Err(CheckRefusal::Manifest(Refusal::Signature))
+        );
+    }
+}
