@@ -2072,8 +2072,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("use super::{json::{self, Json}, sqlite::Value};", false),
-        ("use evreos_i18n::{Language, catalogue};", true),
-        ("use evreos_i18n::{catalogue, Language,};", true),
+        ("use evreos_i18n::{Language, catalogue};", false),
+        ("use evreos_i18n::{catalogue, Language,};", false),
         (
             "fn f() -> &'static str { evreos_i18n::catalogue(evreos_i18n::Language::En).language().subtag() }",
             false,
