@@ -1616,7 +1616,10 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             "evreos_i18n" => {
                 let taken = |at: usize| matches!(ident(at), Some("Language" | "catalogue"));
                 if !path_sep(i + 1) {
-                    found.push(format!("`evreos_i18n` not followed by `::`: {next:?}"));
+                    found.push(format!(
+                        "`evreos_i18n` not followed by `::`: {:?}",
+                        toks.get(i + 1)
+                    ));
                 } else if punct(i + 3, '{') {
                     let mut at = i + 4;
                     while !punct(at, '}') {
