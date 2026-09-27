@@ -1609,6 +1609,31 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
                 found.push(format!("names the dependency `{word}`"));
             }
             "extern" => found.push("names `extern`".to_string()),
+            // Of the catalogue the import takes the two items it uses, the
+            // `Language` a catalogue is keyed by and `catalogue` itself, and
+            // nothing else: not the crate bare or renamed, nor any other
+            // item. A group may hold those names alone.
+            "evreos_i18n" => {
+                let taken = |at: usize| matches!(ident(at), Some("Language" | "catalogue"));
+                if !path_sep(i + 1) {
+                    found.push(format!("`evreos_i18n` not followed by `::`: {next:?}"));
+                } else if punct(i + 3, '{') {
+                    let mut at = i + 4;
+                    while !punct(at, '}') {
+                        if !taken(at) || !(punct(at + 1, ',') || punct(at + 1, '}')) {
+                            found.push(format!(
+                                "`evreos_i18n::{{…}}` holds more than `Language` and \
+                                 `catalogue`: {:?}",
+                                toks.get(at)
+                            ));
+                            break;
+                        }
+                        at += if punct(at + 1, ',') { 2 } else { 1 };
+                    }
+                } else if !taken(i + 3) {
+                    found.push(format!("`evreos_i18n::` followed by {next:?}"));
+                }
+            }
             // `pub(crate)` is a visibility; any other `crate` leads to the
             // crate root, and only the stores may be reached from it.
             "crate" if !visibility && next_word != Some("store") => {
@@ -1902,6 +1927,18 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("use self::{std::fs::File};", false),
+        ("use evreos_i18n::Place;", false),
+        (
+            "fn f() { evreos_i18n::net::TcpStream::connect(\"x\"); }",
+            false,
+        ),
+        ("use evreos_i18n as i;", false),
+        ("use evreos_i18n;", false),
+        ("use evreos_i18n::{Language, Catalogue};", false),
+        ("use evreos_i18n::{self, Language};", false),
+        ("use evreos_i18n::{Language as L};", false),
+        ("use evreos_i18n::{{Language}};", false),
+        ("use evreos_i18n::{Language, net::TcpStream};", false),
         ("use super::{std::fs::File};", true),
         ("use crate::store::{core::X};", false),
         ("use crate::store::{Y, std::X};", false),
@@ -2032,6 +2069,12 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("use super::{json::{self, Json}, sqlite::Value};", false),
+        ("use evreos_i18n::{Language, catalogue};", true),
+        ("use evreos_i18n::{catalogue, Language,};", true),
+        (
+            "fn f() -> &'static str { evreos_i18n::catalogue(evreos_i18n::Language::En).language().subtag() }",
+            false,
+        ),
         (
             "use std::path::{Path, PathBuf}; fn f() -> String { format!(\"{}\", 1) }",
             false,

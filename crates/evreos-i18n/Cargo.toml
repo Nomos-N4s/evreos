@@ -16,8 +16,8 @@ publish.workspace = true
 # under FR-043, never quietly. The import may name this crate, so its reach
 # test in crates/evreos-shell/tests/import.rs fails while this crate
 # declares a normal dependency for some platforms only or links any crate,
-# either of which the import could reach through it; a change adding one
-# has to rework that check too.
+# and lets the import name only `Language` and `catalogue` from it; a change
+# adding a normal dependency has to rework that check too.
 
 [lints]
 workspace = true
