@@ -36,8 +36,8 @@
 //! - it reaches no part of this crate but the stores, by `crate::store` or by
 //!   `super` no further up than the import itself;
 //! - it imports nothing by a glob, and names `std`, `core` and `alloc` only as
-//!   the first segment of a plain path, never renamed and never with a group
-//!   directly under them;
+//!   the first segment of a plain path, never inside a use tree's group,
+//!   never renamed and never with a group directly under them;
 //! - it names nothing of the standard library's that writes, creates,
 //!   removes or renames a file, or changes one's permissions, mode or times:
 //!   the only files it writes are the member's own stores, through

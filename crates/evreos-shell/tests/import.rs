@@ -1303,6 +1303,11 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             {
                 found.push(format!("`{word}` after another path segment"));
             }
+            // Inside a use tree's group it follows the group's prefix, as in
+            // `use self::{std::fs::File};`, and names whatever that holds.
+            "std" | "core" | "alloc" if in_path_group(i) => {
+                found.push(format!("`{word}` inside a use group"));
+            }
             "std" | "core" | "alloc" => match next_word {
                 // Of the platform's own parts, only `OpenOptionsExt`, the
                 // file-opening options the copy uses to open a store without
@@ -1484,6 +1489,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { if !some_macro![] {} }", false),
         ("fn f() { r#match!() }", false),
         ("fn f() -> String { r#format!(\"x\") }", false),
+        ("use self::{std::fs::File};", false),
+        ("use super::{std::fs::File};", true),
+        ("use crate::store::{core::X};", false),
+        ("use crate::store::{Y, std::X};", false),
+        ("use {alloc::string::String};", false),
         ("use crate::store::format;", false),
         ("use crate::store::{format};", false),
         ("use crate::store::{Store, format as f};", false),
