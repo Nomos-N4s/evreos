@@ -7,7 +7,7 @@
 
 ## Question
 
-How much a docstring or code comment may say. Three of the seven checks under
+How much a docstring or code comment may say. Three of the six checks under
 `scripts/checks/` carry module docstrings of a hundred lines or more, which
 restate the specification and argue their rules afresh. New code copies that
 density. Every such sentence is a claim
