@@ -799,6 +799,12 @@ problems = tree(with_manifest('system = { package = "machine-uid", version = "0.
 report("a renamed dependency is read under its real name",
        mentions(problems, "Cargo.toml", "'machine-uid'"))
 
+problems = tree(with_manifest('pnet = "0.35"\nnetdev = "0.31"\ndefault_net = "0.22"\n'))[0]
+report("a network crate that re-exports or replaces pnet_datalink fails",
+       mentions(problems, "Cargo.toml", "'pnet'")
+       and mentions(problems, "Cargo.toml", "'netdev'")
+       and mentions(problems, "Cargo.toml", "'default-net'"))
+
 problems = tree(with_manifest("iana_time_zone = \"0.1\"\n"))[0]
 report("a dependency name compares with - and _ folded",
        mentions(problems, "Cargo.toml", "timezone", "'iana-time-zone'"))
