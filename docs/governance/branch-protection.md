@@ -203,10 +203,10 @@ address as principal. `.github/workflows/commit-hygiene.yml` passes it the
 copy of `.github/allowed-signers` on the base branch. A file with no key entry
 is reported as "signing is not yet enabled" and skipped — never failed — so
 the mechanism could land before the key without breaking every pull request.
-That is the state as of this record: the file carries no key.
+The founder's key is now listed, so once the file carrying it is on `main`,
+every commit in a later pull request must be signed by it.
 
-What remains, and who can do it: the founder adds their public key to
-`.github/allowed-signers` in a signed commit and signs every commit from then
+What remains, and who can do it: the founder signs every commit from then
 on. The file's own comment gives the git configuration. Nobody else holds the
 key, so nobody else can take this step; a change anyone else makes to that
 file authorises nothing, because the copy the check trusts is the one already
