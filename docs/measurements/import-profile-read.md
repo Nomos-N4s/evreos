@@ -169,9 +169,10 @@ since changed neither what a copy must pass to be accepted nor how the
 browsers' stores in these runs are read. They changed how a store refused at
 every attempt is classified, how malformed input is bounded, how a rowid
 alias declared with irregular spacing is found, and which addresses
-at the edges of the filter are kept; and a refused attempt now reads the files
-once more to fingerprint them, which lengthens only attempts that retry, so
-the slowest times below would be somewhat longer. The tier runs measure the
+at the edges of the filter are kept; and an attempt refused at a journal
+check now reads the files once more to fingerprint them, which lengthens only
+those attempts, not the ones retried because the files moved, so the slowest
+times below that retried on a hot journal would be somewhat longer. The tier runs measure the
 reader as it ships.
 
 | 60 s each | Trials | Failed | Accepted copy torn | Attempts (attempts: trials) | Retry causes | Slowest |
