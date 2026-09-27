@@ -49,8 +49,11 @@
 //! refuse is a gap in the check, not a licence in the rule. What it asserts is
 //! what the code names, not where a path leads: a profile the member points
 //! the import at on a network share is read from that share, as the member
-//! chose. Discovery, which runs before the member chooses, never follows a
-//! Firefox profile path to one.
+//! chose. Discovery, which runs before the member chooses, follows a Firefox
+//! profile path only in a plain local shape, so never one naming a share or
+//! a device; but a drive letter the system maps to a share, or a browser
+//! directory the system has redirected to one, cannot be told from a local
+//! one by its name, and is read like one.
 //!
 //! # How a running browser's store is read
 //!

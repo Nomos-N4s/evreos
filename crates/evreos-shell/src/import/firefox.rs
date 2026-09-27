@@ -258,14 +258,31 @@ fn walk(
     Ok(out)
 }
 
-/// Whether a `Path=` from `profiles.ini` opens on two separators, which on
-/// Windows names a network share (`\\host\share`) or a device path, and so
-/// would join onto nothing under `app_dir` either. Looking at such a path
-/// opens a connection to the host it names, which discovery, run before the
-/// member has chosen anything, must never do; so it never follows one.
-fn names_a_share(raw: &str) -> bool {
-    let rest = raw.trim_start_matches(['/', '\\']);
-    raw.len() - rest.len() >= 2
+/// Whether a `Path=` from `profiles.ini` has a shape discovery may follow.
+/// Discovery runs before the member has chosen anything, and looking at a
+/// path on another machine opens a connection to it, so only the plain local
+/// shapes are followed, and anything else is skipped, whatever it names:
+/// - relative to `app_dir`, with no leading separator and no `:`, so that
+///   joining it cannot replace `app_dir` with a drive, a share or a device;
+/// - absolute on Unix, `/` followed by anything but a second separator;
+/// - absolute on Windows, a drive letter, `:` and one separator.
+///
+/// Refused so are `\\host\share`, `//host/share`, and the device forms
+/// `\\?\`, `\\.\` and `\??\`. A drive letter the system maps to a share
+/// cannot be told from a local drive by its name, and is followed like one.
+fn a_local_path(raw: &str, relative: bool) -> bool {
+    let separator = |ch: Option<char>| matches!(ch, Some('/' | '\\'));
+    let mut chars = raw.chars();
+    let (first, second, third) = (chars.next(), chars.next(), chars.next());
+    if relative {
+        return !raw.is_empty() && !separator(first) && !raw.contains(':');
+    }
+    let unix = first == Some('/') && !separator(second);
+    let drive = first.is_some_and(|ch| ch.is_ascii_alphabetic())
+        && second == Some(':')
+        && separator(third)
+        && !separator(raw.chars().nth(3));
+    unix || drive
 }
 
 /// The profiles `profiles.ini` lists under `app_dir`, by the names it gives.
@@ -285,7 +302,7 @@ pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
     let mut flush =
         |section: &str, name: &mut Option<String>, path: &mut Option<String>, relative: bool| {
             if section.starts_with("Profile") {
-                if let Some(raw) = path.take().filter(|raw| !names_a_share(raw)) {
+                if let Some(raw) = path.take().filter(|raw| a_local_path(raw, relative)) {
                     let dir: PathBuf = if relative {
                         app_dir.join(&raw)
                     } else {
@@ -317,4 +334,41 @@ pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
     }
     flush(&section, &mut name, &mut path, relative);
     profiles
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_plain_local_profile_paths_are_followed() {
+        for (raw, relative) in [
+            ("Profiles/abc.default", true),
+            ("abc.default", true),
+            ("/home/member/.mozilla/firefox/abc", false),
+            ("C:\\Users\\member\\abc", false),
+            ("d:/profiles/abc", false),
+        ] {
+            assert!(a_local_path(raw, relative), "{raw:?} is local");
+        }
+        for (raw, relative) in [
+            ("\\\\host\\share\\p", false),
+            ("//host/share/p", false),
+            ("\\\\?\\UNC\\host\\share\\p", false),
+            ("//?/UNC/host/share/p", false),
+            ("\\\\.\\pipe\\p", false),
+            ("\\??\\UNC\\host\\share\\p", false),
+            ("\\??\\GLOBALROOT\\Device\\Mup\\host\\share", false),
+            ("C:\\\\host\\share", false),
+            ("Profiles/abc", false),
+            ("", false),
+            ("\\\\host\\share\\p", true),
+            ("/abs/path", true),
+            ("C:\\Users\\abc", true),
+            ("\\??\\UNC\\host\\share", true),
+            ("", true),
+        ] {
+            assert!(!a_local_path(raw, relative), "{raw:?}, relative {relative}");
+        }
+    }
 }
