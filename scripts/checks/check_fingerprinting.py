@@ -346,7 +346,7 @@ SOURCES = {
         ("GetComputerName", r"GetComputerName(?:Ex)?[AW]?"),
         ("hostname::get", r"hostname::get"),
         ("/etc/hostname", r"/etc/hostname"),
-        ("/proc/sys/kernel/hostname", r"/proc/sys/kernel/hostname"),
+        ("/proc/sys/kernel/hostname", r'/proc/sys/kernel/hostname|"hostname"'),
         ("uname", r"uname"),
         ("utsname", r"utsname"),
         ("nodename", r"nodename"),

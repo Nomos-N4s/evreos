@@ -183,6 +183,10 @@ CAUGHT = (
      "let node = utsname.nodename();\n"),
     ("machine and volume identifier", "/proc/sys/kernel/hostname",
      'let host = read_to_string("/proc/sys/kernel/hostname");\n'),
+    ("machine and volume identifier", "/proc/sys/kernel/hostname",
+     'let host = read_to_string(Path::new("/proc/sys/kernel").join("hostname"));\n'),
+    ("machine and volume identifier", "/proc/sys/kernel/hostname",
+     'let host = Command::new("hostname").output()?;\n'),
     ("machine and volume identifier", "gethostid",
      "let id = unsafe { libc::gethostid() };\n"),
     ("machine and volume identifier", "boot_id",
@@ -430,7 +434,7 @@ problems = tree({**with_rust(
     'let a = std::env::var("ComputerName");\n'
     'let b = std::env::var_os("processor_identifier");\n'
     'let c = ExpandEnvironmentStringsW(w!("%Number_Of_Processors%"));\n'
-    'let d = std::env::var("hostname");\n'
+    'let d = std::env::var("tz");\n'
 ), "web/probe.js": "const host = process.env.userDomain;\n"})[0]
 report("a Windows environment variable named in another case is still a read",
        mentions(problems, "probe.rs:1", "'COMPUTERNAME'")
