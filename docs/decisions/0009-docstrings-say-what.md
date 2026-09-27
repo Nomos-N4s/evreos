@@ -38,8 +38,8 @@ points to it.
   docstring rather than its behaviour -- R1-8, R1-26, R1-27, R1-28, R1-29 and
   R1-32 -- and R1-17 was partly so. Four of those -- R1-26, R1-27, R1-28 and
   R1-29 -- stated something false about the specification, the code or the
-  platform. Seven more were gaps the docstring had promised to cover: R1-2,
-  R1-3, R1-4, R1-5, R1-6, R1-14 (a duplicate of R1-2) and R1-15.
+  platform. Eight more were gaps the docstring had promised to cover: R1-2,
+  R1-3, R1-4, R1-5, R1-6, R1-14 (a duplicate of R1-2), R1-15 and R1-16.
 - The founder's direction on 2026-09-27, given in conversation while T061 was
   in progress, and recorded in Linear issue CAR-353 the same day.
 - The founder's confirmation on 2026-09-27, after review on #107 widened the
