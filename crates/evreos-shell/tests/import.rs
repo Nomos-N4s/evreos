@@ -1105,68 +1105,92 @@ fn denied_crates() -> Vec<String> {
 }
 
 /// The dependencies a manifest declares for the library, as code spells them,
-/// but the one the import may name: every key of `[dependencies]` or of a
-/// `[target.….dependencies]` table, dotted keys such as `foo.workspace` by
-/// their first part, and every table of the form `[dependencies.foo]`.
-/// Development and build dependencies do not reach the library.
+/// but the one the import may name. Each key is read as the path of its
+/// table's header and its own dotted name together, so
+/// `[dependencies] foo = …`, `[dependencies.foo]`, `dependencies.foo = …`,
+/// `foo.workspace = true` and the same under `[target.….dependencies]` or
+/// `[target.…]` all name `foo`, however their dots are spaced or their parts
+/// quoted. Development and build dependencies do not reach the library.
 fn denied_in(manifest: &str) -> Vec<String> {
-    let mut in_dependencies = false;
+    let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
-    let mut deny = |name: &str| {
-        let name = name.trim().trim_matches('"').replace('-', "_");
-        if !name.is_empty() && name != ALLOWED_CRATE && !denied.contains(&name) {
-            denied.push(name);
-        }
-    };
     for line in manifest.lines() {
-        // A comment runs from a `#` outside a string to the end of the line,
-        // after a header as after a key.
-        let mut quote = None;
-        let end = line
-            .char_indices()
-            .find(|&(_, ch)| match quote {
-                Some(open) => {
-                    if ch == open {
-                        quote = None;
-                    }
-                    false
-                }
-                None if ch == '"' || ch == '\'' => {
-                    quote = Some(ch);
-                    false
-                }
-                None => ch == '#',
-            })
-            .map_or(line.len(), |(at, _)| at);
-        let line = line[..end].trim();
-        if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
-            let header = header.trim();
-            let table = header.strip_prefix("target.").map_or(header, |rest| {
-                // `target.'cfg(…)'.dependencies`: what follows the quoted
-                // or dotted target name.
-                rest.rsplit_once("'.")
-                    .or_else(|| rest.rsplit_once("\"."))
-                    .or_else(|| rest.split_once('.'))
-                    .map_or("", |(_, table)| table)
-            });
-            in_dependencies = table == "dependencies";
-            if let Some(name) = table.strip_prefix("dependencies.") {
-                deny(name);
-            }
-        } else if in_dependencies {
-            if let Some((key, _)) = line.split_once('=') {
-                deny(key.split('.').next().unwrap_or(""));
-            }
+        let line = line[..outside_strings(line, '#').unwrap_or(line.len())].trim();
+        let path: Vec<String> = if let Some(header) = line.strip_prefix('[') {
+            let header = header.strip_prefix('[').unwrap_or(header);
+            let end = outside_strings(header, ']').unwrap_or(header.len());
+            table = toml_key(&header[..end]);
+            table.clone()
+        } else if let Some(at) = outside_strings(line, '=') {
+            table.iter().cloned().chain(toml_key(&line[..at])).collect()
+        } else {
+            continue;
+        };
+        let name = match path.as_slice() {
+            [table, name, ..] if table == "dependencies" => name,
+            [target, _, table, name, ..] if target == "target" && table == "dependencies" => name,
+            _ => continue,
+        };
+        let name = name.replace('-', "_");
+        if name != ALLOWED_CRATE && !denied.contains(&name) {
+            denied.push(name);
         }
     }
     denied
 }
 
+/// Where `target` first stands in `line` outside a TOML string, whose
+/// double-quoted form escapes with a backslash.
+fn outside_strings(line: &str, target: char) -> Option<usize> {
+    let mut quote = None;
+    let mut escaped = false;
+    for (at, ch) in line.char_indices() {
+        match quote {
+            Some('"') if escaped => escaped = false,
+            Some('"') if ch == '\\' => escaped = true,
+            Some(open) if ch == open => quote = None,
+            Some(_) => {}
+            None if ch == target => return Some(at),
+            None if ch == '"' || ch == '\'' => quote = Some(ch),
+            None => {}
+        }
+    }
+    None
+}
+
+/// A TOML key, dotted and perhaps quoted, as its parts.
+fn toml_key(key: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut rest = key;
+    loop {
+        let end = outside_strings(rest, '.').unwrap_or(rest.len());
+        let part = rest[..end].trim();
+        let part = part
+            .strip_prefix('"')
+            .and_then(|part| part.strip_suffix('"'))
+            .or_else(|| {
+                part.strip_prefix('\'')
+                    .and_then(|part| part.strip_suffix('\''))
+            })
+            .unwrap_or(part);
+        parts.push(part.replace("\\\"", "\"").replace("\\\\", "\\"));
+        if end == rest.len() {
+            return parts;
+        }
+        rest = &rest[end + 1..];
+    }
+}
+
 #[test]
 fn each_listed_form_of_dependency_table_is_read() {
-    let manifest = "[package]\nname = \"x\"\n\
+    let manifest = "dependencies.toplevel = \"1\"\n\
+        [package]\nname = \"x\" # not a dependency\n\
         [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
-        evreos-i18n = { path = \"i\" }\n\
+        evreos-i18n = { path = \"i\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
+        ok = { version = \"a\\\"#b\" } # c = 1\n\
+        [dependencies . spaced]\nversion = \"1\"\n\
+        [ target . 'cfg(unix)' . dependencies ]\ntspaced = \"1\"\n\
+        [target.'cfg(any())']\ndependencies.intarget = \"1\"\n\
         [target.'cfg(windows)'.dependencies] # the platform's own\nwindows-sys = \"1\"\n\
         [target.\"cfg(unix)\".dependencies]#x\n# nix = \"1\"\nrustix = \"1\" # \"#\"\n\
         [target.x86_64-unknown-linux-gnu.dependencies]\nlibc = \"0.2\"\n\
@@ -1176,8 +1200,15 @@ fn each_listed_form_of_dependency_table_is_read() {
     assert_eq!(
         denied_in(manifest),
         [
+            "toplevel",
             "evreos_net",
             "winit",
+            "quoted_literal",
+            "quoted",
+            "ok",
+            "spaced",
+            "tspaced",
+            "intarget",
             "windows_sys",
             "rustix",
             "libc",
