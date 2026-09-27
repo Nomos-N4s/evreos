@@ -1233,7 +1233,7 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // module's own reach, token by token rather than by text: it names no
     // egress crate and no part of the standard library that opens a socket
     // or starts a process, invokes no macro but the standard library's
-    // formatting and assertion ones, loads no file but its own five modules,
+    // listed in `MACROS`, loads no file but its own five modules,
     // and its only way into the rest of this crate is the stores it writes.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = vec![(src.join("import.rs"), true)];

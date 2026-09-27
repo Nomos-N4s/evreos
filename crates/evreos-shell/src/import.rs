@@ -25,9 +25,13 @@
 //! skips the one shape of `file:` address it cannot be cut from.
 //!
 //! **The network** — reading another browser's files is the local computation
-//! FR-007a permits. Nothing in this module or its submodules references
-//! `evreos-net`, the standard library's sockets or processes, or any part of
-//! this crate but the stores, which `tests/import.rs` asserts token by token.
+//! FR-007a permits. The shipped code of this module and its submodules —
+//! their unit tests aside — names neither `evreos-net` nor this crate's other
+//! dependencies, reaches no part of the standard library's platform module
+//! but its Unix file-opening options, so no socket and no process, and no
+//! part of this crate but the stores; it loads no file but its own five
+//! modules, and invokes no macro but a short list of the standard library's.
+//! `tests/import.rs` asserts each of these token by token.
 //!
 //! # How a running browser's store is read
 //!
