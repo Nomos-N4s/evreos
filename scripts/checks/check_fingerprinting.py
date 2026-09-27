@@ -144,10 +144,11 @@ It reads the tree and fails on:
                 machine rather than an interval the shell measured: `rdtsc`,
                 `QueryPerformanceCounter` and `QueryPerformanceFrequency`,
                 `mach_absolute_time` and its continuous twin,
-                `CLOCK_MONOTONIC_RAW`, `CLOCK_BOOTTIME`, `CLOCK_UPTIME_RAW`,
-                `clock_gettime_nsec_np`, `GetTickCount`, the Windows
-                interrupt-time counters, the boot time and uptime --
-                `systemUptime` on macOS among them -- and `performance.now` and
+                `CLOCK_MONOTONIC` and its raw and coarse forms,
+                `CLOCK_BOOTTIME`, `CLOCK_UPTIME_RAW`, `clock_gettime_nsec_np`,
+                `GetTickCount`, `timeGetTime`, the Windows interrupt-time
+                counters, the boot time and uptime -- `systemUptime` on macOS
+                among them -- and `performance.now` and
                 `performance.timeOrigin` in script -- the class research
                 section 4.3 names.
 
@@ -535,6 +536,7 @@ SOURCES = {
         ("QueryPerformanceFrequency", r"QueryPerformanceFrequency"),
         ("mach_absolute_time", r"mach_absolute_time"),
         ("mach_continuous_time", r"mach_continuous_time"),
+        ("CLOCK_MONOTONIC", r"CLOCK_MONOTONIC(?:_COARSE)?"),
         ("CLOCK_MONOTONIC_RAW", r"CLOCK_MONOTONIC_RAW"),
         ("CLOCK_BOOTTIME", r"CLOCK_BOOTTIME"),
         ("CLOCK_UPTIME_RAW", r"CLOCK_UPTIME_RAW"),
@@ -542,6 +544,7 @@ SOURCES = {
         ("QueryInterruptTime", r"Query(?:Unbiased)?InterruptTime(?:Precise)?"),
         ("systemUptime", r"systemUptime"),
         ("GetTickCount", r"GetTickCount(?:64)?"),
+        ("timeGetTime", r"timeGetTime"),
         ("/proc/uptime", r'/proc/uptime|"uptime"'),
         ("kern.boottime", r"kern\.boottime"),
         ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
