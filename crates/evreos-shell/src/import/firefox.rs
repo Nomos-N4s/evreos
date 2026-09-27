@@ -268,9 +268,15 @@ fn walk(
 /// - absolute on Windows, a drive letter, `:` and one separator.
 ///
 /// Refused so are `\\host\share`, `//host/share`, and the device forms
-/// `\\?\`, `\\.\` and `\??\`. A drive letter the system maps to a share
-/// cannot be told from a local drive by its name, and is followed like one.
+/// `\\?\`, `\\.\` and `\??\`; and, whatever its shape, a path with a
+/// component Windows reads as a device, such as `LPT1` or `nul.txt`, which it
+/// opens as `\\.\LPT1` and which can itself be redirected to a share. A
+/// drive letter the system maps to a share cannot be told from a local drive
+/// by its name, and is followed like one.
 fn a_local_path(raw: &str, relative: bool) -> bool {
+    if raw.split(['/', '\\']).any(names_a_device) {
+        return false;
+    }
     let separator = |ch: Option<char>| matches!(ch, Some('/' | '\\'));
     let mut chars = raw.chars();
     let (first, second, third) = (chars.next(), chars.next(), chars.next());
@@ -283,6 +289,34 @@ fn a_local_path(raw: &str, relative: bool) -> bool {
         && separator(third)
         && !separator(raw.chars().nth(3));
     unix || drive
+}
+
+/// Whether a path component is one of the names Windows reserves for a
+/// device, in any case, with or without an extension or trailing spaces and
+/// dots: `CON`, `PRN`, `AUX`, `NUL`, `CONIN$`, `CONOUT$`, and `COM` or `LPT`
+/// followed by a digit or a superscript one, two or three.
+fn names_a_device(component: &str) -> bool {
+    let stem = component
+        .split('.')
+        .next()
+        .unwrap_or("")
+        .trim_end_matches([' ', '.'])
+        .to_ascii_uppercase();
+    match stem.as_str() {
+        "CON" | "PRN" | "AUX" | "NUL" | "CONIN$" | "CONOUT$" => true,
+        _ => {
+            let port = stem
+                .strip_prefix("COM")
+                .or_else(|| stem.strip_prefix("LPT"));
+            port.is_some_and(|rest| {
+                let mut chars = rest.chars();
+                matches!(
+                    (chars.next(), chars.next()),
+                    (Some('0'..='9' | '\u{b9}' | '\u{b2}' | '\u{b3}'), None)
+                )
+            })
+        }
+    }
 }
 
 /// The profiles `profiles.ini` lists under `app_dir`, by the names it gives.
@@ -348,6 +382,9 @@ mod tests {
             ("/home/member/.mozilla/firefox/abc", false),
             ("C:\\Users\\member\\abc", false),
             ("d:/profiles/abc", false),
+            ("Profiles/COM10", true),
+            ("Profiles/console", true),
+            ("Profiles/lpt", true),
         ] {
             assert!(a_local_path(raw, relative), "{raw:?} is local");
         }
@@ -366,6 +403,13 @@ mod tests {
             ("/abs/path", true),
             ("C:\\Users\\abc", true),
             ("\\??\\UNC\\host\\share", true),
+            ("LPT1", true),
+            ("Profiles/COM1", true),
+            ("Profiles/nul.txt", true),
+            ("Profiles/con .default", true),
+            ("C:\\x\\LPT1", false),
+            ("/home/member/aux", false),
+            ("Profiles/COM\u{b9}", true),
             ("", true),
         ] {
             assert!(!a_local_path(raw, relative), "{raw:?}, relative {relative}");
