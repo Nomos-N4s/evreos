@@ -415,8 +415,9 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
     use evreos_platform::default_browser::WindowsRegistry;
     use windows_registry::CURRENT_USER;
 
+    const SCRATCH_PARENT: &str = r"Software\PlatformRegistrationTest";
     let scratch = format!(
-        r"Software\PlatformRegistrationTest\{}-{}",
+        r"{SCRATCH_PARENT}\{}-{}",
         std::process::id(),
         std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -467,6 +468,12 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
     drop(root);
     CURRENT_USER.remove_tree(&scratch).unwrap();
     assert!(CURRENT_USER.open(&scratch).is_err());
+    // The parent too, once no other run's scratch key is left under it.
+    let parent = CURRENT_USER.open(SCRATCH_PARENT).unwrap();
+    if parent.keys().unwrap().next().is_none() {
+        drop(parent);
+        CURRENT_USER.remove_tree(SCRATCH_PARENT).unwrap();
+    }
 }
 
 /// The binding opens the current user's hive itself, where registration
@@ -495,13 +502,18 @@ fn tier_one_registers_then_opens_the_default_apps_page() {
     }
 }
 
-/// The launcher accepts the page on Windows itself. This opens the system's
-/// default-apps page on the machine running it, which on CI's ephemeral
-/// Windows runner is harmless; the launch is not awaited, so what the page
-/// shows is not checked here.
+/// The system's launcher is reached and takes the page's address on Windows
+/// itself. The launch is not awaited, so whether the page opens is not
+/// checked here. It opens the default-apps page on the machine running it,
+/// so it runs only under CI, whose Windows runner is ephemeral, and passes
+/// without launching anything elsewhere.
 #[cfg(windows)]
 #[test]
-fn the_windows_launcher_accepts_the_default_apps_page() {
+fn the_windows_launcher_takes_the_default_apps_page() {
+    if std::env::var_os("CI").is_none() {
+        eprintln!("skipped outside CI: it would open the system's settings");
+        return;
+    }
     evreos_platform::default_browser::open_settings().unwrap();
 }
 
