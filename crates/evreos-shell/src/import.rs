@@ -851,7 +851,9 @@ fn millis(time: SystemTime) -> u128 {
 /// reads as empty, as `localhost` is in any spelling it decodes to, and the
 /// credential cannot be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
-    let raw = raw.trim();
+    // A browser trims a C0 control or a space from an address's ends, and
+    // nothing else: other whitespace is part of the address.
+    let raw = raw.trim_matches(|ch: char| ch <= ' ');
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
         return None;
     }
@@ -1008,6 +1010,23 @@ mod tests {
             clean_address("file:/home/a/b.html").as_deref(),
             Some("file:/home/a/b.html")
         );
+    }
+
+    #[test]
+    fn only_what_a_browser_trims_is_trimmed() {
+        assert_eq!(
+            clean_address(" \thttps://a.example/x\r\n").as_deref(),
+            Some("https://a.example/x")
+        );
+        assert_eq!(
+            clean_address("file:/x\u{3000}").as_deref(),
+            Some("file:/x\u{3000}")
+        );
+        assert_eq!(
+            clean_address("https://a.example/x\u{2028}").as_deref(),
+            Some("https://a.example/x\u{2028}")
+        );
+        assert_eq!(clean_address("\u{3000}https://a.example/x"), None);
     }
 
     #[test]
