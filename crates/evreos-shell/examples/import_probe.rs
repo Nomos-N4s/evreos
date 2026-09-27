@@ -76,7 +76,7 @@ fn naive_rows(store: &Path, table: &str, with_log: bool) -> Result<(usize, usize
     } else {
         None
     };
-    let db = Database::open(&main, wal.as_deref()).map_err(|e| e.to_string())?;
+    let db = Database::from_bytes(&main, wal.as_deref()).map_err(|e| e.to_string())?;
     let table = db.table(table).map_err(|e| e.to_string())?;
     let time = ["last_visit_time", "last_visit_date"]
         .iter()

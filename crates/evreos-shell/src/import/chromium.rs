@@ -78,7 +78,7 @@ pub(super) fn read(
         let files = StoreFiles::sqlite(profile.join(store));
         if let Some(copy) = copy_store(source, files, store, policy)? {
             let unreadable = |error| ImportError::unreadable(store, error);
-            let db = Database::open(&copy.main, copy.wal.as_deref()).map_err(unreadable)?;
+            let db = Database::from_bytes(&copy.main, copy.wal.as_deref()).map_err(unreadable)?;
             history = visits(&db).map_err(unreadable)?;
         }
     }

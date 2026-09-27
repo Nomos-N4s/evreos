@@ -162,8 +162,8 @@ impl Row {
     }
 }
 
-/// A database opened over its main file's bytes and, optionally, its
-/// write-ahead log's.
+/// A database read from its main file's bytes and, optionally, its
+/// write-ahead log's, both already in memory.
 #[derive(Debug)]
 pub struct Database<'a> {
     main: &'a [u8],
@@ -177,14 +177,15 @@ pub struct Database<'a> {
 }
 
 impl<'a> Database<'a> {
-    /// Open a database over `main` and, when the store has one, `wal`.
+    /// Read a database from `main` and, when the store has one, `wal`, both
+    /// already in memory.
     ///
     /// The log is applied only up to its last valid commit frame: frames
     /// whose salts do not match the log header, whose checksum chain breaks,
     /// or which follow the last commit are ignored, which is what makes a log
     /// copied mid-append read as the last committed state rather than as a
     /// torn one.
-    pub fn open(main: &'a [u8], wal: Option<&'a [u8]>) -> Result<Self, SqliteError> {
+    pub fn from_bytes(main: &'a [u8], wal: Option<&'a [u8]>) -> Result<Self, SqliteError> {
         let wal = wal.filter(|bytes| !bytes.is_empty());
         let log = match wal {
             Some(bytes) => parse_wal(bytes)?,
@@ -1247,7 +1248,7 @@ mod tests {
         include_bytes!("../../../../tests/fixtures/import/chrome/Default/History");
 
     fn url_rows(bytes: &[u8]) -> Result<usize, SqliteError> {
-        let db = Database::open(bytes, None)?;
+        let db = Database::from_bytes(bytes, None)?;
         let table = db.table("urls")?;
         let mut rows = 0;
         db.scan(&table, |_| {
@@ -1595,13 +1596,13 @@ mod tests {
 
     #[test]
     fn non_databases_are_refused_without_panicking() {
-        assert!(Database::open(b"", None).is_err());
-        assert!(Database::open(b"not a database at all", None).is_err());
+        assert!(Database::from_bytes(b"", None).is_err());
+        assert!(Database::from_bytes(b"not a database at all", None).is_err());
         let mut header = vec![0u8; 512];
         header[..16].copy_from_slice(HEADER_MAGIC);
         header[16..18].copy_from_slice(&3u16.to_be_bytes());
         assert!(matches!(
-            Database::open(&header, None),
+            Database::from_bytes(&header, None),
             Err(SqliteError::NotADatabase(_))
         ));
     }

@@ -1559,8 +1559,9 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             }
             // The stores write where they are opened, and each opens at any
             // path it is given, so the import opens none: it writes only the
-            // stores its caller hands it. `Database::open` is the in-tree
-            // reader's, over bytes already in memory.
+            // stores its caller hands it. `Database`, the in-tree reader's
+            // name, is passed; the reader reads bytes already in memory, by
+            // `Database::from_bytes`, and has no `open` of its own.
             "open" | "try_open"
                 if path_sep(i.wrapping_sub(2)) && ident(i.wrapping_sub(3)) != Some("Database") =>
             {
@@ -1902,7 +1903,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() -> u8 { super::g() }", false),
         ("use ::std::fs::File;", false),
         ("pub use ::core::fmt::Display;", false),
-        ("fn f(a: &[u8]) { let _ = Database::open(a, None); }", false),
+        (
+            "fn f(a: &[u8]) { let _ = Database::from_bytes(a, None); }",
+            false,
+        ),
         (
             "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",
             false,

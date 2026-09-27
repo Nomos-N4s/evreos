@@ -74,7 +74,7 @@ pub(super) fn read(
         return Ok((Vec::new(), Vec::new()));
     };
     let unreadable = |error: SqliteError| ImportError::unreadable(store, error);
-    let db = Database::open(&copy.main, copy.wal.as_deref()).map_err(unreadable)?;
+    let db = Database::from_bytes(&copy.main, copy.wal.as_deref()).map_err(unreadable)?;
     let places = places(&db).map_err(unreadable)?;
 
     let history = if scope.history {
