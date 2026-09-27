@@ -42,6 +42,11 @@ points to it.
   R1-3, R1-4, R1-5, R1-6, R1-14 (a duplicate of R1-2) and R1-15.
 - The founder's direction on 2026-09-27, given in conversation while T061 was
   in progress, and recorded in Linear issue CAR-353 the same day.
+- The founder's confirmation on 2026-09-27, after review on #107 widened the
+  wording (round 1's F8 and F12), that a reason may also be cited from the
+  constitution, the plan and research and `CLAUDE.md`, and that the guarantee
+  clause covers code comments too; and the founder's decision the same day that
+  T125's reading of FR-026a is a founder decision. Both recorded in CAR-353.
 
 ## Serves
 
