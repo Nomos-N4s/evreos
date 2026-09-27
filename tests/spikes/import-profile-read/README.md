@@ -32,6 +32,25 @@ python3 probe_lib.py /tmp/p/Default/History "select count(*) from urls"
 python3 stress_copy.py /tmp/p/Default/History "select count(*) from urls" 150 main
 ```
 
+Edge takes the same run with its own binary, profile and bookmarks page:
+
+```
+msedge --headless=new --no-first-run --remote-debugging-port=9334 \
+    --user-data-dir=/tmp/e http://127.0.0.1:8765/p/1 &
+node cdp_bookmarks.mjs 9334 edge://favorites 75 &
+cargo run --release -p evreos-shell --example import_probe -- edge /tmp/e/Default 60
+```
+
+Firefox has no DevTools bookmarks driver here, so its run writes history
+only, and its store is copied with the log beside it:
+
+```
+mkdir -p /tmp/f
+firefox --headless --no-remote --profile /tmp/f http://127.0.0.1:8765/p/1 &
+cargo run --release -p evreos-shell --example import_probe -- firefox /tmp/f 60
+python3 stress_copy.py /tmp/f/places.sqlite "select count(*) from moz_places" 150 sidecars
+```
+
 and against the synthetic writers, each beside the shipped reader and,
 with a writer of its own, beside single-pass copies through the SQLite
 library:
@@ -53,6 +72,7 @@ stopped, over the profiles the runs above left and the synthetic one:
 
 ```
 cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/p/Default
+cargo run --release -p evreos-shell --example import_timing -- edge /tmp/e/Default
 cargo run --release -p evreos-shell --example import_timing -- firefox /tmp/f
 python3 big_bookmarks.py /tmp/big
 cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/big/Default
