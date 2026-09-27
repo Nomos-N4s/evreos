@@ -620,6 +620,21 @@ mod artefact {
         ));
         // The last moment it is accepted, as decide accepts it.
         verify(&offer, 4_000_000_000, ARTEFACT).unwrap();
+        // Refused before anything is read: a reader that fails, or that
+        // would count what it gives, is never read from.
+        struct Counting(usize);
+        impl Read for Counting {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                self.0 += buffer.len();
+                Err(io::Error::other("read"))
+            }
+        }
+        let mut counting = Counting(0);
+        assert!(matches!(
+            verify(&offer, 4_000_000_001, &mut counting),
+            Err(ArtefactRefusal::Expired)
+        ));
+        assert_eq!(counting.0, 0);
     }
 
     #[test]
