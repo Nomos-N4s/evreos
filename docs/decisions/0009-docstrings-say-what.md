@@ -24,8 +24,8 @@ decision record, an ADR or `CLAUDE.md` -- and is cited by its identifier, never
 paraphrased or argued afresh. No docstring or comment claims a guarantee
 beyond what the code it documents does.
 
-The rule binds a file when a change edits it. Existing docstrings are brought
-in line then, not in a sweep.
+The rule binds a file when a pull request opened after the amendment merges
+edits it. Existing docstrings are brought in line then, not in a sweep.
 
 It is stated in the constitution's Development Workflow, and `CLAUDE.md`
 points to it.
