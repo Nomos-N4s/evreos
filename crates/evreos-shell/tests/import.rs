@@ -1211,12 +1211,15 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             },
             // The import writes no file of its own: nothing in it may
             // write, create,
-            // remove or rename a file, or change one's permissions. A file it
-            // wrote could be anything the operating system treats as code or
-            // as a route out, which no refusal of a module could see.
+            // remove or rename a file, or change one's permissions, mode or
+            // times. A file it wrote could be anything the operating system
+            // treats as code or as a route out, which no refusal of a module
+            // could see.
             "remove_file" | "remove_dir" | "remove_dir_all" | "rename" | "create_dir"
             | "create_dir_all" | "hard_link" | "soft_link" | "symlink" | "set_permissions"
-            | "write_all" | "set_len" => found.push(format!("names `{word}`, which writes")),
+            | "write_all" | "set_len" | "set_times" | "set_modified" | "create_buffered" => {
+                found.push(format!("names `{word}`, which writes"))
+            }
             "write" | "copy" | "create" | "create_new" | "append"
                 if punct(i.wrapping_sub(1), '.')
                     || punct(i.wrapping_sub(1), ':')
@@ -1365,6 +1368,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ),
         (
             "fn f(o: &mut std::fs::OpenOptions) { o.mode(0o755); }",
+            false,
+        ),
+        (
+            "fn f(file: &std::fs::File) { file.set_modified(std::time::SystemTime::now()).unwrap(); }",
             false,
         ),
         ("use super::*;", false),
