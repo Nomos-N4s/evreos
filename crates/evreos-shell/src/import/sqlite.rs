@@ -792,17 +792,24 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
         let Some(first) = tokens.first() else {
             continue;
         };
-        if ["UNIQUE", "CHECK", "FOREIGN"]
+        // A table constraint. SQLite needs no comma between two of them, so
+        // `UNIQUE(x) PRIMARY KEY(id)` is one definition here, and the key is
+        // looked for anywhere in it, not only at its start.
+        if ["UNIQUE", "CHECK", "FOREIGN", "PRIMARY"]
             .iter()
             .any(|word| first.is_word(word))
         {
-            continue;
-        }
-        if first.is_word("PRIMARY") {
             // A table-level key over one column makes that column the rowid
             // alias when the column is declared INTEGER.
-            if let Some(Token::Group(inner)) = tokens.iter().find(|t| matches!(t, Token::Group(_)))
-            {
+            let key = tokens.windows(3).find_map(|window| match window {
+                [primary, key, Token::Group(inner)]
+                    if primary.is_word("PRIMARY") && key.is_word("KEY") =>
+                {
+                    Some(inner)
+                }
+                _ => None,
+            });
+            if let Some(inner) = key {
                 let keyed = split_top_level(inner);
                 if keyed.len() == 1 {
                     // Parentheses around the name, `PRIMARY KEY((id))`,
@@ -1361,6 +1368,31 @@ mod tests {
             (
                 "CREATE TABLE t(id INTEGER, url TEXT, PRIMARY KEY((id)))",
                 &["id", "url"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, UNIQUE(x) PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, CHECK(1) PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, FOREIGN KEY(x) REFERENCES p(a) PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, CONSTRAINT a UNIQUE(x) CONSTRAINT b PRIMARY KEY(id))",
+                &["id", "x"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, x, PRIMARY KEY(id) UNIQUE(x))",
+                &["id", "x"],
                 Some(0),
             ),
             (

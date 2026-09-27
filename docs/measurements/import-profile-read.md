@@ -174,10 +174,11 @@ classified, how a store that cannot be read is told from one it cannot
 parse, how malformed input is bounded, how a rowid alias declared with
 irregular spacing, through a named constraint or past a comment is found,
 which declared types make one, where a schema's word ends, that a table's
-key may sit inside extra parentheses, that a key word inside a string
-makes none, where the column list begins when the table's name holds a
-parenthesis, which generated columns a row stores, and which addresses at
-the edges of the filter are kept. And an
+key may follow another table constraint with no comma or sit inside extra
+parentheses, that a key word inside a string makes none, where the column
+list begins when the table's name holds a parenthesis, which generated
+columns a row stores, and which addresses at the edges of the filter are
+kept. And an
 attempt refused at a journal check now reads the files once more, one at
 a time, to fingerprint them. That lengthens only those
 attempts, not the ones retried because the files moved, so the slowest
