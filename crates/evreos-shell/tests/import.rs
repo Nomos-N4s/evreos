@@ -848,8 +848,10 @@ fn tokens(source: &str) -> Vec<Tok> {
     while i < chars.len() {
         let ch = chars[i];
         // Only ASCII whitespace separates tokens here. rustc also skips the
-        // two direction marks, U+200E and U+200F, so any character outside
-        // ASCII is kept as a token of its own, for the check to refuse.
+        // two direction marks, U+200E and U+200F, so they and every other
+        // character outside ASCII stay in the token stream, for the check to
+        // refuse: a letter as part of an identifier, anything else as a
+        // token of its own.
         if ch.is_ascii_whitespace() || ch == '\u{b}' {
             i += 1;
         } else if ch == '/' && at(i + 1) == Some('/') {
