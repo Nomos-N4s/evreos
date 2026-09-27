@@ -17,8 +17,8 @@ publish.workspace = true
 # default-apps page. The shell already links windows 0.62 on Windows,
 # through evreos-chrome's accesskit_windows, and every crate
 # windows-registry depends on is in that same family at these versions, so
-# windows-registry is the one crate they add. Their byte cost is stated in
-# the pull request that adds them.
+# windows-registry is the one crate they add. Their byte cost is recorded
+# at docs/measurements/default-browser-registration.md.
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.6.1"
 windows = { version = "0.62.2", default-features = false, features = ["System", "Foundation"] }
