@@ -11,9 +11,11 @@
 # refuses the file rather than failing every commit with a misleading reason.
 # Keep the file free of blank lines; ssh-keygen warns on each one.
 #
-# THE FOUNDER'S PUBLIC KEY GOES HERE. Until a key is listed, the check reports
-# that signing is not yet enabled and skips, so nothing is enforced yet. Only
-# the founder can change that, because only the founder holds the key.
+# The founder's public key is listed below, on the one line that is not a
+# comment. Before it was listed, the check reported that signing was not yet
+# enabled and skipped; once it is on the base branch, every commit in a pull
+# request must be signed by it. Only the founder can sign, because only the
+# founder holds the private key.
 #
 # What is missing is the key, not the signing. Commits here already carry SSH
 # signatures; without a key to check them against, a signature is a claim
@@ -32,3 +34,4 @@
 # therefore takes effect one merge after it lands, and the pull request that
 # adds the first key passes as not yet enabled. What enforcement needs beyond
 # this file is recorded in docs/governance/branch-protection.md.
+capintobe@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKb7Gz73JHggfT0Gth17JfKqHCXGrnUrZlKxDN9PjWUt
