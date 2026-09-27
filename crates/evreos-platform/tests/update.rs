@@ -661,7 +661,7 @@ mod schedule {
     const HOUR: Duration = Duration::from_secs(3600);
 
     #[test]
-    fn the_period_and_tolerance_come_from_the_budget_file() {
+    fn the_period_comes_from_the_budget_file_and_the_tolerance_is_a_tenth_of_it() {
         let schedule = Schedule::new();
         assert_eq!(
             schedule.period(),

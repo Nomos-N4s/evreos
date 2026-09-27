@@ -39,7 +39,9 @@ impl Schedule {
     }
 
     /// How far past its due time the platform's scheduler may fire a check,
-    /// to run it alongside other work: a tenth of the period.
+    /// to run it alongside other work: a tenth of the period. `budgets.toml`
+    /// states the period alone; the tenth is this design's choice, which no
+    /// requirement or budget states.
     pub const fn tolerance(&self) -> Duration {
         Duration::from_secs(self.period.as_secs() / 10)
     }
