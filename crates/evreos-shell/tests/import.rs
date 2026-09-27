@@ -1647,9 +1647,14 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             // item. A group may hold those names alone.
             // `catalogue` is the catalogue's function, and the import calls
             // it. A module of the same name, which Rust allows beside it,
-            // could re-export anything, so no path may continue after it.
+            // could re-export anything, so no path may continue after it,
+            // and it may not be renamed, since a `use` brings the module in
+            // under the new name too.
             "catalogue" if path_sep(i + 1) => {
                 found.push("`catalogue` followed by `::`".to_string());
+            }
+            "catalogue" if ident(i + 1) == Some("as") => {
+                found.push("`catalogue` renamed".to_string());
             }
             "evreos_i18n" => {
                 let taken = |at: usize| matches!(ident(at), Some("Language" | "catalogue"));
@@ -1673,6 +1678,8 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
                     }
                 } else if !taken(i + 3) {
                     found.push(format!("`evreos_i18n::` followed by {next:?}"));
+                } else if ident(i + 4) == Some("as") {
+                    found.push(format!("`evreos_i18n::{next:?}` renamed"));
                 }
             }
             // `pub(crate)` is a visibility; any other `crate` leads to the
@@ -1982,6 +1989,19 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use evreos_i18n::{Language, net::TcpStream};", false),
         (
             "fn f() { evreos_i18n::catalogue::net::TcpStream::connect(\"x\"); }",
+            false,
+        ),
+        (
+            "use evreos_i18n::catalogue as c; fn f() { c::net::TcpStream::connect(\"x\"); }",
+            false,
+        ),
+        ("use evreos_i18n::Language as L;", false),
+        (
+            "use evreos_i18n::catalogue; use self::catalogue as c; fn f() { c::net::X; }",
+            false,
+        ),
+        (
+            "use evreos_i18n::catalogue; use self::{catalogue as c}; fn f() { c::net::X; }",
             false,
         ),
         (
