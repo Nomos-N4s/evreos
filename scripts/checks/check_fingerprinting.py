@@ -395,7 +395,10 @@ SOURCES = {
         ("GetSystemMetrics", r"GetSystemMetrics(?:ForDpi)?"),
         ("GetDeviceCaps", r"GetDeviceCaps"),
         ("NSScreen", r"NSScreen"),
-        ("CGDisplay", r"CGDisplay(?:Bounds|PixelsWide|PixelsHigh|CopyDisplayMode|ScreenSize)"),
+        # The bare type too: the core-graphics crate spells these calls
+        # `CGDisplay::main().pixels_wide()`.
+        ("CGDisplay", r"CGDisplay(?:Bounds|PixelsWide|PixelsHigh|CopyDisplayMode|ScreenSize)?"),
+        ("CGDirectDisplayID", r"CGDirectDisplayID"),
         ("CGMainDisplayID", r"CGMainDisplayID"),
         ("CGGetActiveDisplayList", r"CGGetActiveDisplayList"),
         ("gdk_screen", r"gdk_screen_\w+"),
@@ -419,6 +422,7 @@ SOURCES = {
             r"|=\s*screen(?=[ \t]*(?:[;,)}\r\n]|\Z))"
         )),
         ("getScreenDetails", r"getScreenDetails"),
+        ("DisplayInformation", r"DisplayInformation"),
     ),
     "installed fonts": (
         ("EnumFontFamilies", r"EnumFontFamilies(?:Ex)?[AW]?"),
@@ -427,6 +431,8 @@ SOURCES = {
         ("IDWriteFontCollection", r"IDWriteFontCollection\d?"),
         ("CTFontManagerCopyAvailable", r"CTFontManagerCopyAvailable\w+"),
         ("CTFontCollectionCreateFromAvailableFonts", r"CTFontCollectionCreateFromAvailableFonts"),
+        ("create_for_all_families", r"create_for_all_families"),
+        ("FontCollection::system", r"FontCollection::(?:get_)?system"),
         ("NSFontManager", r"NSFontManager"),
         ("availableFonts", r"availableFonts"),
         ("availableFontFamilies", r"availableFontFamilies"),
