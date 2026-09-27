@@ -34,7 +34,7 @@
 //!   `OpenOptionsExt`;
 //! - it reaches no part of this crate but the stores, by `crate::store` or by
 //!   `super` no further up than the import itself;
-//! - it groups nothing directly under `std`;
+//! - it imports nothing by a glob, and groups nothing directly under `std`;
 //! - it writes no file but the member's stores, through them, and calls
 //!   nothing of the standard library's that writes, creates, removes or
 //!   renames a file, or changes one's permissions;

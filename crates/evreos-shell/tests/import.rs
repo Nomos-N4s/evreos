@@ -1133,6 +1133,12 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
     }
 
     for i in 0..end {
+        // A glob brings in names the checks below then see bare, with
+        // nothing to say where they came from: `use std::fs::*;` makes
+        // `write(…)` the file-writing one. The import names what it uses.
+        if punct(i, '*') && i >= 2 && path_sep(i - 2) {
+            found.push("a glob import".to_string());
+        }
         let Some(word) = ident(i) else {
             continue;
         };
@@ -1320,6 +1326,16 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             "fn f(file: &mut std::fs::File) { file.set_len(0).unwrap(); }",
             false,
         ),
+        (
+            "use std::fs::*; fn f() { write(\"x\", b\"y\").unwrap(); }",
+            false,
+        ),
+        (
+            "use std::fs; use fs::*; fn f() { copy(\"a\", \"b\").unwrap(); }",
+            false,
+        ),
+        ("use std::io::*;", false),
+        ("use super::*;", false),
         (
             "#[cfg(test)]\nmod tests { #[test] fn t() {} }\nfn leak() { crate::tabs::g() }",
             false,
