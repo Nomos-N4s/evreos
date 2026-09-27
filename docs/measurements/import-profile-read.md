@@ -204,8 +204,9 @@ The import verifies it anyway, since the same protocol costs one comparison.
 
 One trial against the rollback writer needed all eight attempts the default
 policy allows. A browser writing that hard would, some of the time, exhaust
-the bound, and the import then fails with `SourceBusy` — naming the store and
-asking the member to close that browser — rather than importing a torn copy.
+the bound, and the import then fails with `SourceBusy`, naming the store,
+rather than importing a torn copy; the error's documentation tells the
+surface that shows it to offer closing that browser and trying again.
 
 ### Cross-check
 
