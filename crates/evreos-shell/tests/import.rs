@@ -1106,12 +1106,13 @@ fn denied_crates() -> Vec<String> {
 
 fn resolve_denied_crates() -> Vec<String> {
     // Offline, cargo can resolve only the packages it holds, which are the
-    // ones a build for this host fetched, so the graph is filtered to the
-    // host. A dependency declared for some platforms only may then be missing
-    // from it, so any such dependency fails the test rather than go
-    // unchecked. One declared for every platform is in it, but for an
-    // optional one, since the graph is taken with default features.
-    let resolved = cargo_metadata(&["--filter-platform", &host_triple()]);
+    // ones a build for this host with every feature fetched, so the graph
+    // is filtered to the host. A dependency declared for some platforms
+    // only may then be missing from it, so any such dependency fails the
+    // test rather than go unchecked. Every feature is enabled, so an
+    // optional dependency is in the graph too, and one declared for every
+    // platform always is.
+    let resolved = cargo_metadata(&["--filter-platform", &host_triple(), "--all-features"]);
     let declared = cargo_metadata(&["--no-deps"]);
     let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("Cargo.toml")
@@ -1172,9 +1173,8 @@ fn host_triple() -> String {
 /// The normal dependencies the package whose manifest is `manifest`
 /// declares, in `declared`, a `--no-deps` report, only for some platforms.
 /// One declared for every platform is in the host's graph wherever the test
-/// runs, but for an optional one, which the default features leave out;
-/// one declared for a platform may be missing from it, and its name with
-/// it, so none is taken on trust.
+/// runs; one declared for a platform may be missing from it, and its name
+/// with it, so none is taken on trust.
 fn platform_specific(declared: &Json, manifest: &Path) -> Vec<String> {
     let str_at =
         |value: &Json, key: &str| value.get(key).and_then(Json::as_str).map(str::to_string);
