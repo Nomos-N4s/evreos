@@ -23,6 +23,8 @@ struct Memory {
     /// Fails the write whose index this is, counting from zero.
     fail_at: Option<usize>,
     writes: usize,
+    /// Fails every removal of this key, leaving it in place.
+    stuck: Option<String>,
 }
 
 fn fold(key: &str) -> String {
@@ -65,6 +67,13 @@ impl Registry for Memory {
     }
 
     fn remove_key(&mut self, key: &str) -> io::Result<()> {
+        if self
+            .stuck
+            .as_deref()
+            .is_some_and(|stuck| fold(stuck) == fold(key))
+        {
+            return Err(io::Error::other("removal refused"));
+        }
         let key = fold(key);
         let below = format!("{key}\\");
         self.keys.retain(|k, _| *k != key && !k.starts_with(&below));
@@ -463,4 +472,25 @@ fn tier_one_registers_then_opens_the_default_apps_page() {
 #[test]
 fn the_windows_launcher_accepts_the_default_apps_page() {
     evreos_platform::default_browser::open_settings().unwrap();
+}
+
+#[test]
+fn a_removal_that_fails_does_not_stop_the_others() {
+    let mut registry = with_neighbours();
+    register(&mut registry, &APP).unwrap();
+    registry.stuck = Some(CLIENT.to_string());
+
+    let error = unregister(&mut registry, &APP).unwrap_err();
+    assert_eq!(error.to_string(), "removal refused");
+    assert!(registry.has_key(CLIENT));
+    for key in [
+        r"Software\Classes\SampleBrowserHTML",
+        r"Software\Classes\SampleBrowserURL",
+    ] {
+        assert!(!registry.has_key(key), "{key} was left behind");
+    }
+    assert_eq!(
+        registry.value(REGISTERED_APPLICATIONS, "SampleBrowser"),
+        None
+    );
 }

@@ -235,12 +235,17 @@ pub fn unregister(registry: &mut impl Registry, app: &Application<'_>) -> io::Re
 
 fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Result<()> {
     // The pointer first, so the system never lists capabilities that are
-    // half removed.
-    registry.remove_value(REGISTERED_APPLICATIONS, &registration.key)?;
+    // half removed. Every removal is tried even after one fails, so a
+    // failure leaves as little behind as it can, and the first error is
+    // the one reported.
+    let mut result = registry.remove_value(REGISTERED_APPLICATIONS, &registration.key);
     for key in &registration.owned_keys {
-        registry.remove_key(key)?;
+        let removed = registry.remove_key(key);
+        if result.is_ok() {
+            result = removed;
+        }
     }
-    Ok(())
+    result
 }
 
 /// Whether `path` is an absolute Windows path that can sit between quotes on
