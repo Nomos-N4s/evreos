@@ -1110,33 +1110,85 @@ fn denied_crates() -> Vec<String> {
 /// `[dependencies] foo = …`, `[dependencies.foo]`, `dependencies.foo = …`,
 /// `foo.workspace = true` and the same under `[target.….dependencies]` or
 /// `[target.…]` all name `foo`, however their dots are spaced or their parts
-/// quoted. Development and build dependencies do not reach the library.
+/// quoted or escaped, and so does `foo` as a key of an inline table under
+/// any of those, `dependencies = { foo = "1" }`. Development and build
+/// dependencies do not reach the library.
 fn denied_in(manifest: &str) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
     for line in manifest.lines() {
         let line = line[..outside_strings(line, '#').unwrap_or(line.len())].trim();
-        let path: Vec<String> = if let Some(header) = line.strip_prefix('[') {
+        if let Some(header) = line.strip_prefix('[') {
             let header = header.strip_prefix('[').unwrap_or(header);
             let end = outside_strings(header, ']').unwrap_or(header.len());
             table = toml_key(&header[..end]);
-            table.clone()
+            deny_dependency(&table, &mut denied);
         } else if let Some(at) = outside_strings(line, '=') {
-            table.iter().cloned().chain(toml_key(&line[..at])).collect()
-        } else {
-            continue;
-        };
-        let name = match path.as_slice() {
-            [table, name, ..] if table == "dependencies" => name,
-            [target, _, table, name, ..] if target == "target" && table == "dependencies" => name,
-            _ => continue,
-        };
-        let name = name.replace('-', "_");
-        if name != ALLOWED_CRATE && !denied.contains(&name) {
-            denied.push(name);
+            let path: Vec<String> = table.iter().cloned().chain(toml_key(&line[..at])).collect();
+            deny_in_value(&path, line[at + 1..].trim(), &mut denied);
         }
     }
     denied
+}
+
+/// Adds to `denied` the dependency the key `path` names, if it names one.
+fn deny_dependency(path: &[String], denied: &mut Vec<String>) {
+    let name = match path {
+        [table, name, ..] if table == "dependencies" => name,
+        [target, _, table, name, ..] if target == "target" && table == "dependencies" => name,
+        _ => return,
+    };
+    let name = name.replace('-', "_");
+    if name != ALLOWED_CRATE && !denied.contains(&name) {
+        denied.push(name);
+    }
+}
+
+/// As [`deny_dependency`] for `path`, and, where `value` is an inline table,
+/// for each key inside it, at any depth: `dependencies = { foo = "1" }`
+/// names `foo` as `[dependencies] foo = "1"` does.
+fn deny_in_value(path: &[String], value: &str, denied: &mut Vec<String>) {
+    deny_dependency(path, denied);
+    let Some(inner) = value.strip_prefix('{') else {
+        return;
+    };
+    for entry in inline_entries(inner) {
+        if let Some(at) = outside_strings(entry, '=') {
+            let key: Vec<String> = path.iter().cloned().chain(toml_key(&entry[..at])).collect();
+            deny_in_value(&key, entry[at + 1..].trim(), denied);
+        }
+    }
+}
+
+/// The entries of an inline table, from just after its `{` to its `}`: the
+/// text between commas that stand outside strings and nested brackets.
+fn inline_entries(inner: &str) -> Vec<&str> {
+    let mut entries = Vec::new();
+    let (mut quote, mut escaped, mut depth, mut start) = (None, false, 0usize, 0);
+    for (at, ch) in inner.char_indices() {
+        match quote {
+            Some('"') if escaped => escaped = false,
+            Some('"') if ch == '\\' => escaped = true,
+            Some(open) if ch == open => quote = None,
+            Some(_) => {}
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                '{' | '[' => depth += 1,
+                '}' | ']' if depth == 0 => {
+                    entries.push(&inner[start..at]);
+                    return entries;
+                }
+                '}' | ']' => depth -= 1,
+                ',' if depth == 0 => {
+                    entries.push(&inner[start..at]);
+                    start = at + 1;
+                }
+                _ => {}
+            },
+        }
+    }
+    entries.push(&inner[start..]);
+    entries
 }
 
 /// Where `target` first stands in `line` outside a TOML string, whose
@@ -1165,15 +1217,17 @@ fn toml_key(key: &str) -> Vec<String> {
     loop {
         let end = outside_strings(rest, '.').unwrap_or(rest.len());
         let part = rest[..end].trim();
-        let part = part
+        let basic = part
             .strip_prefix('"')
-            .and_then(|part| part.strip_suffix('"'))
-            .or_else(|| {
-                part.strip_prefix('\'')
-                    .and_then(|part| part.strip_suffix('\''))
-            })
-            .unwrap_or(part);
-        parts.push(part.replace("\\\"", "\"").replace("\\\\", "\\"));
+            .and_then(|part| part.strip_suffix('"'));
+        let literal = part
+            .strip_prefix('\'')
+            .and_then(|part| part.strip_suffix('\''));
+        parts.push(match (basic, literal) {
+            (Some(basic), _) => unescape(basic),
+            (None, Some(literal)) => literal.to_string(),
+            (None, None) => part.to_string(),
+        });
         if end == rest.len() {
             return parts;
         }
@@ -1181,9 +1235,57 @@ fn toml_key(key: &str) -> Vec<String> {
     }
 }
 
+/// A TOML basic string's text, its escapes read: `\"`, `\\`, `\b`, `\t`,
+/// `\n`, `\f`, `\r`, `\uXXXX` and `\UXXXXXXXX`.
+fn unescape(text: &str) -> String {
+    let mut out = String::new();
+    let mut chars = text.chars();
+    while let Some(ch) = chars.next() {
+        if ch != '\\' {
+            out.push(ch);
+            continue;
+        }
+        let digits = match chars.next() {
+            Some('b') => {
+                out.push('\u{8}');
+                continue;
+            }
+            Some('t') => {
+                out.push('\t');
+                continue;
+            }
+            Some('n') => {
+                out.push('\n');
+                continue;
+            }
+            Some('f') => {
+                out.push('\u{c}');
+                continue;
+            }
+            Some('r') => {
+                out.push('\r');
+                continue;
+            }
+            Some('u') => 4,
+            Some('U') => 8,
+            Some(other) => {
+                out.push(other);
+                continue;
+            }
+            None => break,
+        };
+        let code: String = chars.by_ref().take(digits).collect();
+        if let Some(ch) = u32::from_str_radix(&code, 16).ok().and_then(char::from_u32) {
+            out.push(ch);
+        }
+    }
+    out
+}
+
 #[test]
 fn each_listed_form_of_dependency_table_is_read() {
     let manifest = "dependencies.toplevel = \"1\"\n\
+        dependencies = { inline = \"1\", \"inline\\u002dtwo\" = { path = \"{,}\" } }\n\
         [package]\nname = \"x\" # not a dependency\n\
         [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
         evreos-i18n = { path = \"i\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
@@ -1191,6 +1293,7 @@ fn each_listed_form_of_dependency_table_is_read() {
         [dependencies . spaced]\nversion = \"1\"\n\
         [ target . 'cfg(unix)' . dependencies ]\ntspaced = \"1\"\n\
         [target.'cfg(any())']\ndependencies.intarget = \"1\"\n\
+        [target.'cfg(all())']\ndependencies = { inline-target = { path = \"x\" } }\n\
         [target.'cfg(windows)'.dependencies] # the platform's own\nwindows-sys = \"1\"\n\
         [target.\"cfg(unix)\".dependencies]#x\n# nix = \"1\"\nrustix = \"1\" # \"#\"\n\
         [target.x86_64-unknown-linux-gnu.dependencies]\nlibc = \"0.2\"\n\
@@ -1201,6 +1304,8 @@ fn each_listed_form_of_dependency_table_is_read() {
         denied_in(manifest),
         [
             "toplevel",
+            "inline",
+            "inline_two",
             "evreos_net",
             "winit",
             "quoted_literal",
@@ -1209,6 +1314,7 @@ fn each_listed_form_of_dependency_table_is_read() {
             "spaced",
             "tspaced",
             "intarget",
+            "inline_target",
             "windows_sys",
             "rustix",
             "libc",
