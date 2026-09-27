@@ -966,6 +966,7 @@ name = "evreos-platform"
 version = "0.0.0"
 dependencies = [
  "ed25519-dalek",
+ "evreos-net",
  "getrandom 0.3.4",
  "sha2",
  "windows 0.62.2",

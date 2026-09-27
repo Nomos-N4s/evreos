@@ -9,6 +9,10 @@
 //! document fixes, and says whether this install is offered the update.
 //! [`artefact`] checks an offered update's artefact against its manifest
 //! before anything applies it.
+//!
+//! The check leaves the machine only as [`check_request`] plans it: the
+//! `UpdateCheck` purpose, to the update endpoint the brand configuration
+//! names, and nothing about the install.
 
 pub mod artefact;
 pub mod manifest;
@@ -16,6 +20,8 @@ pub mod rollout;
 pub mod wake;
 
 use std::fmt;
+
+use evreos_net::{Endpoint, NonHistory, PlannedRequest, Purpose, request};
 
 use self::manifest::{Refusal, UpdateKey, VerifiedManifest, Version};
 use self::rollout::RolloutDraw;
@@ -25,6 +31,18 @@ use self::wake::Wake;
 /// under this entry and no other, every `period_seconds`, and one check may
 /// use at most `processor_time_bound_ms` of processor time.
 pub const UPDATE_CHECK_WAKE: Wake = include!(concat!(env!("OUT_DIR"), "/update_wake.rs"));
+
+/// The update check's one transmission: a request for the manifest, with
+/// the FR-014 `UpdateCheck` purpose, to `endpoint`, the update endpoint the
+/// shell resolves from the brand configuration.
+///
+/// It takes nothing else, so nothing about the install, its rollout draw or
+/// its version among them, can reach the request: the install is decided on
+/// the machine, from the manifest the request fetches (research §10.1,
+/// FR-036a).
+pub fn check_request(endpoint: Endpoint) -> PlannedRequest {
+    request(Purpose::NonHistory(NonHistory::UpdateCheck), endpoint)
+}
 
 /// The build that is running, which a manifest is checked against.
 #[derive(Clone, Copy, Debug)]

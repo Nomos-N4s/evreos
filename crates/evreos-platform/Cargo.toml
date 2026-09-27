@@ -18,6 +18,9 @@ publish.workspace = true
 # tables, and brings sha2 and digest at the versions the workspace already
 # resolves. Its byte cost is stated in the pull request that adds it.
 [dependencies]
+# The update check leaves the machine only as an evreos-net request, the
+# workspace's one egress chokepoint.
+evreos-net = { path = "../evreos-net" }
 ed25519-dalek = { version = "2.2.0", default-features = false }
 # The rollout draw's randomness, from the operating system. The shell
 # already links this version through winit's ahash.

@@ -568,3 +568,40 @@ mod artefact {
         ));
     }
 }
+
+mod check_request {
+    use std::fs;
+
+    use evreos_net::{BrandResolved, Endpoint, NonHistory, Purpose};
+    use evreos_platform::update::check_request;
+    use evreos_platform::update::rollout::RolloutDraw;
+
+    #[test]
+    fn the_check_carries_its_purpose_and_endpoint_and_nothing_of_the_install() {
+        let endpoint = || {
+            Endpoint::resolve(BrandResolved::declared_in_brand_configuration(
+                String::from("brand://update-host"),
+            ))
+        };
+        let planned = check_request(endpoint());
+        assert_eq!(
+            planned.purpose(),
+            &Purpose::NonHistory(NonHistory::UpdateCheck)
+        );
+        assert_eq!(planned.endpoint(), &endpoint());
+
+        // The install's draw, a distinctive value, appears nowhere in what
+        // the request holds.
+        let dir = std::env::temp_dir().join(format!("evreos-check-{}", std::process::id()));
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("rollout");
+        fs::write(&path, "731529\n").unwrap();
+        let _draw = RolloutDraw::load_or_draw(&path).unwrap();
+        let _ = fs::remove_dir_all(&dir);
+        let held = format!("{planned:?}");
+        assert!(!held.contains("731529"), "{held}");
+        // The request is the same for every install: the same endpoint
+        // plans an equal request whatever the install drew.
+        assert_eq!(check_request(endpoint()), planned);
+    }
+}
