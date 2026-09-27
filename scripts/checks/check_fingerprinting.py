@@ -177,9 +177,11 @@ are facts this check refuses by name. Formatting or serialising an `Instant`
 rests on review, and so does a correlator built from intervals, such as timing
 a fixed workload to fingerprint the processor.
 
-The locale is not a source here: FR-035 has the shell read the member's
-language, and FR-039c's closed report contents and FR-039d's closed counter
-keys already keep it out of crash reports and counters.
+The locale is not read. Research section 4.3 lists it among the fields FR-036a
+rules out, but T061's enumeration leaves it out, so a read of the system locale
+rests on review under FR-036a. The member's interface language is a different
+value: FR-035 keeps it as a preference the member chooses, stored in the
+profile, and never read from the device.
 
 A device provisioning identifier a content-protection path would require --
 the last item research section 4.3 lists -- is not read. ADR-0001 risk 8
