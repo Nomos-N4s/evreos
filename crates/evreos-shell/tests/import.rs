@@ -1222,7 +1222,7 @@ fn a_dependency_for_some_platforms_is_not_passed_over() {
                 {{"name": "zz", "kind": null, "target": "cfg(unix)"}},
                 {{"name": "zz", "rename": "bar", "kind": null, "target": "cfg(windows)"}},
                 {{"name": "tested", "kind": "dev", "target": "cfg(windows)"}},
-                {{"name": "built", "kind": "build", "target": null}}
+                {{"name": "built", "kind": "build", "target": "cfg(unix)"}}
             ]}}
         ]}}"#,
         manifest = manifest.display().to_string(),
