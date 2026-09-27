@@ -80,7 +80,8 @@ where to look and a check could one day parse it.
    its unit, so that the budget file can be checked against the record line by
    line.
 7. **Consequences** — what the decision binds from its date, and what result
-   would reopen it.
+   would reopen it. A decision that takes effect from a later event than its
+   date, as an amendment does from its merge, names that event here.
 8. **Corrections** — dated entries, appended and never edited, each saying what
    it corrected and why.
 

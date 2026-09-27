@@ -40,9 +40,9 @@ The link stays mandatory. What changes is which tracker may carry it.
   direction, before the rule changed, and says so in its body. The GitHub
   issue opened for it earlier, #101, was closed as not planned. The pull
   request carrying this amendment, #103, is linked to CAR-351 alone in the
-  same way. Until the amendment merges, both fall short of the rule then in
-  force, and both need the founder's override, stated on each before its
-  merge, to land.
+  same way. Neither is covered by this decision, whenever it merges: both
+  fall short of the rule in force when they were opened, and both need the
+  founder's override, stated on each before its merge, to land.
 - `AGENTS.md` already lists `Refs CAR-N` beside `Refs #N` as a commit's issue
   reference, and `scripts/check-commit-hygiene.py` accepts both.
 
