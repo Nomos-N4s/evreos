@@ -756,7 +756,7 @@ fn discovery_finds_each_browsers_profiles_by_the_names_they_carry() {
 }
 
 #[test]
-fn discovery_never_follows_a_firefox_profile_path_to_a_share() {
+fn discovery_skips_a_firefox_profile_path_in_a_share_s_own_shape() {
     // A path opening on two separators names a network share on Windows; on
     // Linux `//dir` is `/dir`, so a real local directory stands in for the
     // share, and a discovery that followed the path would find it.
