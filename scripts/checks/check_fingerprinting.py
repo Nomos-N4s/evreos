@@ -212,8 +212,9 @@ member, which research section 4.3 sets out of FR-036a's scope and out of this
 architecture's reach.
 
 Files other than Rust source, the script and markup suffixes above and
-`Cargo.toml` are not read: Python is the tooling that runs this check and ships
-in nothing, and markdown is where the forbidden sources are quoted.
+`Cargo.toml` are not read, unless a Rust file brings one into the build as
+SOURCE describes: Python is the tooling that runs this check and ships in
+nothing, and markdown is where the forbidden sources are quoted.
 Directories are matched with case folded where they must be, the release
 platforms' filesystems folding case. `.git/` is not read, and neither is
 Cargo's build output: a `target/` directory beside a `Cargo.toml`, which
