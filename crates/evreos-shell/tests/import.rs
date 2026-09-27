@@ -970,6 +970,21 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
     };
     let punct = |i: usize, ch: char| toks.get(i) == Some(&Tok::Punct(ch));
     let path_sep = |i: usize| punct(i, ':') && punct(i + 1, ':');
+    // Whether token `i` sits inside a path's `{…}` group, as `super` does in
+    // `use super::{json, super::tabs}`: the nearest brace still open before
+    // it follows a `::`. A block's brace, as in `{ super::f() }`, does not.
+    let in_path_group = |i: usize| {
+        let mut depth = 0usize;
+        for j in (0..i).rev() {
+            match toks[j] {
+                Tok::Punct('}') => depth += 1,
+                Tok::Punct('{') if depth > 0 => depth -= 1,
+                Tok::Punct('{') => return j >= 2 && path_sep(j - 2),
+                _ => {}
+            }
+        }
+        false
+    };
     let mut found = Vec::new();
 
     // The unit-test module that closes the file is not shipped code, and its
@@ -1029,7 +1044,11 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
         let Some(word) = ident(i) else {
             continue;
         };
-        let visibility = punct(i.wrapping_sub(1), '(') && punct(i + 1, ')');
+        // `pub(crate)`, `pub(super)` and `pub(in crate)`: a visibility, not a
+        // path.
+        let visibility = (punct(i.wrapping_sub(1), '(')
+            || (ident(i.wrapping_sub(1)) == Some("in") && punct(i.wrapping_sub(2), '(')))
+            && punct(i + 1, ')');
         let next = if path_sep(i + 1) {
             toks.get(i + 3)
         } else {
@@ -1055,7 +1074,7 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             // may go no further up: neither `super::super`, nor a group that
             // names `super` again, nor a rename.
             "super" if !visibility => {
-                if punct(i.wrapping_sub(1), ':') || punct(i.wrapping_sub(1), '{') {
+                if punct(i.wrapping_sub(1), ':') || in_path_group(i) {
                     found.push("`super` inside a path".to_string());
                 } else if at_root {
                     if next_word != Some("store") {
@@ -1130,6 +1149,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use r#crate::tabs;", false),
         ("use super::\u{200E}super::tabs;", false),
         ("use super::{\u{200F}super::tabs as t};", false),
+        ("use super::{json, super::tabs};", false),
+        ("use super::{json::{self, Json}, super::tabs};", false),
         ("fn f() { m\u{200E}!() }", false),
         ("fn f() { let x\u{301} = 1; }", false),
         ("fn f() { let caf\u{e9} = 1; }", false),
@@ -1160,6 +1181,12 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use crate::store::{BookmarkStore};", true),
         ("use super::store::HistoryStore;", true),
         ("pub(crate) fn f() {} pub(super) fn g() {}", false),
+        ("pub(in crate) fn f() {}", false),
+        ("fn f() -> u8 { super::g() }", false),
+        (
+            "fn f() -> u8 { if true { super::g() } else { super::h() } }",
+            false,
+        ),
         ("use super::{json::{self, Json}, sqlite::Value};", false),
         (
             "use std::path::{Path, PathBuf}; fn f() -> String { format!(\"{}\", 1) }",
