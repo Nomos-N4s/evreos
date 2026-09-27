@@ -1096,6 +1096,9 @@ const KEYWORDS: &[&str] = &[
 /// of the folders it writes.
 const ALLOWED_CRATE: &str = "evreos_i18n";
 
+/// The package the catalogue's dependency must name.
+const ALLOWED_PACKAGE: &str = "evreos-i18n";
+
 /// Every dependency of this crate the import may not name, as its code spells
 /// them, read from its manifest.
 fn denied_crates() -> Vec<String> {
@@ -1113,7 +1116,12 @@ fn denied_crates() -> Vec<String> {
 /// quoted or escaped, and so does `foo` as a key of an inline table under
 /// any of those, `dependencies = { foo = "1" }`. A multi-line string, `"""`
 /// or `'''`, is read as one string, so a header or key inside it is none.
-/// Development and build dependencies do not reach the library.
+/// The catalogue is allowed only as its own package: a key naming it that
+/// renames another, `evreos-i18n = { package = "evreos-net" }`, or takes its
+/// package from the workspace's manifest, which this one cannot show, is
+/// denied like any other. So is one naming its package in a multi-line
+/// string, which is read as empty. Development and build dependencies do
+/// not reach the library.
 fn denied_in(manifest: &str) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
@@ -1192,24 +1200,49 @@ fn without_multiline_strings(manifest: &str) -> String {
     out
 }
 
+/// Where in the key `path` the name of a dependency stands, if it names one.
+fn dependency_at(path: &[String]) -> Option<usize> {
+    match path {
+        [table, _, ..] if table == "dependencies" => Some(1),
+        [target, _, table, _, ..] if target == "target" && table == "dependencies" => Some(3),
+        _ => None,
+    }
+}
+
 /// Adds to `denied` the dependency the key `path` names, if it names one.
 fn deny_dependency(path: &[String], denied: &mut Vec<String>) {
-    let name = match path {
-        [table, name, ..] if table == "dependencies" => name,
-        [target, _, table, name, ..] if target == "target" && table == "dependencies" => name,
-        _ => return,
-    };
-    let name = name.replace('-', "_");
-    if name != ALLOWED_CRATE && !denied.contains(&name) {
+    if let Some(at) = dependency_at(path) {
+        let name = path[at].replace('-', "_");
+        if name != ALLOWED_CRATE {
+            deny(name, denied);
+        }
+    }
+}
+
+/// Adds `name` to `denied`, once.
+fn deny(name: String, denied: &mut Vec<String>) {
+    if !denied.contains(&name) {
         denied.push(name);
     }
 }
 
 /// As [`deny_dependency`] for `path`, and, where `value` is an inline table,
 /// for each key inside it, at any depth: `dependencies = { foo = "1" }`
-/// names `foo` as `[dependencies] foo = "1"` does.
+/// names `foo` as `[dependencies] foo = "1"` does. A `package` other than
+/// the catalogue's, or a `workspace` key, under the catalogue's name denies
+/// that name too.
 fn deny_in_value(path: &[String], value: &str, denied: &mut Vec<String>) {
     deny_dependency(path, denied);
+    if let Some(at) = dependency_at(path) {
+        let renamed = match path[at + 1..].first().map(String::as_str) {
+            Some("package") => toml_key(value) != [ALLOWED_PACKAGE],
+            Some("workspace") => true,
+            _ => false,
+        };
+        if renamed && path.len() == at + 2 && path[at].replace('-', "_") == ALLOWED_CRATE {
+            deny(ALLOWED_CRATE.to_string(), denied);
+        }
+    }
     let Some(inner) = value.strip_prefix('{') else {
         return;
     };
@@ -1413,6 +1446,30 @@ rustix = "1"
         denied_in(manifest),
         ["evreos_net", "x", "winit", "libc", "rustix"]
     );
+}
+
+#[test]
+fn the_catalogue_is_allowed_only_as_its_own_package() {
+    for manifest in [
+        "[dependencies]\nevreos-i18n = { path = \"n\", package = \"evreos-net\" }\n",
+        "[dependencies]\nevreos_i18n = { package = 'evreos-net' }\n",
+        "[dependencies.evreos-i18n]\npath = \"n\"\npackage = \"evreos-net\"\n",
+        "[dependencies]\nevreos-i18n.package = \"evreos-net\"\n",
+        "[target.'cfg(unix)'.dependencies]\nevreos-i18n = { package = \"evreos-net\" }\n",
+        "dependencies = { evreos-i18n = { package = \"evreos-net\" } }\n",
+        "[dependencies]\nevreos-i18n = { workspace = true }\n",
+        "[dependencies]\nevreos-i18n.workspace = true\n",
+    ] {
+        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
+    }
+    for manifest in [
+        "[dependencies]\nevreos-i18n = { path = \"i\" }\n",
+        "[dependencies]\nevreos-i18n = { path = \"i\", package = \"evreos-i18n\" }\n",
+        "[dependencies.evreos-i18n]\npackage = 'evreos-i18n'\n",
+        "[dev-dependencies]\nevreos-i18n = { package = \"evreos-net\" }\n",
+    ] {
+        assert!(denied_in(manifest).is_empty(), "{manifest:?}");
+    }
 }
 
 #[test]
