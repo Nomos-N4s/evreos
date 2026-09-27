@@ -17,6 +17,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use evreos_i18n::{Language, catalogue};
+use evreos_shell::import::json::{self, Json};
 use evreos_shell::import::snapshot::{Disk, FileSource, SnapshotPolicy};
 use evreos_shell::import::{
     ImportError, ImportFailure, ImportJob, ImportScope, ImportState, ImportedData, ImportedNode,
@@ -1096,566 +1097,246 @@ const KEYWORDS: &[&str] = &[
 /// of the folders it writes.
 const ALLOWED_CRATE: &str = "evreos_i18n";
 
-/// The package the catalogue's dependency must name.
-const ALLOWED_PACKAGE: &str = "evreos-i18n";
-
-/// The path the catalogue's dependency must be read from.
-const ALLOWED_PATH: &str = "../evreos-i18n";
-
-/// Every dependency of this crate the import may not name, as its code spells
-/// them, read from its manifest.
+/// Every dependency of this crate's library the import may not name, as its
+/// code names them, read once from cargo's own resolution of the crate.
 fn denied_crates() -> Vec<String> {
-    let manifest =
-        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")).unwrap();
-    denied_in(&manifest)
+    static DENIED: std::sync::OnceLock<Vec<String>> = std::sync::OnceLock::new();
+    DENIED.get_or_init(resolve_denied_crates).clone()
 }
 
-/// The dependencies a manifest declares for the library, as code spells them,
-/// but the one the import may name. Each key is read as the path of its
-/// table's header and its own dotted name together, so
-/// `[dependencies] foo = …`, `[dependencies.foo]`, `dependencies.foo = …`,
-/// `foo.workspace = true` and the same under `[target.….dependencies]` or
-/// `[target.…]` all name `foo`, however their dots are spaced or their parts
-/// quoted or escaped, and so does `foo` as a key of an inline table under
-/// any of those, `dependencies = { foo = "1" }`. A multi-line string, `"""`
-/// or `'''`, is read as one string, so a header or key inside it is none,
-/// and an array or inline table that runs over several lines is read as one
-/// line, so a line inside it is neither a header nor a key of its own.
-/// The catalogue is allowed only as its own package: a key naming it that
-/// renames another, `evreos-i18n = { package = "evreos-net" }`, is denied
-/// like any other, and so is one naming its package in a multi-line string,
-/// which is read as empty. It is allowed only from its own directory, too:
-/// a declaration not read from `path = "../evreos-i18n"`, as one taking its
-/// package from the workspace's manifest by `workspace = true` is not, or
-/// read from a `git` source or a registry as well, any of which could hold
-/// another crate of that name, is denied.
-/// Development and build dependencies do not reach the library.
-fn denied_in(manifest: &str) -> Vec<String> {
-    let mut table: Vec<String> = Vec::new();
+fn resolve_denied_crates() -> Vec<String> {
+    // Offline, cargo can resolve only the packages it holds, which are the
+    // ones a build for this host fetched, so the graph is filtered to the
+    // host. A dependency the manifest declares for another platform alone is
+    // then missing from it, and fails the test rather than go unchecked.
+    let resolved = cargo_metadata(&["--filter-platform", &host_triple()]);
+    let declared = cargo_metadata(&["--no-deps"]);
+    let missing = unresolved(&declared, &resolved);
+    assert!(
+        missing.is_empty(),
+        "declared for another platform, so the names its code uses cannot be \
+         resolved here: {missing:?}"
+    );
+    let catalogue = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../evreos-i18n/Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    denied_by(&resolved, &catalogue)
+}
+
+/// `cargo metadata`'s report on this crate, taken offline, with `args`.
+fn cargo_metadata(args: &[&str]) -> Json {
+    let output = std::process::Command::new(env!("CARGO"))
+        .args([
+            "metadata",
+            "--offline",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml"))
+        .args(args)
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    json::parse(&String::from_utf8(output.stdout).unwrap()).unwrap()
+}
+
+/// The host rustc builds for by default, which the graph is filtered to,
+/// as the compiler beside cargo names it.
+fn host_triple() -> String {
+    let rustc =
+        Path::new(env!("CARGO")).with_file_name(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    let output = std::process::Command::new(rustc)
+        .arg("-vV")
+        .output()
+        .unwrap();
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .find_map(|line| line.strip_prefix("host: "))
+        .expect("rustc names its host")
+        .to_string()
+}
+
+/// The packages the root package declares as normal dependencies, in
+/// `declared`, a `--no-deps` report, that the root's node in `resolved`
+/// does not hold.
+fn unresolved(declared: &Json, resolved: &Json) -> Vec<String> {
+    let str_at =
+        |value: &Json, key: &str| value.get(key).and_then(Json::as_str).map(str::to_string);
+    let array = |value: Option<&Json>| value.and_then(Json::as_array).unwrap_or_default().to_vec();
+    let resolve = resolved.get("resolve").expect("a resolved graph");
+    let root = str_at(resolve, "root").expect("a root package");
+    let name_of = |id: &str| {
+        array(resolved.get("packages"))
+            .iter()
+            .find(|package| str_at(package, "id").as_deref() == Some(id))
+            .and_then(|package| str_at(package, "name"))
+    };
+    let held: Vec<String> = array(resolve.get("nodes"))
+        .iter()
+        .find(|node| str_at(node, "id").as_deref() == Some(root.as_str()))
+        .map(|node| array(node.get("deps")))
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|dep| str_at(dep, "pkg").and_then(|pkg| name_of(&pkg)))
+        .collect();
+    let package = array(declared.get("packages"))
+        .into_iter()
+        .find(|package| str_at(package, "id").as_deref() == Some(root.as_str()))
+        .expect("the root package declared");
+    array(package.get("dependencies"))
+        .iter()
+        .filter(|dep| dep.get("kind") == Some(&Json::Null))
+        .filter_map(|dep| str_at(dep, "name"))
+        .filter(|name| !held.contains(name))
+        .collect()
+}
+
+#[test]
+fn a_dependency_for_another_platform_is_not_passed_over() {
+    let declared = json::parse(
+        r#"{"packages": [{"id": "root", "dependencies": [
+            {"name": "held", "kind": null, "target": null},
+            {"name": "elsewhere", "kind": null, "target": "cfg(windows)"},
+            {"name": "tested", "kind": "dev", "target": null}
+        ]}]}"#,
+    )
+    .unwrap();
+    let resolved = json::parse(
+        r#"{"packages": [{"id": "h", "name": "held"}],
+        "resolve": {"root": "root", "nodes": [
+            {"id": "root", "deps": [{"name": "held", "pkg": "h", "dep_kinds": []}]}
+        ]}}"#,
+    )
+    .unwrap();
+    assert_eq!(unresolved(&declared, &resolved), ["elsewhere"]);
+}
+
+/// The names the root package's code gives its library's dependencies, as
+/// `cargo metadata` resolves them, but the catalogue's. The name is cargo's
+/// own: a rename, or the dependency's library name, whatever its manifest's
+/// key or however that key is spelled. Every dependency of every kind but
+/// development and build, on every platform `metadata` resolves, counts.
+/// The catalogue's name is allowed only while it resolves to the package
+/// whose manifest is `catalogue`, the workspace's own `evreos-i18n`; under
+/// any other package it is denied like any other name.
+fn denied_by(metadata: &Json, catalogue: &Path) -> Vec<String> {
+    let str_at =
+        |value: &Json, key: &str| value.get(key).and_then(Json::as_str).map(str::to_string);
+    let resolve = metadata.get("resolve").expect("a resolved graph");
+    let root = str_at(resolve, "root").expect("a root package");
+    let manifest_of = |id: &str| {
+        metadata
+            .get("packages")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+            .iter()
+            .find(|package| str_at(package, "id").as_deref() == Some(id))
+            .and_then(|package| str_at(package, "manifest_path"))
+            .and_then(|path| Path::new(&path).canonicalize().ok())
+    };
+    let node = resolve
+        .get("nodes")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+        .iter()
+        .find(|node| str_at(node, "id").as_deref() == Some(root.as_str()))
+        .expect("the root package's node");
     let mut denied = Vec::new();
-    let mut sourced = Vec::new();
-    let mut pending = String::new();
-    for line in without_multiline_strings(manifest).lines() {
-        pending.push_str(&line[..outside_strings(line, '#').unwrap_or(line.len())]);
-        pending.push(' ');
-        if open_brackets(&pending) > 0 {
-            continue;
+    for dependency in node
+        .get("deps")
+        .and_then(Json::as_array)
+        .unwrap_or_default()
+    {
+        let name = str_at(dependency, "name").expect("a dependency's name");
+        // A kind of `null` is a normal dependency, which the library links.
+        let linked = dependency
+            .get("dep_kinds")
+            .and_then(Json::as_array)
+            .unwrap_or_default()
+            .iter()
+            .any(|kind| kind.get("kind") == Some(&Json::Null));
+        let pkg = str_at(dependency, "pkg").expect("a dependency's package");
+        let the_catalogue =
+            name == ALLOWED_CRATE && manifest_of(&pkg).as_deref() == Some(catalogue);
+        if linked && !the_catalogue && !denied.contains(&name) {
+            denied.push(name);
         }
-        let whole = std::mem::take(&mut pending);
-        let line = whole.trim();
-        if let Some(header) = line.strip_prefix('[') {
-            let header = header.strip_prefix('[').unwrap_or(header);
-            let end = outside_strings(header, ']').unwrap_or(header.len());
-            table = toml_key(&header[..end]);
-            deny_dependency(&table, &mut denied);
-            note_catalogue(&table, None, &mut sourced, &mut denied);
-        } else if let Some(at) = outside_strings(line, '=') {
-            let path: Vec<String> = table.iter().cloned().chain(toml_key(&line[..at])).collect();
-            deny_in_value(&path, line[at + 1..].trim(), &mut sourced, &mut denied);
-        }
-    }
-    if sourced.iter().any(|(_, from_its_path)| !from_its_path) {
-        deny(ALLOWED_CRATE.to_string(), &mut denied);
     }
     denied
 }
 
-/// Where the key `path` declares the catalogue, notes the declaration in
-/// `sourced`, marked once `path = "../evreos-i18n"` is read under it, and
-/// denies the catalogue at once for a `git`, `registry` or `registry-index`
-/// under it. `value` is the key's value, or `None` for a table header.
-fn note_catalogue(
-    path: &[String],
-    value: Option<&str>,
-    sourced: &mut Vec<(Vec<String>, bool)>,
-    denied: &mut Vec<String>,
-) {
-    let Some(at) = dependency_at(path) else {
-        return;
+#[test]
+fn a_dependency_is_denied_by_the_name_cargo_gives_it() {
+    let dir = temp_dir("metadata");
+    let catalogue = dir.join("evreos-i18n");
+    let other = dir.join("evreos-net");
+    for package in [&catalogue, &other] {
+        fs::create_dir_all(package).unwrap();
+        fs::write(package.join("Cargo.toml"), "").unwrap();
+    }
+    let manifest = |package: &Path| package.join("Cargo.toml").display().to_string();
+    // The shape `cargo metadata` gives: the root's node names each
+    // dependency as its code does, with its package and kinds.
+    let metadata = |deps: &str| {
+        json::parse(&format!(
+            r#"{{"packages": [
+                {{"id": "cat", "manifest_path": {cat:?}}},
+                {{"id": "net", "manifest_path": {net:?}}},
+                {{"id": "reg", "manifest_path": "/nowhere/Cargo.toml"}}
+            ],
+            "resolve": {{"root": "root", "nodes": [
+                {{"id": "cat", "deps": []}},
+                {{"id": "root", "deps": [{deps}]}}
+            ]}}}}"#,
+            cat = manifest(&catalogue),
+            net = manifest(&other),
+        ))
+        .unwrap()
     };
-    if path[at].replace('-', "_") != ALLOWED_CRATE {
-        return;
-    }
-    let declaration = &path[..=at];
-    let index = match sourced.iter().position(|(key, _)| key == declaration) {
-        Some(index) => index,
-        None => {
-            sourced.push((declaration.to_vec(), false));
-            sourced.len() - 1
-        }
+    let dep = |name: &str, pkg: &str, kind: &str| {
+        format!(
+            r#"{{"name": "{name}", "pkg": "{pkg}", "dep_kinds": [{{"kind": {kind}, "target": null}}]}}"#
+        )
     };
-    if path.len() != at + 2 {
-        return;
-    }
-    match (path[at + 1].as_str(), value) {
-        ("path", Some(value)) if toml_key(value) == [ALLOWED_PATH] => sourced[index].1 = true,
-        ("git" | "registry" | "registry-index", _) => deny(ALLOWED_CRATE.to_string(), denied),
-        _ => {}
-    }
-}
-
-/// How many brackets and braces `text` leaves open outside its strings.
-fn open_brackets(text: &str) -> isize {
-    let mut depth = 0;
-    let mut quote = None;
-    let mut escaped = false;
-    for ch in text.chars() {
-        match quote {
-            Some('"') if escaped => escaped = false,
-            Some('"') if ch == '\\' => escaped = true,
-            Some(open) if ch == open => quote = None,
-            Some(_) => {}
-            None => match ch {
-                '"' | '\'' => quote = Some(ch),
-                '[' | '{' => depth += 1,
-                ']' | '}' => depth -= 1,
-                _ => {}
-            },
-        }
-    }
-    depth
-}
-
-/// `manifest` with each multi-line string, `"""…"""` or `'''…'''`, replaced by
-/// an empty one, `""`, so that none of its text, its line breaks included,
-/// is read as the manifest's own. A comment, and a string on one line, are
-/// copied whole, so a `"""` inside either opens nothing.
-fn without_multiline_strings(manifest: &str) -> String {
-    let chars: Vec<char> = manifest.chars().collect();
-    let run = |at: usize, quote: char| chars[at..].iter().take_while(|&&ch| ch == quote).count();
-    let mut out = String::new();
-    let mut at = 0;
-    while at < chars.len() {
-        let ch = chars[at];
-        match ch {
-            '"' | '\'' if run(at, ch) >= 3 => {
-                // Skipped to its closing three quotes, which up to two more
-                // may precede. A basic string's backslash escapes the
-                // character after it; a literal string escapes nothing.
-                at += 3;
-                while at < chars.len() {
-                    if ch == '"' && chars[at] == '\\' {
-                        at += 2;
-                    } else if chars[at] == ch && run(at, ch) >= 3 {
-                        at += run(at, ch).min(5);
-                        break;
-                    } else {
-                        at += 1;
-                    }
-                }
-                out.push_str("\"\"");
-            }
-            '"' | '\'' => {
-                // A string on one line, to its closing quote or the line's
-                // end.
-                out.push(ch);
-                at += 1;
-                while at < chars.len() && chars[at] != '\n' {
-                    out.push(chars[at]);
-                    at += 1;
-                    if ch == '"' && chars[at - 1] == '\\' && at < chars.len() {
-                        out.push(chars[at]);
-                        at += 1;
-                    } else if chars[at - 1] == ch {
-                        break;
-                    }
-                }
-            }
-            '#' => {
-                while at < chars.len() && chars[at] != '\n' {
-                    out.push(chars[at]);
-                    at += 1;
-                }
-            }
-            _ => {
-                out.push(ch);
-                at += 1;
-            }
-        }
-    }
-    out
-}
-
-/// Where in the key `path` the name of a dependency stands, if it names one.
-fn dependency_at(path: &[String]) -> Option<usize> {
-    match path {
-        [table, _, ..] if table == "dependencies" => Some(1),
-        [target, _, table, _, ..] if target == "target" && table == "dependencies" => Some(3),
-        _ => None,
-    }
-}
-
-/// Adds to `denied` the dependency the key `path` names, if it names one.
-fn deny_dependency(path: &[String], denied: &mut Vec<String>) {
-    if let Some(at) = dependency_at(path) {
-        let name = path[at].replace('-', "_");
-        if name != ALLOWED_CRATE {
-            deny(name, denied);
-        }
-    }
-}
-
-/// Adds `name` to `denied`, once.
-fn deny(name: String, denied: &mut Vec<String>) {
-    if !denied.contains(&name) {
-        denied.push(name);
-    }
-}
-
-/// As [`deny_dependency`] for `path`, and, where `value` is an inline table,
-/// for each key inside it, at any depth: `dependencies = { foo = "1" }`
-/// names `foo` as `[dependencies] foo = "1"` does. A `package` other than
-/// the catalogue's under the catalogue's name denies that name too, and
-/// [`note_catalogue`] notes, for each key, where the catalogue is read from.
-fn deny_in_value(
-    path: &[String],
-    value: &str,
-    sourced: &mut Vec<(Vec<String>, bool)>,
-    denied: &mut Vec<String>,
-) {
-    deny_dependency(path, denied);
-    note_catalogue(path, Some(value), sourced, denied);
-    if let Some(at) = dependency_at(path) {
-        let renamed = path[at + 1..].first().map(String::as_str) == Some("package")
-            && toml_key(value) != [ALLOWED_PACKAGE];
-        if renamed && path.len() == at + 2 && path[at].replace('-', "_") == ALLOWED_CRATE {
-            deny(ALLOWED_CRATE.to_string(), denied);
-        }
-    }
-    let Some(inner) = value.strip_prefix('{') else {
-        return;
-    };
-    for entry in inline_entries(inner) {
-        if let Some(at) = outside_strings(entry, '=') {
-            let key: Vec<String> = path.iter().cloned().chain(toml_key(&entry[..at])).collect();
-            deny_in_value(&key, entry[at + 1..].trim(), sourced, denied);
-        }
-    }
-}
-
-/// The entries of an inline table, from just after its `{` to its `}`: the
-/// text between commas that stand outside strings and nested brackets.
-fn inline_entries(inner: &str) -> Vec<&str> {
-    let mut entries = Vec::new();
-    let (mut quote, mut escaped, mut depth, mut start) = (None, false, 0usize, 0);
-    for (at, ch) in inner.char_indices() {
-        match quote {
-            Some('"') if escaped => escaped = false,
-            Some('"') if ch == '\\' => escaped = true,
-            Some(open) if ch == open => quote = None,
-            Some(_) => {}
-            None => match ch {
-                '"' | '\'' => quote = Some(ch),
-                '{' | '[' => depth += 1,
-                '}' | ']' if depth == 0 => {
-                    entries.push(&inner[start..at]);
-                    return entries;
-                }
-                '}' | ']' => depth -= 1,
-                ',' if depth == 0 => {
-                    entries.push(&inner[start..at]);
-                    start = at + 1;
-                }
-                _ => {}
-            },
-        }
-    }
-    entries.push(&inner[start..]);
-    entries
-}
-
-/// Where `target` first stands in `line` outside a TOML string, whose
-/// double-quoted form escapes with a backslash.
-fn outside_strings(line: &str, target: char) -> Option<usize> {
-    let mut quote = None;
-    let mut escaped = false;
-    for (at, ch) in line.char_indices() {
-        match quote {
-            Some('"') if escaped => escaped = false,
-            Some('"') if ch == '\\' => escaped = true,
-            Some(open) if ch == open => quote = None,
-            Some(_) => {}
-            None if ch == target => return Some(at),
-            None if ch == '"' || ch == '\'' => quote = Some(ch),
-            None => {}
-        }
-    }
-    None
-}
-
-/// A TOML key, dotted and perhaps quoted, as its parts.
-fn toml_key(key: &str) -> Vec<String> {
-    let mut parts = Vec::new();
-    let mut rest = key;
-    loop {
-        let end = outside_strings(rest, '.').unwrap_or(rest.len());
-        let part = rest[..end].trim();
-        let basic = part
-            .strip_prefix('"')
-            .and_then(|part| part.strip_suffix('"'));
-        let literal = part
-            .strip_prefix('\'')
-            .and_then(|part| part.strip_suffix('\''));
-        parts.push(match (basic, literal) {
-            (Some(basic), _) => unescape(basic),
-            (None, Some(literal)) => literal.to_string(),
-            (None, None) => part.to_string(),
-        });
-        if end == rest.len() {
-            return parts;
-        }
-        rest = &rest[end + 1..];
-    }
-}
-
-/// A TOML basic string's text, its escapes read: `\"`, `\\`, `\b`, `\t`,
-/// `\n`, `\f`, `\r`, `\uXXXX` and `\UXXXXXXXX`.
-fn unescape(text: &str) -> String {
-    let mut out = String::new();
-    let mut chars = text.chars();
-    while let Some(ch) = chars.next() {
-        if ch != '\\' {
-            out.push(ch);
-            continue;
-        }
-        let digits = match chars.next() {
-            Some('b') => {
-                out.push('\u{8}');
-                continue;
-            }
-            Some('t') => {
-                out.push('\t');
-                continue;
-            }
-            Some('n') => {
-                out.push('\n');
-                continue;
-            }
-            Some('f') => {
-                out.push('\u{c}');
-                continue;
-            }
-            Some('r') => {
-                out.push('\r');
-                continue;
-            }
-            Some('u') => 4,
-            Some('U') => 8,
-            Some(other) => {
-                out.push(other);
-                continue;
-            }
-            None => break,
-        };
-        let code: String = chars.by_ref().take(digits).collect();
-        if let Some(ch) = u32::from_str_radix(&code, 16).ok().and_then(char::from_u32) {
-            out.push(ch);
-        }
-    }
-    out
-}
-
-#[test]
-fn each_listed_form_of_dependency_table_is_read() {
-    let manifest = "dependencies.toplevel = \"1\"\n\
-        dependencies = { inline = \"1\", \"inline\\u002dtwo\" = { path = \"{,}\" } }\n\
-        [package]\nname = \"x\" # not a dependency\n\
-        [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
-        evreos-i18n = { path = \"../evreos-i18n\" }\n'quoted-literal' = \"1\"\n\"quoted\" = \"1\"\n\
-        'lit\\\\x' = \"1\"\n\
-        ok = { version = \"a\\\"#b\" } # c = 1\n\
-        [dependencies . spaced]\nversion = \"1\"\n\
-        [ target . 'cfg(unix)' . dependencies ]\ntspaced = \"1\"\n\
-        [target.'cfg(any())']\ndependencies.intarget = \"1\"\n\
-        [target.'cfg(all())']\ndependencies = { inline-target = { path = \"x\" } }\n\
-        [target.'cfg(windows)'.dependencies] # the platform's own\nwindows-sys = \"1\"\n\
-        [target.\"cfg(unix)\".dependencies]#x\n# nix = \"1\"\nrustix = \"1\" # \"#\"\n\
-        [target.x86_64-unknown-linux-gnu.dependencies]\nlibc = \"0.2\"\n\
-        [dependencies.reqwest]\nversion = \"1\"\n\
-        [dev-dependencies]\ntrybuild = \"1\"\n\
-        [build-dependencies]\ncc = \"1\"\n";
-    assert_eq!(
-        denied_in(manifest),
-        [
-            "toplevel",
-            "inline",
-            "inline_two",
-            "evreos_net",
-            "winit",
-            "quoted_literal",
-            "quoted",
-            "lit\\\\x",
-            "ok",
-            "spaced",
-            "tspaced",
-            "intarget",
-            "inline_target",
-            "windows_sys",
-            "rustix",
-            "libc",
-            "reqwest"
-        ]
-    );
-}
-
-#[test]
-fn a_multiline_string_in_the_manifest_hides_no_table() {
-    // A header inside a multi-line string would otherwise move the reader
-    // into a table the manifest never opened.
-    let manifest = r#"[dependencies]
-evreos-i18n = { path = "../evreos-i18n", note = """
-[dev-dependencies]
-""" }
-evreos-net = { path = "n" }
-[package]
-description = '''
-[dependencies]
-fake = "1"
-'''
-readme = """ends in \""" and " and five"""""
-[dependencies.x]
-version = "1"
-[target.'cfg(unix)'.dependencies]
-winit = """
-""" # and a """ in a comment opens nothing
-libc = '"""'
-rustix = "1"
-"#;
-    assert_eq!(
-        denied_in(manifest),
-        ["evreos_net", "x", "winit", "libc", "rustix"]
-    );
-}
-
-#[test]
-fn a_manifest_value_over_several_lines_is_read_whole() {
-    // A line inside an array or inline table that runs over several lines
-    // would otherwise be read as a header or a key of its own.
-    for (manifest, expected) in [
+    let catalogue_manifest = catalogue.join("Cargo.toml").canonicalize().unwrap();
+    for (deps, expected) in [
+        // The catalogue itself, and development and build dependencies.
+        (dep("evreos_i18n", "cat", "null"), &[][..]),
+        (dep("trybuild", "reg", "\"dev\""), &[][..]),
+        (dep("cc", "reg", "\"build\""), &[][..]),
+        // A dependency whose library name is not its key: denied by the
+        // name code gives it.
+        (dep("md5", "reg", "null"), &["md5"][..]),
+        // The catalogue's name on another package, by a rename or from
+        // another source.
+        (dep("evreos_i18n", "net", "null"), &["evreos_i18n"][..]),
+        (dep("evreos_i18n", "reg", "null"), &["evreos_i18n"][..]),
         (
-            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", features = [\n], package = \"evreos-net\" }\n",
-            &[ALLOWED_CRATE][..],
-        ),
-        (
-            "dependencies = { a = { path = \"a\", features = [\n] }, foo = \"1\" }\n",
-            &["a", "foo"][..],
-        ),
-        (
-            "[dependencies]\nfoo = { path = \"f\", x = [\n[\"y\"]] }\nbar = \"1\"\n",
-            &["foo", "bar"][..],
-        ),
-        (
-            "[dependencies]\nfoo = { features = [ # a ] in a comment\n  \"x\",\n] }\n[dev-dependencies]\nbar = \"1\"\n",
-            &["foo"][..],
-        ),
-        (
-            "[dependencies]\nevreos-i18n = {\n  path = \"../evreos-i18n\",\n  package = \"evreos-net\",\n}\n",
-            &[ALLOWED_CRATE][..],
+            format!(
+                "{}, {}",
+                dep("evreos_i18n", "cat", "null"),
+                dep("evreos_net", "net", "null")
+            ),
+            &["evreos_net"][..],
         ),
     ] {
-        assert_eq!(denied_in(manifest), expected, "{manifest:?}");
+        assert_eq!(
+            denied_by(&metadata(&deps), &catalogue_manifest),
+            expected,
+            "{deps}"
+        );
     }
-}
-
-#[test]
-fn the_catalogue_is_allowed_only_as_its_own_package() {
-    // Each manifest reads the catalogue from its own directory, so only the
-    // rename can refuse it: the same manifest naming the catalogue's own
-    // package instead is allowed.
-    for manifest in [
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" }\n",
-        "[dependencies]\nevreos_i18n = { path = '../evreos-i18n', package = 'evreos-net' }\n",
-        "[dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\npackage = \"evreos-net\"\n",
-        "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.package = \"evreos-net\"\n",
-        "dependencies = { evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" } }\n",
-        "dependencies.evreos-i18n.path = \"../evreos-i18n\"\n\
-         dependencies.evreos-i18n.package = \"evreos-net\"\n",
-        "[target.'cfg(unix)'.dependencies]\n\
-         evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" }\n",
-        "[target.'cfg(unix)'.dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\npackage = \"evreos-net\"\n",
-        "[target.'cfg(unix)'.dependencies]\n\
-         evreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.package = \"evreos-net\"\n",
-        "[target.'cfg(unix)']\n\
-         dependencies = { evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" } }\n",
-        "[target.'cfg(unix)']\ndependencies.evreos-i18n.path = \"../evreos-i18n\"\n\
-         dependencies.evreos-i18n.package = \"evreos-net\"\n",
-        "[dependencies]\n\"evreos-i18n\" = { \"path\" = \"../evreos-i18n\", \"package\" = \"evreos-net\" }\n",
-        "[target.'cfg(unix)'.dependencies]\n\
-         \"evreos-i18n\" = { \"path\" = \"../evreos-i18n\", \"package\" = \"evreos-net\" }\n",
-        "[dependencies]\n'evreos-i18n' . path = '../evreos-i18n'\n'evreos-i18n' . package = 'evreos-net'\n",
-        "[dependencies]\n\"evreos\\u002di18n\" = { path = \"../evreos-i18n\", package = \"evreos\\u002dnet\" }\n",
-        // Read as empty, so refused though it names the catalogue.
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"\"\"evreos-i18n\"\"\" }\n",
-    ] {
-        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
-        let own = manifest
-            .replace("evreos-net", "evreos-i18n")
-            .replace("evreos\\u002dnet", "evreos\\u002di18n")
-            .replace("\"\"\"evreos-i18n\"\"\"", "\"evreos-i18n\"");
-        assert!(denied_in(&own).is_empty(), "{own:?}");
-    }
-    for manifest in [
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n",
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-i18n\" }\n",
-        "[dependencies.evreos-i18n]\npath = '../evreos-i18n'\npackage = 'evreos-i18n'\n",
-        "[dev-dependencies]\nevreos-i18n = { package = \"evreos-net\" }\n",
-    ] {
-        assert!(denied_in(manifest).is_empty(), "{manifest:?}");
-    }
-}
-
-#[test]
-fn the_catalogue_is_allowed_only_from_its_own_directory() {
-    // Another source could hold another crate under the catalogue's name.
-    for manifest in [
-        "[dependencies]\nevreos-i18n = \"1\"\n",
-        "[dependencies]\nevreos-i18n = { version = \"1\" }\n",
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-net\" }\n",
-        "[dependencies]\nevreos-i18n = { git = \"https://example.invalid/i18n\" }\n",
-        "[dependencies.evreos-i18n]\nversion = \"1\"\n",
-        "[dependencies]\nevreos-i18n.git = \"https://example.invalid/i18n\"\n",
-        "[dependencies]\nevreos-i18n = { workspace = true }\n",
-        "[dependencies]\nevreos-i18n.workspace = true\n",
-        "[target.'cfg(unix)'.dependencies]\nevreos-i18n = { workspace = true }\n",
-        "[target.'cfg(unix)'.dependencies.evreos-i18n]\nworkspace = true\n",
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n\
-         [target.'cfg(unix)'.dependencies]\nevreos-i18n = \"1\"\n",
-    ] {
-        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
-    }
-    // Each reads the catalogue from its own directory and from another
-    // source as well, so only the other source can refuse it: the same
-    // manifest without it is allowed.
-    for (manifest, other) in [
-        (
-            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", git = \"https://example.invalid/i18n\" }\n",
-            ", git = \"https://example.invalid/i18n\"",
-        ),
-        (
-            "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.git = \"https://example.invalid/i18n\"\n",
-            "evreos-i18n.git = \"https://example.invalid/i18n\"\n",
-        ),
-        (
-            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", registry = \"other\" }\n",
-            ", registry = \"other\"",
-        ),
-        (
-            "[dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\nregistry-index = \"https://example.invalid/index\"\n",
-            "registry-index = \"https://example.invalid/index\"\n",
-        ),
-    ] {
-        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
-        let alone = manifest.replace(other, "");
-        assert!(denied_in(&alone).is_empty(), "{alone:?}");
-    }
-    for manifest in [
-        "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\n",
-        "[dependencies.evreos-i18n]\npath = '../evreos-i18n'\nversion = \"1\"\n",
-        "[target.'cfg(unix)'.dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n",
-        "[dev-dependencies]\nevreos-i18n = \"1\"\n",
-    ] {
-        assert!(denied_in(manifest).is_empty(), "{manifest:?}");
-    }
+    // A dependency that is both normal and development still links.
+    let both = r#"{"name": "winit", "pkg": "reg", "dep_kinds": [{"kind": "dev", "target": null}, {"kind": null, "target": "cfg(unix)"}]}"#;
+    assert_eq!(denied_by(&metadata(both), &catalogue_manifest), ["winit"]);
+    fs::remove_dir_all(dir).unwrap();
 }
 
 #[test]
@@ -1815,8 +1496,9 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
         let next_word = if path_sep(i + 1) { ident(i + 3) } else { None };
         match word {
             // The egress crate, and every other dependency of this crate but
-            // the catalogue's, read from its manifest so that one added later
-            // is refused too; and `extern`, which could name any crate.
+            // the catalogue's, by the names cargo resolves them to, so that
+            // one added later is refused too; and `extern`, which could name
+            // any crate.
             _ if denied.iter().any(|name| name == word) => {
                 found.push(format!("names the dependency `{word}`"));
             }
