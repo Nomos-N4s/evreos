@@ -754,6 +754,53 @@ mod tests {
         );
     }
 
+    /// As above, for Linux and Android on MIPS, whose flags differ.
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        any(
+            target_arch = "mips",
+            target_arch = "mips32r6",
+            target_arch = "mips64",
+            target_arch = "mips64r6"
+        )
+    ))]
+    #[test]
+    fn the_open_flag_is_o_nonblock_and_nothing_else_on_mips() {
+        assert_eq!(O_NONBLOCK, 0x0080);
+        assert_eq!(O_NONBLOCK & (0x1 | 0x2 | 0x0100 | 0x0200 | 0x0008), 0);
+    }
+
+    /// As above, for Linux and Android on SPARC.
+    #[cfg(all(
+        any(target_os = "linux", target_os = "android"),
+        any(target_arch = "sparc", target_arch = "sparc64")
+    ))]
+    #[test]
+    fn the_open_flag_is_o_nonblock_and_nothing_else_on_sparc() {
+        assert_eq!(O_NONBLOCK, 0x4000);
+        assert_eq!(O_NONBLOCK & (0x1 | 0x2 | 0x0200 | 0x0400 | 0x0008), 0);
+    }
+
+    /// As above, for Apple's systems and the BSDs, which share their flags:
+    /// `O_WRONLY` 0x1, `O_RDWR` 0x2, `O_APPEND` 0x8, `O_CREAT` 0x200 and
+    /// `O_TRUNC` 0x400.
+    #[cfg(any(
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "tvos",
+        target_os = "watchos",
+        target_os = "visionos",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))]
+    #[test]
+    fn the_open_flag_is_o_nonblock_and_nothing_else_on_apple_and_bsd() {
+        assert_eq!(O_NONBLOCK, 0x0004);
+        assert_eq!(O_NONBLOCK & (0x1 | 0x2 | 0x0008 | 0x0200 | 0x0400), 0);
+    }
+
     #[test]
     fn the_disk_source_reads_only_a_bounded_regular_file() {
         let dir = std::env::temp_dir().join(format!(

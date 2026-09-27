@@ -1094,8 +1094,9 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
 }
 
 /// As [`reach_violations`], for a file that may define `O_NONBLOCK`: only the
-/// copy's module may, once, as a `const` whose value its own test pins on
-/// Linux and Android outside MIPS and SPARC.
+/// copy's module may, once, as a `const`. Its unit tests pin the value on each
+/// platform it names one for, each run on that platform: Linux and Android
+/// (with MIPS and SPARC apart), and Apple's systems and the BSDs.
 fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<String> {
     let denied = denied_crates();
     let toks = tokens(source);
