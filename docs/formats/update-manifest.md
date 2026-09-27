@@ -42,7 +42,11 @@ range, or if its domain is not exactly the one above.
 
 ## What the client accepts
 
-In this order, so that nothing from an unverified manifest is acted on:
+In this order, so that nothing from an unverified manifest is acted on. The
+fields are read, and a malformed manifest refused, as the section above says,
+before the signature is checked: the signature covers the preimage whole, so
+reading comes first, but nothing read is acted on until it verifies. A
+malformed manifest is therefore reported as malformed, whatever its signature.
 
 1. **The signature.** The preimage is verified against the pinned key with
    Ed25519 strict verification, which rejects small-order points and

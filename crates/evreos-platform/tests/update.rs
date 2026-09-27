@@ -480,8 +480,9 @@ mod decide {
 
     #[test]
     fn verification_failure_comes_before_every_other_check() {
-        // Another key, and every other check failing too: the signature is
-        // what is reported, since nothing unverified is looked at.
+        // Another key, and every later check failing too: the signature is
+        // what is reported, since nothing unverified is acted on. A malformed
+        // manifest is the one exception, refused as it is read.
         let everything_wrong = Fields {
             platform: b"macos-aarch64".to_vec(),
             not_after: 0,
