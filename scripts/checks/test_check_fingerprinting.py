@@ -930,11 +930,36 @@ report("...and one before a manifest is not a way past the dependency clause",
 
 problems = tree(passing_tree({
     "crates/x/target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
-    "crates/x/TARGET/vendor/dep.rs": 'let g = "MachineGuid";\n',
     ".git/dep.rs": 'let g = "MachineGuid";\n',
+    ".GIT/dep.rs": 'let g = "MachineGuid";\n',
 }))[0]
-report("Cargo's target/ beside a manifest, in any case, and .git/ are not read",
-       problems == [])
+report("outside a git work tree, .git/ in any case is not read, and target/ is",
+       mentions(problems, "crates/x/target/debug/build/dep.rs:1")
+       and not mentions(problems, ".git/")
+       and not mentions(problems, ".GIT/"))
+
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    root = base / "tree"
+    for relative, content in passing_tree({
+        ".gitignore": "/target\n",
+        "target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
+        "target/evil/src/main.rs": 'let id = read("/etc/machine-id");\n',
+        "crates/x/src/Cargo.toml": "",
+        "crates/x/src/target/mod.rs": "let n = gethostname();\n",
+    }).items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(content, encoding="utf-8")
+    (base / "allowlist.txt").write_text("", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "add", "-f", "target/evil/src/main.rs"], check=True)
+    problems = check.check_tree(root, base / "allowlist.txt")[0]
+    report("in a git work tree, build output git ignores is not read",
+           not mentions(problems, "target/debug/"))
+    report("...while a file committed under target/ is",
+           mentions(problems, "target/evil/src/main.rs:1", "'machine-id'"))
+    report("...and a stray Cargo.toml hides no module named target",
+           mentions(problems, "crates/x/src/target/mod.rs:1", "'gethostname'"))
 
 problems = tree(passing_tree({".probe/src/lib.rs": 'let g = "MachineGuid";\n'}))[0]
 report("any other dot-directory is read, since a workspace member may live there",

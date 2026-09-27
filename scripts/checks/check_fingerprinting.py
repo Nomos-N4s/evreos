@@ -233,17 +233,19 @@ Files other than Rust source, the script and markup suffixes above and
 `Cargo.toml` are not read, unless a Rust file or a manifest brings one into
 the build as SOURCE describes: Python is the tooling that runs this check and
 ships in nothing, and markdown is where the forbidden sources are quoted.
-Directories are matched with case folded where they must be, the release
-platforms' filesystems folding case. `.git/` is not read, and neither is
-Cargo's build output: a `target/` directory beside a `Cargo.toml`, which
-holds every vendored dependency's source and ships nothing of this tree's. A
-directory named `target` anywhere else is read like any other, since a module
-or a crate may carry that name and Cargo builds it. Every other directory whose
-name starts with a dot is read: Cargo builds a workspace member wherever its
-manifest names it.
+In a git work tree the files read are the ones git lists, tracked or
+untracked but not ignored, so Cargo's build output, which `.gitignore` leaves
+out, is not read, while anything committed is, a module, crate or workspace
+member named `target` included. Outside one, every file under the root is read
+but `.git/`. Directories are matched with case folded where they must be, the
+release platforms' filesystems folding case. A directory whose name starts
+with a dot is read: Cargo builds a workspace member wherever its manifest
+names it.
 """
 import argparse
+import os
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
@@ -988,7 +990,7 @@ def check_tree(root, allowlist_path=ALLOWLIST):
             f"salted or kept, and {allowlist_path.name} lists no use of it here"
         )
 
-    for path in walk(root, problems):
+    for path in files_in(root, problems):
         where = path.relative_to(root).as_posix()
         if is_rust_source(path):
             scan_rust(path, where)
@@ -1072,16 +1074,59 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     return problems, sorted(read), len(used)
 
 
-def walk(root, problems):
-    """Every file in the directories under `root` this check reads, `root`
-    included, directory by directory.
+def files_in(root, problems):
+    """Every file under `root` this check reads, shallowest first.
 
-    `.git/` is pruned, and so is Cargo's build output: a `target/`
-    beside a `Cargo.toml`, which holds every vendored dependency's source and
-    is not this tree's to fix. Only there -- `src/target/` is a module and
-    `crates/target/` a crate, and Cargo builds both. The fold on `target` and
-    on the manifest name is casefs's rule -- `TARGET/` is the same directory
-    on the platforms that build the release.
+    In a git work tree, the files git lists, tracked or untracked but not
+    ignored; a directory it lists, a submodule or a nested repository, is
+    walked. Elsewhere, or when git cannot list the tree, the walk's files. A
+    link to a directory is not followed: git lists the files it links to
+    where they are. A link that leads outside the tree is reported.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+             "--exclude-standard"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        listed = None
+    if listed is None or listed.returncode != 0:
+        files = walk(root, problems)
+    else:
+        files = []
+        for name in sorted(set(os.fsdecode(listed.stdout).split("\0")) - {""}):
+            path = root / name
+            where = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                try:
+                    real = path.resolve()
+                except (OSError, RuntimeError) as error:
+                    problems.append(
+                        f"{where}: a link this check cannot resolve ({error}), so it is not read"
+                    )
+                    continue
+                if not real.is_relative_to(root):
+                    problems.append(
+                        f"{where}: links outside the tree this check reads, so it is not read"
+                    )
+                    continue
+                if real.is_dir():
+                    continue
+            if path.is_dir():
+                files.extend(walk(root, problems, path))
+            elif path.is_file():
+                files.append(path)
+    return sorted(files, key=lambda path: (len(path.relative_to(root).parts), path))
+
+
+def walk(root, problems, start=None):
+    """Every file in the directories under `start`, `root` by default, this
+    check reads, `start` included, directory by directory.
+
+    `.git/` is pruned. The fold on it is casefs's rule -- `.GIT/` is the same
+    directory on the platforms that build the release.
 
     A directory that cannot be listed is reported and not read. A directory
     reached a second time through a symbolic link is not read again, so a
@@ -1089,7 +1134,7 @@ def walk(root, problems):
     directory or a file outside the tree is reported: nothing there can be
     answered for.
     """
-    kept, seen, files = [root], set(), []
+    kept, seen, files = [start or root], set(), []
     for directory in kept:
         where = directory.relative_to(root).as_posix()
         real = directory.resolve()
@@ -1114,15 +1159,10 @@ def walk(root, problems):
                 )
                 continue
             files.append(path)
-        beside_manifest = any(
-            path.is_file() and folded_in(path.name, [MANIFEST]) for path in entries
-        )
         for path in entries:
             if not path.is_dir():
                 continue
             if folded_in(path.name, [".git"]):
-                continue
-            if beside_manifest and folded_in(path.name, ["target"]):
                 continue
             kept.append(path)
     return files
