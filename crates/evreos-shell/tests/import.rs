@@ -1111,12 +1111,13 @@ fn denied_crates() -> Vec<String> {
 /// `foo.workspace = true` and the same under `[target.….dependencies]` or
 /// `[target.…]` all name `foo`, however their dots are spaced or their parts
 /// quoted or escaped, and so does `foo` as a key of an inline table under
-/// any of those, `dependencies = { foo = "1" }`. Development and build
-/// dependencies do not reach the library.
+/// any of those, `dependencies = { foo = "1" }`. A multi-line string, `"""`
+/// or `'''`, is read as one string, so a header or key inside it is none.
+/// Development and build dependencies do not reach the library.
 fn denied_in(manifest: &str) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
-    for line in manifest.lines() {
+    for line in without_multiline_strings(manifest).lines() {
         let line = line[..outside_strings(line, '#').unwrap_or(line.len())].trim();
         if let Some(header) = line.strip_prefix('[') {
             let header = header.strip_prefix('[').unwrap_or(header);
@@ -1129,6 +1130,66 @@ fn denied_in(manifest: &str) -> Vec<String> {
         }
     }
     denied
+}
+
+/// `manifest` with each multi-line string, `"""…"""` or `'''…'''`, replaced by
+/// an empty one, `""`, so that none of its text, its line breaks included,
+/// is read as the manifest's own. A comment, and a string on one line, are
+/// copied whole, so a `"""` inside either opens nothing.
+fn without_multiline_strings(manifest: &str) -> String {
+    let chars: Vec<char> = manifest.chars().collect();
+    let run = |at: usize, quote: char| chars[at..].iter().take_while(|&&ch| ch == quote).count();
+    let mut out = String::new();
+    let mut at = 0;
+    while at < chars.len() {
+        let ch = chars[at];
+        match ch {
+            '"' | '\'' if run(at, ch) >= 3 => {
+                // Skipped to its closing three quotes, which up to two more
+                // may precede. A basic string's backslash escapes the
+                // character after it; a literal string escapes nothing.
+                at += 3;
+                while at < chars.len() {
+                    if ch == '"' && chars[at] == '\\' {
+                        at += 2;
+                    } else if chars[at] == ch && run(at, ch) >= 3 {
+                        at += run(at, ch).min(5);
+                        break;
+                    } else {
+                        at += 1;
+                    }
+                }
+                out.push_str("\"\"");
+            }
+            '"' | '\'' => {
+                // A string on one line, to its closing quote or the line's
+                // end.
+                out.push(ch);
+                at += 1;
+                while at < chars.len() && chars[at] != '\n' {
+                    out.push(chars[at]);
+                    at += 1;
+                    if ch == '"' && chars[at - 1] == '\\' && at < chars.len() {
+                        out.push(chars[at]);
+                        at += 1;
+                    } else if chars[at - 1] == ch {
+                        break;
+                    }
+                }
+            }
+            '#' => {
+                while at < chars.len() && chars[at] != '\n' {
+                    out.push(chars[at]);
+                    at += 1;
+                }
+            }
+            _ => {
+                out.push(ch);
+                at += 1;
+            }
+        }
+    }
+    out
 }
 
 /// Adds to `denied` the dependency the key `path` names, if it names one.
@@ -1322,6 +1383,35 @@ fn each_listed_form_of_dependency_table_is_read() {
             "libc",
             "reqwest"
         ]
+    );
+}
+
+#[test]
+fn a_multiline_string_in_the_manifest_hides_no_table() {
+    // A header inside a multi-line string would otherwise move the reader
+    // into a table the manifest never opened.
+    let manifest = r#"[dependencies]
+evreos-i18n = { path = "i", note = """
+[dev-dependencies]
+""" }
+evreos-net = { path = "n" }
+[package]
+description = '''
+[dependencies]
+fake = "1"
+'''
+readme = """ends in \""" and " and five"""""
+[dependencies.x]
+version = "1"
+[target.'cfg(unix)'.dependencies]
+winit = """
+""" # and a """ in a comment opens nothing
+libc = '"""'
+rustix = "1"
+"#;
+    assert_eq!(
+        denied_in(manifest),
+        ["evreos_net", "x", "winit", "libc", "rustix"]
     );
 }
 
