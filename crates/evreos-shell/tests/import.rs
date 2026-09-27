@@ -1004,25 +1004,65 @@ const KEYWORDS: &[&str] = &[
 const ALLOWED_CRATE: &str = "evreos_i18n";
 
 /// Every dependency of this crate the import may not name, as its code spells
-/// them, read from the `[dependencies]` table of its manifest.
+/// them, read from its manifest.
 fn denied_crates() -> Vec<String> {
     let manifest =
         fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")).unwrap();
+    denied_in(&manifest)
+}
+
+/// The dependencies a manifest declares for the library, as code spells them,
+/// but the one the import may name: every key of `[dependencies]` or of a
+/// `[target.….dependencies]` table, dotted keys such as `foo.workspace` by
+/// their first part, and every table of the form `[dependencies.foo]`.
+/// Development and build dependencies do not reach the library.
+fn denied_in(manifest: &str) -> Vec<String> {
     let mut in_dependencies = false;
     let mut denied = Vec::new();
+    let mut deny = |name: &str| {
+        let name = name.trim().trim_matches('"').replace('-', "_");
+        if !name.is_empty() && name != ALLOWED_CRATE && !denied.contains(&name) {
+            denied.push(name);
+        }
+    };
     for line in manifest.lines().map(str::trim) {
-        if line.starts_with('[') {
-            in_dependencies = line == "[dependencies]";
-        } else if in_dependencies {
-            if let Some((name, _)) = line.split_once('=') {
-                let name = name.trim().replace('-', "_");
-                if !name.is_empty() && !name.starts_with('#') && name != ALLOWED_CRATE {
-                    denied.push(name);
-                }
+        if let Some(header) = line.strip_prefix('[').and_then(|l| l.strip_suffix(']')) {
+            let header = header.trim();
+            let table = header.strip_prefix("target.").map_or(header, |rest| {
+                // `target.'cfg(…)'.dependencies`: what follows the quoted
+                // or dotted target name.
+                rest.rsplit_once("'.")
+                    .or_else(|| rest.rsplit_once("\"."))
+                    .or_else(|| rest.split_once('.'))
+                    .map_or("", |(_, table)| table)
+            });
+            in_dependencies = table == "dependencies";
+            if let Some(name) = table.strip_prefix("dependencies.") {
+                deny(name);
+            }
+        } else if in_dependencies && !line.starts_with('#') {
+            if let Some((key, _)) = line.split_once('=') {
+                deny(key.split('.').next().unwrap_or(""));
             }
         }
     }
     denied
+}
+
+#[test]
+fn each_listed_form_of_dependency_table_is_read() {
+    let manifest = "[package]\nname = \"x\"\n\
+        [dependencies]\nevreos-net = { path = \"n\" }\nwinit.workspace = true\n\
+        evreos-i18n = { path = \"i\" }\n\
+        [target.'cfg(windows)'.dependencies]\nwindows-sys = \"1\"\n\
+        [target.x86_64-unknown-linux-gnu.dependencies]\nlibc = \"0.2\"\n\
+        [dependencies.reqwest]\nversion = \"1\"\n\
+        [dev-dependencies]\ntrybuild = \"1\"\n\
+        [build-dependencies]\ncc = \"1\"\n";
+    assert_eq!(
+        denied_in(manifest),
+        ["evreos_net", "winit", "windows_sys", "libc", "reqwest"]
+    );
 }
 
 #[test]
