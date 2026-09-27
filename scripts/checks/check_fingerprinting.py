@@ -930,14 +930,23 @@ def check_tree(root, allowlist_path=ALLOWLIST):
 
     while brought:
         kind, target, by = brought.pop(0)
-        resolved = target.resolve()
+        try:
+            resolved = target.resolve()
+            is_file = resolved.is_file()
+        except (OSError, RuntimeError, ValueError) as error:
+            reason = getattr(error, "strerror", None) or error
+            problems.append(
+                f"{by}: brings {target.name!r} into the build, but it cannot be "
+                f"resolved ({reason}), so no read in it can be answered for"
+            )
+            continue
         if not resolved.is_relative_to(root):
             problems.append(
                 f"{by}: brings {target.name} into the build from outside the tree "
                 "this check reads, so no read in it can be answered for"
             )
             continue
-        if not resolved.is_file():
+        if not is_file:
             continue
         where = resolved.relative_to(root).as_posix()
         if where in read:

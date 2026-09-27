@@ -507,6 +507,31 @@ report("a file compiled in through cfg_attr's path is read, whichever cfg holds"
        mentions(problems, "crates/x/src/probe_windows.txt:1", "'MachineGuid'")
        and mentions(problems, "crates/x/src/probe_other.txt:1", "'machine-id'"))
 
+for label, body in (
+    ("a name too long for the system", 'include!("' + "a" * 300 + '.in");\n'),
+    ("a NUL", 'const S: &str = include_str!("a\0b");\n'),
+):
+    try:
+        problems = tree(with_rust(body))[0]
+        report(f"a brought file with {label} is reported, not a traceback",
+               mentions(problems, "probe.rs:", "cannot be resolved"))
+    except (OSError, RuntimeError, ValueError) as error:
+        report(f"a brought file with {label} is reported, not {error!r}", False)
+
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    root = base / "tree"
+    for relative, content in with_rust('include!("loop.in");\n').items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(content, encoding="utf-8")
+    (root / "crates" / "x" / "src" / "loop.in").symlink_to("loop.in")
+    (base / "allowlist.txt").write_text("", encoding="utf-8")
+    try:
+        check.check_tree(root, base / "allowlist.txt")
+        report("a brought file whose link loops ends in a verdict", True)
+    except (OSError, RuntimeError, ValueError) as error:
+        report(f"a brought file whose link loops ends in a verdict, not {error!r}", False)
+
 problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported, on the line that brings it",
        mentions(problems, "probe.rs:2", "outside.in", "outside the tree"))
