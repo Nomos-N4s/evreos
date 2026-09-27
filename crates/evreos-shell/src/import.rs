@@ -831,10 +831,11 @@ fn millis(time: SystemTime) -> u128 {
 /// skipped. A user name and password carried in the address's authority are
 /// removed: they are a site credential, which an import never carries
 /// (Q-E5). A `file:` address whose path opens on two separators — which a
-/// browser reads as the start of an authority, whether after `file:` or after
-/// a `file://` whose host is empty or `localhost`, which a browser reads as
-/// empty — and names a user there is skipped whole, since the credential
-/// cannot be cut from it without changing where it points.
+/// browser can read as the start of an authority, after `file:`, after an
+/// empty `file://`, or after a host it reads as empty, which `localhost`
+/// is in any of the spellings a browser decodes to it — and names a user
+/// there is skipped whole, whatever its host, since the credential cannot
+/// be cut from it without changing where it points.
 pub fn clean_address(raw: &str) -> Option<String> {
     let raw = raw.trim();
     if raw.is_empty() || raw.chars().any(|ch| ch.is_control() || ch == ' ') {
@@ -872,12 +873,12 @@ pub fn clean_address(raw: &str) -> Option<String> {
             let path = &rest[end..];
             // With no host, a path opening on two separators is read as a
             // further authority, as above: a share path is kept, and one
-            // naming a user is refused. A `file:` host of `localhost` is no
-            // host: a browser loads `file://localhost//u:p@server/` as
-            // `file:////u:p@server/`.
-            let no_host =
-                host.is_empty() || (scheme == "file" && host.eq_ignore_ascii_case("localhost"));
-            if no_host && smuggles_credential(path) {
+            // naming a user is refused. A browser reads a `file:` host of
+            // `localhost` as none, and decodes the host first, so
+            // `file://localhos%74//u:p@server/` loads as
+            // `file:////u:p@server/`. No spelling of the host is trusted: for
+            // a `file:` address the rule holds whatever the host.
+            if scheme == "file" && smuggles_credential(path) {
                 return None;
             }
             Some(format!("{scheme}://{host}{path}"))
@@ -1009,6 +1010,11 @@ mod tests {
             "file://LOCALHOST/\\u:secret@server/x",
             "file://localhost/\\\\u:secret@server\\x",
             "file://member@localhost//u:secret@server/x",
+            "file://localhos%74//u:secret@server/x",
+            "file://%6cocalhost//u:secret@server/x",
+            "file://\u{ff4c}\u{ff4f}\u{ff43}\u{ff41}\u{ff4c}\u{ff48}\u{ff4f}\u{ff53}\u{ff54}//u:secret@server/x",
+            "file://loca\u{ad}lhost/\\u:secret@server/x",
+            "file://server//u:secret@elsewhere/x",
         ] {
             assert_eq!(clean_address(smuggled), None, "{smuggled}");
         }
