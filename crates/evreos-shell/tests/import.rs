@@ -1159,10 +1159,16 @@ fn cargo_metadata(args: &[&str]) -> Json {
 }
 
 /// The host rustc builds for by default, which the graph is filtered to,
-/// as the compiler beside cargo names it.
+/// as the compiler beside cargo, or else the one on the path, names it.
 fn host_triple() -> String {
-    let rustc =
+    let beside =
         Path::new(env!("CARGO")).with_file_name(format!("rustc{}", std::env::consts::EXE_SUFFIX));
+    // Where cargo stands alone, the compiler is the one on the path.
+    let rustc = if beside.is_file() {
+        beside
+    } else {
+        PathBuf::from("rustc")
+    };
     let output = std::process::Command::new(rustc)
         .arg("-vV")
         .output()
