@@ -31,9 +31,11 @@
 //! neither `std::net` nor `std::process`, so opens no socket and starts no
 //! process; reaches no part of the standard library's platform module but
 //! the Unix `OpenOptionsExt`, and no part of this crate but the stores;
-//! loads no file but its own five modules, through no
-//! `#[path]` and no `cfg_attr`; invokes no macro but a short list of the
-//! standard library's; and is written in ASCII outside its literals and
+//! writes no file but the member's stores, through them, and calls nothing
+//! of the standard library's that writes, creates, removes or renames one;
+//! loads no file but its own five modules, through no `#[path]` and no `cfg_attr`;
+//! invokes no macro but a short list of the standard library's; and is
+//! written in ASCII outside its literals and
 //! comments, so no character a reader cannot see hides a path.
 //! `tests/import.rs` asserts each of these token by token. What it asserts is
 //! what the code names, not where a path leads: a profile the member points

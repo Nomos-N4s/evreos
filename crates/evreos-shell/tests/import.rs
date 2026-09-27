@@ -1196,6 +1196,21 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
                 }
                 Some(_) => {}
             },
+            // The import writes no file of its own: nothing in it may
+            // write, create,
+            // remove or rename a file, or change one's permissions. A file it
+            // wrote could be anything the operating system treats as code or
+            // as a route out, which no refusal of a module could see.
+            "remove_file" | "remove_dir" | "remove_dir_all" | "rename" | "create_dir"
+            | "create_dir_all" | "hard_link" | "soft_link" | "symlink" | "set_permissions"
+            | "write_all" | "set_len" => found.push(format!("names `{word}`, which writes")),
+            "write" | "copy" | "create" | "create_new" | "append"
+                if punct(i.wrapping_sub(1), '.')
+                    || punct(i.wrapping_sub(1), ':')
+                    || in_path_group(i) =>
+            {
+                found.push(format!("calls `{word}`, which writes"));
+            }
             // A macro named without a path, from anywhere in the crate.
             // A raw identifier is never a keyword, so `r#match!` is a macro,
             // and none of the standard library's is invoked that way.
@@ -1288,6 +1303,21 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("#[cfg_attr(unix, allow(dead_code))] fn f() {}", false),
         ("mod elsewhere;", true),
         ("mod json;", false),
+        ("fn f() { std::fs::write(\"x\", b\"y\").unwrap(); }", false),
+        (
+            "use std::fs::{write}; fn f() { write(\"x\", b\"\").unwrap(); }",
+            false,
+        ),
+        (
+            "fn f(o: &mut std::fs::OpenOptions) { o.write(true); }",
+            false,
+        ),
+        ("fn f() { std::fs::File::create(\"x\").unwrap(); }", false),
+        ("fn f() { std::fs::remove_file(\"x\").unwrap(); }", false),
+        (
+            "fn f(file: &mut std::fs::File) { file.set_len(0).unwrap(); }",
+            false,
+        ),
         (
             "#[cfg(test)]\nmod tests { #[test] fn t() {} }\nfn leak() { crate::tabs::g() }",
             false,
@@ -1319,6 +1349,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("mod json;", true),
+        (
+            "fn f(f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { write!(f, \"x\") }",
+            false,
+        ),
+        ("fn f(v: &mut Vec<u8>) { v.truncate(3); }", false),
         (
             "fn f(a: bool) -> bool { if !a { return !a; } cfg!(windows) }",
             false,
@@ -1387,7 +1422,8 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // module's own reach, token by token rather than by text: it names no
     // dependency of this crate but evreos-i18n, neither std::net nor
     // std::process, and no part of std::os but OpenOptionsExt; its only way
-    // into the rest of this crate is the stores it writes; it loads no file
+    // into the rest of this crate is the stores it writes; it calls nothing
+    // that writes a file; it loads no file
     // but its own five modules, through no #[path] and no cfg_attr; it
     // invokes no macro but those listed in `MACROS`; and its code is ASCII.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
