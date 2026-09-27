@@ -122,7 +122,11 @@ impl RolloutDraw {
 
     /// Writes `draw` to a new file beside `path`, flushed to the disk, and
     /// returns its path. A name another call left behind, from a process
-    /// that ended before removing it, is passed over and left as it is.
+    /// that ended before removing it, is passed over and left as it is:
+    /// nothing tells whether a running process is about to link it. Such a
+    /// file can hold a value, even the kept one under a second name, so
+    /// removing the rollout file alone may leave a value on the disk; it is
+    /// still one that never leaves the machine.
     fn write_partial(path: &Path, draw: Self) -> io::Result<PathBuf> {
         loop {
             let partial = Self::partial_path(path);
