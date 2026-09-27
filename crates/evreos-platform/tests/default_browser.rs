@@ -1,10 +1,12 @@
-//! FR-013 registration, run against an in-memory registry on every platform.
+//! FR-013 registration, run against an in-memory registry on every platform,
+//! and on Windows against the real registry and the system's launcher too.
 //!
 //! Asserts that registering writes the browser's entry, its capabilities
 //! naming a ProgID for `http`, `https`, `.htm` and `.html`, the two ProgIDs
 //! and its `RegisteredApplications` value; that unregistering, as an
-//! uninstall does, removes every one of them and nothing else; and that a
-//! failed registration leaves nothing listed.
+//! uninstall does, removes every one of them and nothing else; that a failed
+//! first registration leaves nothing listed; and that a failed
+//! re-registration leaves the existing one listed.
 #![forbid(unsafe_code)]
 
 use std::collections::BTreeMap;

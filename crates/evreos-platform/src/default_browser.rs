@@ -33,10 +33,10 @@
 //! 11, is owed to the tier-1 check that
 //! `docs/measurements/default-browser-registration.md` lists.
 //!
-//! Both go through [`Registry`], so the set of values is decided here, on
-//! every platform, and tested on every platform; a platform binding only
-//! stores strings. The tier-1 binding is `WindowsRegistry`, built on Windows
-//! alone.
+//! Registration and its removal both go through [`Registry`], so the set of
+//! values is decided here, on every platform, and tested on every platform;
+//! a platform binding only stores strings. The tier-1 binding is
+//! `WindowsRegistry`, built on Windows alone.
 //!
 //! No brand name appears here (FR-042). The product name reaches this module
 //! as [`Application::name`], from the shell's brand configuration, and every
