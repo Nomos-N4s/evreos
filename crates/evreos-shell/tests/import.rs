@@ -1674,6 +1674,12 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             "catalogue" if ident(i + 1) == Some("as") => {
                 found.push("`catalogue` renamed".to_string());
             }
+            // `Language` is held as `catalogue` is: once taken, it may not be
+            // renamed by a later `use`, so the two names are all the import
+            // ever uses of the catalogue.
+            "Language" if ident(i + 1) == Some("as") => {
+                found.push("`Language` renamed".to_string());
+            }
             "evreos_i18n" => {
                 let taken = |at: usize| matches!(ident(at), Some("Language" | "catalogue"));
                 if !path_sep(i + 1) {
@@ -2014,6 +2020,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("use evreos_i18n::Language as L;", false),
+        (
+            "use evreos_i18n::{Language}; use self::Language as L;",
+            false,
+        ),
         (
             "use evreos_i18n::catalogue; use self::catalogue as c; fn f() { c::net::X; }",
             false,

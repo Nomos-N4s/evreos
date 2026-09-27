@@ -30,7 +30,7 @@
 //! - it names no dependency of this crate but `evreos-i18n`, for the names of
 //!   its folders, so not `evreos-net`, and no crate through `extern`; of
 //!   `evreos-i18n` it names `Language` and `catalogue` alone, and no path
-//!   after `catalogue`, the function it calls, nor a rename of it, so
+//!   after `catalogue`, the function it calls, nor a rename of either, so
 //!   nothing that crate re-exports; and that crate declares no normal
 //!   dependency for some platforms only and links no crate of its own;
 //! - it names neither `std::net` nor `std::process`, so opens no socket and

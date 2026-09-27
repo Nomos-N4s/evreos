@@ -17,7 +17,7 @@ publish.workspace = true
 # test in crates/evreos-shell/tests/import.rs fails while this crate
 # declares a normal dependency for some platforms only or links any crate,
 # and lets the import name only `Language` and `catalogue` from it, with no
-# path after `catalogue` and no rename of it, so nothing this crate
+# path after `catalogue` and no rename of either, so nothing this crate
 # re-exports reaches the import; a change adding a normal dependency has to
 # rework that check too.
 
