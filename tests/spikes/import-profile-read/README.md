@@ -19,7 +19,9 @@ with the crate, so neither can drift from the code it measures.
 | `synth_naive.py rollback\|wal DIR SECONDS` | Single-pass copies of the synthetic store, torn if `quick_check` fails or the copy holds two generations. |
 | `big_bookmarks.py DIR` | Writes the synthetic 20,000-bookmark Chromium profile, 400 folders of 50, into `DIR/Default`. |
 
-A run, per browser:
+A run, per browser. The record's live table has two runs for Chrome and
+for Edge: one with history writes only, which is this run without
+`cdp_bookmarks.mjs` and on its own profile directory, and one with it:
 
 ```
 python3 pages.py 8765 150 &
@@ -39,6 +41,8 @@ msedge --headless=new --no-first-run --remote-debugging-port=9334 \
     --user-data-dir=/tmp/e http://127.0.0.1:8765/p/1 &
 node cdp_bookmarks.mjs 9334 edge://favorites 75 &
 cargo run --release -p evreos-shell --example import_probe -- edge /tmp/e/Default 60
+
+python3 probe_lib.py /tmp/e/Default/History "select count(*) from urls"
 ```
 
 Firefox has no DevTools bookmarks driver here, so its run writes history
@@ -48,6 +52,7 @@ only, and its store is copied with the log beside it:
 mkdir -p /tmp/f
 firefox --headless --no-remote --profile /tmp/f http://127.0.0.1:8765/p/1 &
 cargo run --release -p evreos-shell --example import_probe -- firefox /tmp/f 60
+python3 probe_lib.py /tmp/f/places.sqlite "select count(*) from moz_places where last_visit_date is not null"
 python3 stress_copy.py /tmp/f/places.sqlite "select count(*) from moz_places" 150 sidecars
 ```
 
