@@ -49,11 +49,12 @@ impl Schedule {
     /// With none, it is due at once. Otherwise it is due a period after the
     /// last, and a last check that appears to be in the future, because the
     /// clock moved back, counts as having run now, so a clock change never
-    /// holds checks off for longer than one period.
+    /// holds checks off for longer than one period. A due time past the
+    /// latest the platform's clock can hold is due at once instead.
     pub fn next_due(&self, last: Option<SystemTime>, now: SystemTime) -> SystemTime {
         match last {
             None => now,
-            Some(last) => last.min(now) + self.period,
+            Some(last) => last.min(now).checked_add(self.period).unwrap_or(now),
         }
     }
 }

@@ -690,4 +690,25 @@ mod schedule {
         let future = now + 30 * 24 * HOUR;
         assert_eq!(schedule.next_due(Some(future), now), now + 6 * HOUR);
     }
+
+    #[test]
+    fn a_due_time_past_the_clocks_range_is_due_at_once() {
+        // The latest whole second this platform's clock holds, found by
+        // halving, since its range differs between platforms.
+        let (mut low, mut high) = (0u64, u64::MAX);
+        while low < high {
+            let middle = low + (high - low).div_ceil(2);
+            if SystemTime::UNIX_EPOCH
+                .checked_add(Duration::from_secs(middle))
+                .is_some()
+            {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
+        }
+        let latest = SystemTime::UNIX_EPOCH + Duration::from_secs(low);
+        let schedule = Schedule::new();
+        assert_eq!(schedule.next_due(Some(latest), latest), latest);
+    }
 }
