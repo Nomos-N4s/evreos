@@ -843,6 +843,11 @@ fn unix_micros(micros: i64) -> Option<SystemTime> {
     UNIX_EPOCH.checked_add(Duration::from_micros(micros))
 }
 
+/// The most a browser's list of its profiles — Chromium's `Local State`,
+/// Firefox's `profiles.ini` — may hold for discovery to read it. Both run to
+/// kilobytes; the bound keeps a file that never ends from being read.
+const MAX_PROFILE_LIST_BYTES: u64 = 16 << 20;
+
 /// Whether a directory entry is a directory, following no further than
 /// `fs::metadata` does.
 fn is_dir(path: &Path) -> bool {

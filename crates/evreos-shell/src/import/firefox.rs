@@ -13,14 +13,13 @@
 #![forbid(unsafe_code)]
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
 use std::path::{Path, PathBuf};
 
-use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles};
+use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles, read_bounded};
 use super::sqlite::{Database, SqliteError, Value};
 use super::{
-    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, SourceBrowser,
-    SourceProfile, clean_address, copy_store, firefox_time, is_dir,
+    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, MAX_PROFILE_LIST_BYTES,
+    RootKind, SourceBrowser, SourceProfile, clean_address, copy_store, firefox_time, is_dir,
 };
 
 /// Every file an import of a Firefox profile reads.
@@ -261,7 +260,11 @@ fn walk(
 
 /// The profiles `profiles.ini` lists under `app_dir`, by the names it gives.
 pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
-    let Ok(ini) = fs::read_to_string(app_dir.join("profiles.ini")) else {
+    let Some(ini) = read_bounded(&app_dir.join("profiles.ini"), MAX_PROFILE_LIST_BYTES)
+        .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
+    else {
         return Vec::new();
     };
     let mut profiles = Vec::new();

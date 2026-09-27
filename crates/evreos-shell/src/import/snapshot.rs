@@ -40,7 +40,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fs::File;
+use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -175,7 +175,27 @@ pub trait FileSource {
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Disk;
 
+/// The most one file of a store may hold for the import to read it: far
+/// beyond any `History` or `places.sqlite` a profile used for years reaches,
+/// and a bound on what a file that never ends can make the reader hold.
+pub const MAX_STORE_FILE_BYTES: u64 = 1 << 30;
+
+/// Open `path` if it is there and is a regular file. A pipe would block the
+/// open and a device such as `/dev/zero` never ends, and a profile directory
+/// can hold either under a store's name, behind a link or not; neither is a
+/// store, so each is an error rather than a read.
 fn open_if_present(path: &Path) -> io::Result<Option<File>> {
+    match fs::metadata(path) {
+        Ok(meta) if !meta.is_file() => {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "not a regular file",
+            ));
+        }
+        Ok(_) => {}
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error),
+    }
     match File::open(path) {
         Ok(file) => Ok(Some(file)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
@@ -183,14 +203,29 @@ fn open_if_present(path: &Path) -> io::Result<Option<File>> {
     }
 }
 
+/// The whole of the regular file at `path`, or `None` if it does not exist;
+/// an error if it is not a regular file or holds more than `limit` bytes.
+/// Past its opening check the file is read through a bound, so one that grows
+/// while it is read cannot carry the read past `limit` either.
+pub fn read_bounded(path: &Path, limit: u64) -> io::Result<Option<Vec<u8>>> {
+    let Some(file) = open_if_present(path)? else {
+        return Ok(None);
+    };
+    let too_large = || io::Error::new(io::ErrorKind::InvalidData, "larger than the import reads");
+    if file.metadata()?.len() > limit {
+        return Err(too_large());
+    }
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(too_large());
+    }
+    Ok(Some(bytes))
+}
+
 impl FileSource for Disk {
     fn read(&mut self, path: &Path) -> io::Result<Option<Vec<u8>>> {
-        let Some(mut file) = open_if_present(path)? else {
-            return Ok(None);
-        };
-        let mut bytes = Vec::new();
-        file.read_to_end(&mut bytes)?;
-        Ok(Some(bytes))
+        read_bounded(path, MAX_STORE_FILE_BYTES)
     }
 
     /// Compared in chunks as it is read, so the second pass holds no second
@@ -629,6 +664,49 @@ mod tests {
         assert!(disk.journal_hot(&journal).unwrap());
         assert!(disk.unchanged(&dir.join("absent"), None).unwrap());
         assert!(!disk.unchanged(&main, None).unwrap());
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn the_disk_source_reads_only_a_bounded_regular_file() {
+        let dir = std::env::temp_dir().join(format!(
+            "evreos_snapshot_unit_{}_{}",
+            std::process::id(),
+            line!()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let store = dir.join("store");
+        std::fs::write(&store, b"twelve bytes").unwrap();
+        assert_eq!(read_bounded(&store, 12).unwrap().unwrap(), b"twelve bytes");
+        assert_eq!(
+            read_bounded(&store, 11).unwrap_err().kind(),
+            io::ErrorKind::InvalidData,
+            "one byte over the bound"
+        );
+        // A sparse file past the store bound is refused before any of it is read.
+        let huge = dir.join("huge");
+        File::create(&huge)
+            .unwrap()
+            .set_len(MAX_STORE_FILE_BYTES + 1)
+            .unwrap();
+        assert!(Disk.read(&huge).is_err());
+        assert!(Disk.read(&dir).is_err(), "a directory is not a store");
+        #[cfg(unix)]
+        {
+            let zero = dir.join("zero");
+            std::os::unix::fs::symlink("/dev/zero", &zero).unwrap();
+            assert!(Disk.read(&zero).is_err(), "a device behind a link");
+            assert!(Disk.unchanged(&zero, Some(b"x")).is_err());
+            assert!(Disk.journal_hot(&zero).is_err());
+            let pipe = dir.join("pipe");
+            let made = std::process::Command::new("mkfifo")
+                .arg(&pipe)
+                .status()
+                .is_ok_and(|status| status.success());
+            if made {
+                assert!(Disk.read(&pipe).is_err(), "a pipe, which would block");
+            }
+        }
         std::fs::remove_dir_all(&dir).unwrap();
     }
 }

@@ -17,11 +17,11 @@ use std::fs;
 use std::path::Path;
 
 use super::json::{self, Json};
-use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles};
+use super::snapshot::{FileSource, SnapshotPolicy, StoreFiles, read_bounded};
 use super::sqlite::{Database, Value};
 use super::{
-    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, RootKind, SourceBrowser,
-    SourceProfile, chromium_time, clean_address, copy_store, is_dir,
+    ImportError, ImportScope, ImportedNode, ImportedRoot, ImportedVisit, MAX_PROFILE_LIST_BYTES,
+    RootKind, SourceBrowser, SourceProfile, chromium_time, clean_address, copy_store, is_dir,
 };
 
 /// Every file an import of a Chromium profile reads.
@@ -192,8 +192,10 @@ pub(super) fn discover(browser: SourceBrowser, user_data: &Path) -> Vec<SourcePr
     let Ok(entries) = fs::read_dir(user_data) else {
         return Vec::new();
     };
-    let local_state = fs::read_to_string(user_data.join("Local State"))
+    let local_state = read_bounded(&user_data.join("Local State"), MAX_PROFILE_LIST_BYTES)
         .ok()
+        .flatten()
+        .and_then(|bytes| String::from_utf8(bytes).ok())
         .and_then(|text| json::parse(&text).ok());
     let mut profiles: Vec<SourceProfile> = entries
         .filter_map(Result::ok)
