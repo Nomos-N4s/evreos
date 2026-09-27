@@ -74,7 +74,9 @@ pub enum Decision {
 /// to this install. Only `decide` makes one, and [`artefact::verify`] takes
 /// nothing else, so an artefact is never checked against a manifest that
 /// was refused, is for another platform, names an older version, or is
-/// rolled out to installs this one is not among.
+/// rolled out to installs this one is not among. An offer carries no time
+/// of its own, so the artefact check refuses it again once its manifest
+/// has expired.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Offer(VerifiedManifest);
 

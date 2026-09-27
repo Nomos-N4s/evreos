@@ -31,6 +31,9 @@ pub enum ArtefactRefusal {
     Size,
     /// Its SHA-256 is not the manifest's.
     Digest,
+    /// Its manifest is past its `not after` now, though it was not when it
+    /// was offered.
+    Expired,
     /// It could not be read.
     Read(io::Error),
 }
@@ -40,6 +43,7 @@ impl fmt::Display for ArtefactRefusal {
         match self {
             Self::Size => f.write_str("the update artefact's length is not the manifest's"),
             Self::Digest => f.write_str("the update artefact's SHA-256 is not the manifest's"),
+            Self::Expired => f.write_str("the update artefact's manifest has expired"),
             Self::Read(error) => write!(f, "the update artefact could not be read: {error}"),
         }
     }
@@ -53,11 +57,23 @@ impl std::error::Error for ArtefactRefusal {}
 /// manifest's length, so an artefact far longer than stated is not read
 /// whole.
 ///
+/// `now`, in seconds since 1970-01-01 UTC, is checked against the
+/// manifest's `not after` again before anything is read, since an offer
+/// can be held while its artefact is fetched, and the manifest may expire
+/// in that time.
+///
 /// The check covers the bytes read here. What applies the update must apply
 /// those bytes, from a copy only the updater writes, and not reopen a path
 /// another process could have written to since.
-pub fn verify(offer: &Offer, mut reader: impl Read) -> Result<VerifiedArtefact, ArtefactRefusal> {
+pub fn verify(
+    offer: &Offer,
+    now: u64,
+    mut reader: impl Read,
+) -> Result<VerifiedArtefact, ArtefactRefusal> {
     let manifest = offer.manifest();
+    if now > manifest.not_after() {
+        return Err(ArtefactRefusal::Expired);
+    }
     let mut hasher = Sha256::new();
     let mut read: u64 = 0;
     let mut buffer = [0u8; 64 * 1024];

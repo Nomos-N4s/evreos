@@ -540,6 +540,9 @@ mod artefact {
     use super::{Fields, key};
 
     const ARTEFACT: &[u8] = b"an installer, standing in for the real one";
+    /// A moment the default manifest, which expires at 4,000,000,000, has
+    /// not reached.
+    const NOW: u64 = 3_000_000_000;
 
     /// The offer of an update whose artefact is `bytes`, to an install of
     /// an older version inside its rollout.
@@ -564,13 +567,24 @@ mod artefact {
     }
 
     #[test]
+    fn an_offer_whose_manifest_has_since_expired_is_refused() {
+        let offer = offer_for(ARTEFACT);
+        assert!(matches!(
+            verify(&offer, 4_000_000_001, ARTEFACT),
+            Err(ArtefactRefusal::Expired)
+        ));
+        // The last moment it is accepted, as decide accepts it.
+        verify(&offer, 4_000_000_000, ARTEFACT).unwrap();
+    }
+
+    #[test]
     fn the_published_artefact_verifies() {
         let offer = offer_for(ARTEFACT);
-        let verified = verify(&offer, ARTEFACT).unwrap();
+        let verified = verify(&offer, NOW, ARTEFACT).unwrap();
         assert_eq!(verified.version(), offer.manifest().version());
         // Read a byte at a time, it verifies the same.
         let one_at_a_time = io::BufReader::with_capacity(1, ARTEFACT);
-        verify(&offer, one_at_a_time).unwrap();
+        verify(&offer, NOW, one_at_a_time).unwrap();
     }
 
     #[test]
@@ -580,7 +594,7 @@ mod artefact {
             let mut changed = ARTEFACT.to_vec();
             changed[index] ^= 0x01;
             assert!(matches!(
-                verify(&offer, changed.as_slice()),
+                verify(&offer, NOW, changed.as_slice()),
                 Err(ArtefactRefusal::Digest)
             ));
         }
@@ -590,13 +604,13 @@ mod artefact {
     fn a_shorter_or_longer_artefact_is_refused() {
         let offer = offer_for(ARTEFACT);
         assert!(matches!(
-            verify(&offer, &ARTEFACT[..ARTEFACT.len() - 1]),
+            verify(&offer, NOW, &ARTEFACT[..ARTEFACT.len() - 1]),
             Err(ArtefactRefusal::Size)
         ));
         let mut longer = ARTEFACT.to_vec();
         longer.push(0);
         assert!(matches!(
-            verify(&offer, longer.as_slice()),
+            verify(&offer, NOW, longer.as_slice()),
             Err(ArtefactRefusal::Size)
         ));
     }
@@ -620,7 +634,7 @@ mod artefact {
         let offer = offer_for(ARTEFACT);
         let mut endless = Endless(0);
         assert!(matches!(
-            verify(&offer, &mut endless),
+            verify(&offer, NOW, &mut endless),
             Err(ArtefactRefusal::Size)
         ));
         assert!(endless.0 <= 64 * 1024, "read {} bytes", endless.0);
@@ -635,7 +649,7 @@ mod artefact {
             }
         }
         assert!(matches!(
-            verify(&offer_for(ARTEFACT), Failing),
+            verify(&offer_for(ARTEFACT), NOW, Failing),
             Err(ArtefactRefusal::Read(_))
         ));
     }
