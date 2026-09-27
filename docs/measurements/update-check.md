@@ -32,19 +32,20 @@ the workspace's `Cargo.lock`. Two builds gave the same bytes.
 | --- | --- | ---: | ---: |
 | `io_error` | its arguments, one line of output, and an unwrapped `io::Result` from `std::fs` | 262,144 | — |
 | `verify_only` | `io_error`, plus a manifest verified under a pinned key | 335,872 | 73,728 |
-| `update_reached` | `io_error`, plus a whole check: the rollout draw kept in a file, the manifest decided, and an offered artefact checked | 352,256 | 90,112 |
+| `update_reached` | `io_error`, plus a whole check: the request planned, the rollout draw kept in a file, the manifest decided, an offered artefact checked, and the next check's due time | 361,472 | 99,328 |
 
 Ed25519 verification is most of the cost: 73,728 bytes, the curve arithmetic
 and SHA-512 `ed25519-dalek` brings, used without its default features, so with
-no precomputed tables. The rollout draw, the decision and the artefact's
-SHA-256 add 16,384 more.
+no precomputed tables. The request, the rollout draw, the decision, the
+artefact's SHA-256 and the schedule add 25,600 more.
 
 Against `budgets.toml`: SC-001's Windows entries are unmeasured, since no
 installer exists. Nothing shipped reaches the update path at this change,
 since the shell does not call it yet, so the cost as shipped is 0 bytes. Once
-the shell runs the check it is at most 90,112 bytes on this build, 0.086 MB.
+the shell runs the check it is at most 99,328 bytes on this build, 0.095 MB.
 That is an upper bound, since the probe counts the standard library's error
-formatting and file handling, which the shell already carries.
+formatting and file handling, which the shell already carries, and its own
+printing of the request and the due time.
 
 ### The crates they come from
 
@@ -76,9 +77,9 @@ verification:
 
 | Round | Each check |
 | --- | ---: |
-| 1 | 2.71 ms |
+| 1 | 2.73 ms |
 | 2 | 2.71 ms |
-| 3 | 2.71 ms |
+| 3 | 2.73 ms |
 
 The work is single-threaded and does not block, so the wall-clock time per
 check stands in for its processor time here. That is 5% of the 50 ms bound.
@@ -97,9 +98,9 @@ requests and sends none.
 The bytes: add two more executables to the scratch crate
 `docs/measurements/default-browser-registration.md` describes. `verify_only`
 calls `VerifiedManifest::verify` under an `UpdateKey`. `update_reached` calls
-`RolloutDraw::load_or_draw`, `decide` and, on an offered update,
-`artefact::verify`. Each takes its inputs from its arguments, so nothing is
-folded away.
+`check_request`, `RolloutDraw::load_or_draw`, `decide`, on an offered update
+`artefact::verify`, and `Schedule::next_due`. Each takes its inputs from its
+arguments, so nothing is folded away.
 
 The time: a crate outside the workspace with the same release profile, less
 `strip`, depending on `evreos-platform` and on `ed25519-dalek` 2.2 without
