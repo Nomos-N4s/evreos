@@ -245,22 +245,26 @@ impl FileSource for Disk {
 type Fingerprint = (usize, usize, usize, u64);
 
 fn fingerprint(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<Fingerprint> {
-    let main = source.read(&files.main)?.unwrap_or_default();
-    let wal = match &files.wal {
-        Some(path) => source.read(path)?.unwrap_or_default(),
-        None => Vec::new(),
-    };
-    let journal = match &files.journal {
-        Some(path) => source.read(path)?.unwrap_or_default(),
-        None => Vec::new(),
-    };
     // FNV-1a: a comparison between two reads of one store, not a defence
-    // against an adversary, which the parser's own checks are.
+    // against an adversary, which the parser's own checks are. Each file is
+    // hashed and let go before the next is read, so the fingerprint holds
+    // one file at a time, never the store and its journal together.
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
-    for byte in main.iter().chain(wal.iter()).chain(journal.iter()) {
-        hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+    let mut lengths = [0usize; 3];
+    let paths = [
+        Some(&files.main),
+        files.wal.as_ref(),
+        files.journal.as_ref(),
+    ];
+    for (length, path) in lengths.iter_mut().zip(paths) {
+        let Some(path) = path else { continue };
+        let bytes = source.read(path)?.unwrap_or_default();
+        for byte in &bytes {
+            hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+        *length = bytes.len();
     }
-    Ok((main.len(), wal.len(), journal.len(), hash))
+    Ok((lengths[0], lengths[1], lengths[2], hash))
 }
 
 fn journal_hot(source: &mut impl FileSource, files: &StoreFiles) -> io::Result<bool> {
@@ -325,7 +329,7 @@ pub fn take(
         }
         if journal_hot(source, files)? {
             // Let this attempt's copy go before the fingerprint reads the
-            // files again, so a refusal never holds the store twice.
+            // files again, so a refusal never holds more than one of them.
             drop((main, wal));
             moved |= refused_open(source, files, &mut held)?;
             continue;
