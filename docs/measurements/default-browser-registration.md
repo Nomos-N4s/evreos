@@ -3,10 +3,13 @@
 - **Task**: T059 (`specs/001-evreos-v1/tasks.md`) / CAR-116
 - **Date**: 2026-09-27
 - **Status**: Evidence from a build cross-compiled on Linux, not yet the
-  tier-1 figure. `specs/001-evreos-v1/tasks.md` orders every measurement
-  behind the reference machines T013 procures, with decisions/0004 as the one
-  exception, for T015 and T016 alone, and this build's target is not the
-  tier-1 one. The figures below are therefore recorded as the evidence the
+  tier-1 figure. Two rules decide that, and neither admits this build.
+  `specs/001-evreos-v1/quickstart.md` §A7 names FR-013 default-browser
+  registration among what "no result obtained" on a machine without a system
+  web view "may be reported for". `specs/001-evreos-v1/tasks.md` orders every
+  measurement behind the reference machines T013 procures, with
+  decisions/0004 as the one exception, for T015 and T016 alone, and this
+  build's target is not the tier-1 one. The figures below are therefore recorded as the evidence the
   choice of bindings rests on, and as the baseline the tier-1 build will be
   compared against. They become the tier-1 figure when that build confirms
   them on the tier-1 pinned runner, or sooner only if a founder decision
