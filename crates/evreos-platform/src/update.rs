@@ -7,7 +7,10 @@
 
 //! [`decide`] takes a manifest through every check in the order the format
 //! document fixes, and says whether this install is offered the update.
+//! [`artefact`] checks an offered update's artefact against its manifest
+//! before anything applies it.
 
+pub mod artefact;
 pub mod manifest;
 pub mod rollout;
 pub mod wake;

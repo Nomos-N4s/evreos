@@ -22,6 +22,8 @@ ed25519-dalek = { version = "2.2.0", default-features = false }
 # The rollout draw's randomness, from the operating system. The shell
 # already links this version through winit's ahash.
 getrandom = { version = "0.3.4", default-features = false }
+# The artefact's SHA-256. ed25519-dalek already brings this version.
+sha2 = { version = "0.10.9", default-features = false }
 
 # Tier 1's bindings, both Microsoft's safe ones: windows-registry for
 # default-browser registration, and windows for the launcher that opens the
@@ -37,6 +39,8 @@ windows = { version = "0.62.2", default-features = false, features = ["System", 
 [dev-dependencies]
 # Signs the manifests the tests verify; tests alone sign.
 ed25519-dalek = { version = "2.2.0", default-features = false }
+# Digests the artefacts the tests publish.
+sha2 = { version = "0.10.9", default-features = false }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-registry = "0.6.1"

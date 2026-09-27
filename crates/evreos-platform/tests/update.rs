@@ -470,3 +470,101 @@ mod decide {
         );
     }
 }
+
+mod artefact {
+    use std::io::{self, Read};
+
+    use evreos_platform::update::artefact::{ArtefactRefusal, verify};
+    use evreos_platform::update::manifest::VerifiedManifest;
+    use sha2::{Digest, Sha256};
+
+    use super::{Fields, key};
+
+    const ARTEFACT: &[u8] = b"an installer, standing in for the real one";
+
+    fn manifest_for(bytes: &[u8]) -> VerifiedManifest {
+        let fields = Fields {
+            size: bytes.len() as u64,
+            digest: Sha256::digest(bytes).into(),
+            ..Fields::default()
+        };
+        VerifiedManifest::verify(&fields.signed(), &key()).unwrap()
+    }
+
+    #[test]
+    fn the_published_artefact_verifies() {
+        let manifest = manifest_for(ARTEFACT);
+        let verified = verify(&manifest, ARTEFACT).unwrap();
+        assert_eq!(verified.version(), manifest.version());
+        // Read a byte at a time, it verifies the same.
+        let one_at_a_time = io::BufReader::with_capacity(1, ARTEFACT);
+        verify(&manifest, one_at_a_time).unwrap();
+    }
+
+    #[test]
+    fn any_changed_byte_is_refused() {
+        let manifest = manifest_for(ARTEFACT);
+        for index in 0..ARTEFACT.len() {
+            let mut changed = ARTEFACT.to_vec();
+            changed[index] ^= 0x01;
+            assert!(matches!(
+                verify(&manifest, changed.as_slice()),
+                Err(ArtefactRefusal::Digest)
+            ));
+        }
+    }
+
+    #[test]
+    fn a_shorter_or_longer_artefact_is_refused() {
+        let manifest = manifest_for(ARTEFACT);
+        assert!(matches!(
+            verify(&manifest, &ARTEFACT[..ARTEFACT.len() - 1]),
+            Err(ArtefactRefusal::Size)
+        ));
+        let mut longer = ARTEFACT.to_vec();
+        longer.push(0);
+        assert!(matches!(
+            verify(&manifest, longer.as_slice()),
+            Err(ArtefactRefusal::Size)
+        ));
+    }
+
+    #[test]
+    fn a_far_longer_artefact_is_refused_once_past_its_length() {
+        // A reader far longer than the manifest's length, which counts what
+        // it gives; it ends after a mebibyte so that a verifier reading to
+        // the end fails this test rather than hanging it.
+        struct Endless(u64);
+        impl Read for Endless {
+            fn read(&mut self, buffer: &mut [u8]) -> io::Result<usize> {
+                if self.0 >= 1 << 20 {
+                    return Ok(0);
+                }
+                self.0 += buffer.len() as u64;
+                buffer.fill(0);
+                Ok(buffer.len())
+            }
+        }
+        let manifest = manifest_for(ARTEFACT);
+        let mut endless = Endless(0);
+        assert!(matches!(
+            verify(&manifest, &mut endless),
+            Err(ArtefactRefusal::Size)
+        ));
+        assert!(endless.0 <= 64 * 1024, "read {} bytes", endless.0);
+    }
+
+    #[test]
+    fn a_read_that_fails_is_refused() {
+        struct Failing;
+        impl Read for Failing {
+            fn read(&mut self, _: &mut [u8]) -> io::Result<usize> {
+                Err(io::Error::other("disk gone"))
+            }
+        }
+        assert!(matches!(
+            verify(&manifest_for(ARTEFACT), Failing),
+            Err(ArtefactRefusal::Read(_))
+        ));
+    }
+}
