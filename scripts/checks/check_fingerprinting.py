@@ -115,10 +115,11 @@ It reads the tree and fails on:
                 `machine-uid`, `sysinfo`, `iana-time-zone`, `font-kit`,
                 `mac_address` and the rest of DEPENDENCY_SOURCES below. A
                 crate renamed with `package = ...` is read under its real
-                name. Such a crate reads the source inside code this check
-                never sees, so the manifest line is the one place the use is
-                visible. Names compare with `-` and `_` folded, as crates.io
-                folds them.
+                name, and so is one a member inherits with `workspace =
+                true` from a rename its workspace makes. Such a crate reads
+                the source inside code this check never sees, so the
+                manifest line is the one place the use is visible. Names
+                compare with `-` and `_` folded, as crates.io folds them.
 
   ALLOWLIST     an entry in scripts/checks/fingerprinting-allowlist.txt that
                 is not `<path> <source>`, names a source this check does not
@@ -476,14 +477,18 @@ def sources_in(line):
     return found
 
 
-def dependencies_in(manifest):
+def dependencies_in(manifest, inherited=None):
     """Every crate a parsed manifest depends on directly, by its real name.
 
     Every dependency table Cargo reads: top-level, `target.<cfg>.`, and the
     workspace's own `[workspace.dependencies]`. A renamed dependency --
     `alias = { package = "sysinfo" }` -- is returned under the crate it
-    names, since that is the code that runs.
+    names, since that is the code that runs. So is one a member inherits
+    with `workspace = true`: `inherited` is its workspace's
+    `[workspace.dependencies]`, where the rename is written, and the member
+    cannot restate it.
     """
+    inherited = inherited if isinstance(inherited, dict) else {}
     tables = []
     for key in DEPENDENCY_TABLES:
         tables.append(manifest.get(key))
@@ -501,6 +506,8 @@ def dependencies_in(manifest):
             continue
         for alias, spec in table.items():
             real = alias
+            if isinstance(spec, dict) and spec.get("workspace") is True:
+                spec = inherited.get(alias)
             if isinstance(spec, dict) and isinstance(spec.get("package"), str):
                 real = spec["package"]
             if real not in names:
@@ -573,6 +580,10 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     allowed = read_allowlist(allowlist_path, problems)
     used = set()
     read = []
+    # Each workspace's [workspace.dependencies], by the directory of its
+    # manifest. The walk reaches a workspace root before its members, which
+    # sit beneath it.
+    workspaces = {}
 
     def found(where, number, category, name):
         if (where, name) in allowed:
@@ -620,7 +631,14 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 except tomllib.TOMLDecodeError as error:
                     problems.append(f"{where}: not TOML this check can read ({error})")
                     continue
-                for crate in dependencies_in(manifest):
+                workspace = manifest.get("workspace")
+                if isinstance(workspace, dict):
+                    workspaces[path.parent] = workspace.get("dependencies")
+                inherited = next(
+                    (workspaces[d] for d in (path.parent, *path.parent.parents) if d in workspaces),
+                    None,
+                )
+                for crate in dependencies_in(manifest, inherited):
                     name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
                     if name is not None:
                         found(where, 0, DEPENDENCY_SOURCES[name], name)

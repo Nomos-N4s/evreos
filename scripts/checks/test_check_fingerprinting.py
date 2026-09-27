@@ -329,6 +329,16 @@ problems = tree(passing_tree({
 }))[0]
 report("a workspace dependency fails", mentions(problems, "Cargo.toml", "'mac_address'"))
 
+problems = tree(passing_tree({
+    "Cargo.toml": (
+        '[workspace]\nmembers = ["crates/x"]\n\n'
+        '[workspace.dependencies]\nsys = { package = "sysinfo", version = "0.30" }\n'
+    ),
+    "crates/x/Cargo.toml": CLEAN_MANIFEST + "sys = { workspace = true }\n",
+}))[0]
+report("a member inheriting a renamed workspace dependency is read under its real name",
+       mentions(problems, "crates/x/Cargo.toml", "'sysinfo'"))
+
 problems = tree(passing_tree({"crates/x/Cargo.toml": "[package\nname = \n"}))[0]
 report("a manifest that is not TOML fails rather than passing unread",
        mentions(problems, "Cargo.toml", "not TOML"))
