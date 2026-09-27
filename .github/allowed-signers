@@ -11,11 +11,15 @@
 # refuses the file rather than failing every commit with a misleading reason.
 # Keep the file free of blank lines; ssh-keygen warns on each one.
 #
-# The founder's public key is listed below, on the one line that is not a
-# comment. Before it was listed, the check reported that signing was not yet
-# enabled and skipped; once it is on the base branch, every commit in a pull
-# request must be signed by it. Only the founder can sign, because only the
-# founder holds the private key.
+# Two keys are listed below, on the lines that are not comments, both under
+# the founder's address: the key of the founder's own machine, and a second
+# key the founder made for the cloud environment the founder develops in,
+# whose private half is kept in that environment's settings, so that commits
+# made there are signed. Before a key was listed, the check reported that
+# signing was not yet enabled and skipped; once the keys are on the base
+# branch, every commit in a pull request must be signed by one of them.
+# Removing a line revokes that key, so the cloud key can be withdrawn without
+# touching the other.
 #
 # The history before the key was listed is not signed by it: its commits
 # carry no signature, and the forge's merge commits carry the forge's own.
@@ -35,3 +39,4 @@
 # adds the first key passes as not yet enabled. What enforcement needs beyond
 # this file is recorded in docs/governance/branch-protection.md.
 capintobe@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKb7Gz73JHggfT0Gth17JfKqHCXGrnUrZlKxDN9PjWUt
+capintobe@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPcoPokZ7SfHGZ629dxTEpaTM1G5roEjCZfZEO8R8uHo
