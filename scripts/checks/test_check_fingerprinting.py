@@ -748,7 +748,7 @@ problems = tree(passing_tree({
         "const { colorDepth } = screen;\n"
     ),
 }))[0]
-report("a chain a formatter breaks across lines is one read, on the line it starts",
+report("a call read off a chain a formatter breaks is reported on the line it is on",
        mentions(problems, "zone.js:2", "'resolvedOptions'"))
 report("...and the screen object taken whole by destructuring is a read",
        mentions(problems, "zone.js:4", "'window.screen'")
@@ -757,6 +757,20 @@ report("...as are a property split from screen, optionally chained or bracketed"
        mentions(problems, "zone.js:5", "'screen.'")
        and mentions(problems, "zone.js:7", "'screen.'")
        and mentions(problems, "zone.js:8", "'screen.'"))
+
+problems = tree(passing_tree({
+    "crates/x/ui/split.js": (
+        "const t = performance\n  .now();\n"
+        "const o = performance .\n  timeOrigin;\n"
+        "const c = navigator\n  ?.connection;\n"
+        "const f = document\n  .fonts;\n"
+    ),
+}))[0]
+report("a dotted script source split across lines is one read, on the line it starts",
+       mentions(problems, "split.js:1", "'performance.now'")
+       and mentions(problems, "split.js:3", "'performance.timeOrigin'")
+       and mentions(problems, "split.js:5", "'navigator.connection'")
+       and mentions(problems, "split.js:7", "'document.fonts'"))
 
 problems = tree(passing_tree({
     "crates/x/ui/whole.js": (
