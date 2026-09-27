@@ -49,12 +49,12 @@ It reads the tree and fails on:
                 Rust field access can spell, `self.screen.width` among them,
                 so in Rust they are matched inside string literals only,
                 where an injected script lives. A file a Rust file compiles
-                in through `include!` or `#[path = ...]` is read as Rust
-                whatever its suffix, and one it embeds through `include_str!`
-                or `include_bytes!` is read whole, like script, bytes that are
-                not UTF-8 decoded as `String::from_utf8_lossy` decodes them;
-                one outside the tree is reported, since nothing in it can be
-                answered for.
+                in through `include!` or `#[path = ...]`, `cfg_attr`'s
+                included, is read as Rust whatever its suffix, and one it
+                embeds through `include_str!` or `include_bytes!` is read
+                whole, like script, bytes that are not UTF-8 decoded as
+                `String::from_utf8_lossy` decodes them; one outside the tree
+                is reported, since nothing in it can be answered for.
                 A literal's `\\x` and `\\u{...}` escapes, and script's
                 `\\uHHHH` too, are decoded before matching, so a name spelled
                 with an escape -- `"/etc/machine\\x2did"` -- is the same name.
@@ -575,7 +575,7 @@ BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
 # where BROUGHT_PATH, read from the code with literals kept, begins.
 BRINGS = (
     ("rust", re.compile(r"\binclude!\s*[(\[{]")),
-    ("rust", re.compile(r"#\s*\[\s*path\s*=")),
+    ("rust", re.compile(r"#\s*\[\s*(?:cfg_attr\s*\([^\]]*?)?\bpath\s*=")),
     ("text", re.compile(r"\binclude_str!\s*[(\[{]")),
     ("bytes", re.compile(r"\binclude_bytes!\s*[(\[{]")),
 )

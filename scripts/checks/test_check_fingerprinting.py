@@ -494,6 +494,19 @@ problems = tree(passing_tree({
 report("a file embedded through include_bytes! is read whole, bad UTF-8 replaced",
        mentions(problems, "crates/x/src/inject.txt:1", "'hardwareConcurrency'"))
 
+problems = tree(passing_tree({
+    "crates/x/src/probe.rs": (
+        '#[cfg_attr(windows, path = "probe_windows.txt")]\n'
+        '#[cfg_attr(not(windows), path = "probe_other.txt")]\nmod probe_impl;\n'
+        '#[cfg_attr(feature = "path", derive(Debug))]\nstruct S;\n'
+    ),
+    "crates/x/src/probe_windows.txt": 'let g = "MachineGuid";\n',
+    "crates/x/src/probe_other.txt": 'let id = read("/etc/machine-id");\n',
+}))[0]
+report("a file compiled in through cfg_attr's path is read, whichever cfg holds",
+       mentions(problems, "crates/x/src/probe_windows.txt:1", "'MachineGuid'")
+       and mentions(problems, "crates/x/src/probe_other.txt:1", "'machine-id'"))
+
 problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported, on the line that brings it",
        mentions(problems, "probe.rs:2", "outside.in", "outside the tree"))
