@@ -168,11 +168,14 @@ the member chose, which Principle X's scaling to 200% requires, and the
 accessibility spike already does; a rule on it would fail every conformant
 window, the chrome's among them. A derivation that uses it rests on review.
 
-`std::time::Instant` is not read: it is opaque, and all it yields is an
-interval between two readings in one process, which the tab model uses for its
-load timeouts. A correlator built from such intervals -- timing a fixed
-workload to fingerprint the processor -- is composed from innocent parts and
-rests on review.
+`std::time::Instant` is not read. The shell uses it for intervals -- the tab
+model's load timeouts -- and an interval between two readings in one process
+is not a fact about the machine. An `Instant` is not opaque, though: its
+`Debug` form prints the platform counter it wraps -- the monotonic clock on
+Linux, the performance counter on Windows, the mach clock on macOS -- which
+are facts this check refuses by name. Formatting or serialising an `Instant`
+rests on review, and so does a correlator built from intervals, such as timing
+a fixed workload to fingerprint the processor.
 
 The locale is not a source here: FR-035 has the shell read the member's
 language, and FR-039c's closed report contents and FR-039d's closed counter
