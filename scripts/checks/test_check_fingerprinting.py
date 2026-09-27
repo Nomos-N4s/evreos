@@ -163,6 +163,12 @@ CAUGHT = (
      "GlobalMemoryStatusEx(&mut status);\n"),
     ("total memory", "/proc/meminfo",
      'let memory = read_to_string("/proc/meminfo");\n'),
+    ("processor model or count", "cpuid",
+     "let leaf = unsafe { core::arch::x86_64::__cpuid(0x8000_0002) };\n"),
+    ("processor model or count", "available_parallelism",
+     "let cores = std::thread::available_parallelism();\n"),
+    ("processor model or count", "brand_string",
+     'let model = sysctl("machdep.cpu.brand_string");\n'),
 )
 
 for category, name, body in CAUGHT:

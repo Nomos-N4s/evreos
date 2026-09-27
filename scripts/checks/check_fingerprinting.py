@@ -72,6 +72,15 @@ It reads the tree and fails on:
                 the physical memory the machine carries, through every
                 platform API, `/proc/meminfo`, `sysinfo` and
                 `navigator.deviceMemory`.
+    processor model and count
+                the processor's brand string, CPUID, the registry and sysctl
+                keys that name the processor, `/proc/cpuinfo`, and the
+                processor count -- `available_parallelism`, `num_cpus`,
+                `hardwareConcurrency` and their platform equivalents. The
+                task names the model; the count is read here too because
+                FR-036a binds on the characteristic, not on the one field a
+                crash reporter happens to label it with, and the count is the
+                same kind of fact about the same part.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -259,6 +268,28 @@ SOURCES = {
         ("total_memory", r"total_memory"),
         ("physicalMemory", r"physicalMemory"),
         ("deviceMemory", r"deviceMemory"),
+    ),
+    "processor model or count": (
+        ("/proc/cpuinfo", r"/proc/cpuinfo"),
+        ("cpuid", r"_*cpuid(?:_count)?"),
+        ("raw_cpuid", r"raw_cpuid"),
+        ("brand_string", r"brand_string"),
+        ("machdep.cpu", r"machdep\.cpu(?:\.\w+)*"),
+        ("ProcessorNameString", r"ProcessorNameString"),
+        ("CentralProcessor", r"CentralProcessor"),
+        ("Win32_Processor", r"Win32_Processor"),
+        ("GetLogicalProcessorInformation", r"GetLogicalProcessorInformation(?:Ex)?"),
+        ("GetSystemInfo", r"Get(?:Native)?SystemInfo"),
+        ("dwNumberOfProcessors", r"dwNumberOfProcessors"),
+        ("num_cpus", r"num_cpus"),
+        ("available_parallelism", r"available_parallelism"),
+        ("_SC_NPROCESSORS", r"_SC_NPROCESSORS_(?:ONLN|CONF)"),
+        ("hw.ncpu", r"hw\.ncpu"),
+        ("hw.physicalcpu", r"hw\.physicalcpu"),
+        ("hw.logicalcpu", r"hw\.logicalcpu"),
+        ("/sys/devices/system/cpu", r"/sys/devices/system/cpu"),
+        ("hardwareConcurrency", r"hardwareConcurrency"),
+        ("processorCount", r"(?:active)?processorCount"),
     ),
 }
 
