@@ -1,6 +1,22 @@
 <!--
 Sync Impact Report
-Version change: 2.0.0 → 2.1.0
+Version change: 2.1.0 → 2.2.0
+
+Amendment 2.1.0 → 2.2.0 (2026-09-27), MINOR — guidance outside the Core Principles
+  tightened:
+  - Classified MINOR. The Development Workflow is not a Core Principle, so MAJOR does not
+    apply. The change withdraws an option, the long docstring that argues its rule afresh,
+    which the Versioning policy names as MINOR, and PATCH would understate it.
+  - What changed: the Development Workflow gains a bullet. A docstring or code comment
+    states what the code does, briefly, and cites the document that gives the reason
+    rather than paraphrasing it. Recorded at `decisions/0009`.
+  - It binds a pull request opened after the amendment merges, when that pull request edits
+    a file. One already open when it merges, #106 among them, is not covered.
+  - Nothing is relaxed, so the amendment procedure asks for no replacement discipline.
+  - Follow-on, in the same pull request: `CLAUDE.md`'s Workflow section points to the new
+    bullet, and six open tasks in `specs/001-evreos-v1/tasks.md` — T112, T114, T124, T125,
+    T137 and T161 — have their doc comments cite a reason rather than argue it. T125's
+    reading of FR-026a, where the service issues no token, becomes a founder decision.
 
 Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Principles
   expanded:
@@ -308,6 +324,13 @@ of them requires a MAJOR amendment to this constitution:
   are prohibited.
 - Commits are atomic: exactly one logical change per commit, each standing, building and
   reverting on its own.
+- A docstring or code comment states what the code does — its inputs, outputs, effects
+  and limits — briefly. The reason for a rule lives in the document that makes it — this
+  constitution, the specification or its plan and research, a decision record, an ADR or
+  `CLAUDE.md` — and is cited by its identifier, never paraphrased or argued afresh; no
+  docstring or comment claims a guarantee beyond what the code it documents does. A file
+  is held to this when a pull request opened after the 2.2.0 amendment merges edits it
+  (`decisions/0009`).
 - Every pull request that adds or changes a feature states the byte and millisecond cost
   of its change against the budgets in Principle II, as that principle requires. A red
   budget gate fails the merge.
@@ -377,4 +400,4 @@ release blockers, as is any client-side money logic prohibited by Principle V.
 Complexity that appears to conflict with Principle II or Principle III MUST be justified in
 the pull request that introduces it, or removed.
 
-**Version**: 2.1.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-27
+**Version**: 2.2.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-27
