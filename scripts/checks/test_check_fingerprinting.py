@@ -144,7 +144,20 @@ report("no source name holds whitespace, which an entry could not spell",
        all(name.split() == [name] for name in names))
 report("every dependency is filed under a category the sources use",
        set(check.DEPENDENCY_SOURCES.values()) <= set(check.SOURCES))
-report("the eight categories T061 names are all present", len(check.SOURCES) == 8)
+# T061's eight, as the table names them: "MAC and platform UUIDs" are split
+# between the machine identifiers (the platform UUID) and the network
+# category, and "processor model" is widened to its count.
+report("the eight categories T061 names are all present, and no other",
+       set(check.SOURCES) == {
+           "machine and volume identifier",
+           "MAC address or network characteristic",
+           "screen geometry",
+           "installed fonts",
+           "timezone",
+           "total memory",
+           "processor model or count",
+           "high-resolution timing correlator",
+       })
 
 # --- a clean tree -------------------------------------------------------------
 
