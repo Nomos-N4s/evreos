@@ -24,6 +24,9 @@ import check_fingerprinting as check  # noqa: E402
 
 PASSED = FAILED = 0
 
+# Passed as `allowlist` to leave the allowlist file out of the tree entirely.
+MISSING = object()
+
 
 def report(name, condition):
     global PASSED, FAILED
@@ -61,12 +64,13 @@ CLEAN_MANIFEST = (
 )
 
 
-def tree(files):
+def tree(files, allowlist=""):
     """Build the files in a temporary tree and run the check over it.
 
     `files` maps a relative POSIX path to its content; bytes are written raw,
-    so a test can plant a file the check cannot decode. Returns what
-    `check_tree` returns.
+    so a test can plant a file the check cannot decode. `allowlist` is the
+    allowlist's text, written beside the tree rather than in it, or MISSING
+    to leave it absent. Returns what `check_tree` returns.
     """
     with tempfile.TemporaryDirectory() as tmp:
         base = Path(tmp)
@@ -79,7 +83,10 @@ def tree(files):
                 path.write_bytes(content)
             else:
                 path.write_text(content, encoding="utf-8")
-        return check.check_tree(root)
+        allowlist_path = base / "fingerprinting-allowlist.txt"
+        if allowlist is not MISSING:
+            allowlist_path.write_text(allowlist, encoding="utf-8")
+        return check.check_tree(root, allowlist_path)
 
 
 def passing_tree(extra=None):
@@ -111,14 +118,20 @@ def run_main(*arguments):
 
 # --- the repository itself ----------------------------------------------------
 
-problems, read = check.check_tree(check.REPO)
+problems, read, allowlisted = check.check_tree(check.REPO)
 report("the repository passes", problems == [])
+report("...with no allowlisted use", allowlisted == 0)
 report("...having read the update client",
        "crates/evreos-platform/src/update.rs" in read)
 report("...the rollout draw", "crates/evreos-platform/src/update/rollout.rs" in read)
 report("...the shell", any(path.startswith("crates/evreos-shell/src/") for path in read))
 report("...and the workspace manifests", "Cargo.toml" in read
        and "crates/evreos-platform/Cargo.toml" in read)
+
+check_problems = []
+entries = check.read_allowlist(check.ALLOWLIST, check_problems)
+report("the committed allowlist is readable", check_problems == [])
+report("...and empty in v1, so the first entry is a visible diff", entries == {})
 
 # --- the table itself ---------------------------------------------------------
 
@@ -292,6 +305,64 @@ report("a workspace dependency fails", mentions(problems, "Cargo.toml", "'mac_ad
 problems = tree(passing_tree({"crates/x/Cargo.toml": "[package\nname = \n"}))[0]
 report("a manifest that is not TOML fails rather than passing unread",
        mentions(problems, "Cargo.toml", "not TOML"))
+
+# --- ALLOWLIST ----------------------------------------------------------------
+
+problems, _, allowlisted = tree(
+    with_rust('let zone = std::env::var("TZ");\n'),
+    allowlist="# the history view shows local time\ncrates/x/src/probe.rs TZ\n",
+)
+report("an allowlisted use passes", problems == [])
+report("...and is counted", allowlisted == 1)
+
+problems = tree(
+    with_rust('let zone = std::env::var("TZ");\nlet g = "MachineGuid";\n'),
+    allowlist="crates/x/src/probe.rs TZ\n",
+)[0]
+report("an entry permits its source only, not every source in the file",
+       mentions(problems, "probe.rs:2", "'MachineGuid'")
+       and not mentions(problems, "'TZ'"))
+
+problems = tree(
+    passing_tree({"crates/x/src/other.rs": 'let zone = std::env::var("TZ");\n'}),
+    allowlist="crates/x/src/probe.rs TZ\n",
+)[0]
+report("an entry permits its file only",
+       mentions(problems, "other.rs:1", "'TZ'"))
+report("...and an entry permitting nothing fails as stale",
+       mentions(problems, "fingerprinting-allowlist.txt:1", "permits nothing"))
+
+problems = tree(with_manifest('sysinfo = "0.30"\n'),
+                allowlist="crates/x/Cargo.toml sysinfo\n")[0]
+report("a dependency is allowlisted by manifest path and crate name", problems == [])
+
+problems = tree(
+    passing_tree({"crates/x/src/with space.rs": "let t = GetTickCount64();\n"}),
+    allowlist="crates/x/src/with space.rs GetTickCount\n",
+)[0]
+report("an entry's path may hold a space", problems == [])
+
+problems = tree(passing_tree(), allowlist="crates/x/src/lib.rs NotASource\n")[0]
+report("an entry naming an unknown source fails",
+       mentions(problems, "fingerprinting-allowlist.txt:1", "names no source"))
+
+problems = tree(passing_tree(), allowlist="MachineGuid\n")[0]
+report("an entry that is not `<path> <source>` fails",
+       mentions(problems, "fingerprinting-allowlist.txt:1", "<path> <source>"))
+
+problems = tree(
+    with_rust("let t = GetTickCount64();\n"),
+    allowlist="crates/x/src/probe.rs GetTickCount\ncrates/x/src/probe.rs GetTickCount\n",
+)[0]
+report("an entry listed twice fails",
+       mentions(problems, "fingerprinting-allowlist.txt:2", "listed twice"))
+
+problems = tree(passing_tree(), allowlist=MISSING)[0]
+report("a missing allowlist fails; a missing file is not an empty one",
+       mentions(problems, "missing"))
+
+problems = tree(passing_tree(), allowlist="# comments only\n\n   \n")[0]
+report("an allowlist of comments and blank lines is empty and passes", problems == [])
 
 # --- unreadable input and an unreached verdict -------------------------------
 

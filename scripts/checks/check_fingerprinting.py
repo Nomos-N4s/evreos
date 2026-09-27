@@ -25,6 +25,14 @@ no value derived from these sources while this check passes -- the draw is a
 random number (`getrandom`), which is not a characteristic of the device and
 is not read here.
 
+A use that is not a derivation -- and there will be some: a history view that
+shows local time needs the timezone -- is not waved through by a pattern. It is
+listed, by file and by source, in scripts/checks/fingerprinting-allowlist.txt,
+which is empty in v1 so that the first entry lands as a visible diff and the
+pull request that writes it says why that read derives nothing. An entry is a
+use taken, not one granted ahead of it: an entry that permits nothing the tree
+does fails, so the list cannot outlive the code it excused.
+
 It reads the tree and fails on:
 
   SOURCE        a read of one of the characteristics below, in Rust source,
@@ -108,6 +116,12 @@ It reads the tree and fails on:
                 visible. Names compare with `-` and `_` folded, as crates.io
                 folds them.
 
+  ALLOWLIST     an entry in scripts/checks/fingerprinting-allowlist.txt that
+                is not `<path> <source>`, names a source this check does not
+                know, is listed twice, or permits nothing: no use of that
+                source in that file. A missing allowlist is a failure too; a
+                missing file is not an empty one.
+
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
 A window's own scale factor -- winit's `scale_factor()`, script's
@@ -150,6 +164,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
+ALLOWLIST = HERE / "fingerprinting-allowlist.txt"
 
 sys.path.insert(0, str(HERE))
 from casefs import folded_in, is_rust_source, suffix_of  # noqa: E402
@@ -409,6 +424,9 @@ def fold_crate(name):
 
 FOLDED_DEPENDENCY_SOURCES = {fold_crate(name): name for name in DEPENDENCY_SOURCES}
 
+# Every name an allowlist entry may spell: a source's, or a dependency's.
+KNOWN_NAMES = {name for _, name, _ in COMPILED} | set(DEPENDENCY_SOURCES)
+
 
 class CheckError(Exception):
     """The check could not reach a verdict: the tree it was pointed at is
@@ -472,13 +490,58 @@ def dependencies_in(manifest):
     return names
 
 
-def check_tree(root):
+def read_allowlist(path, problems):
+    """The allowlist's entries, as {(path, source): line number}.
+
+    One entry per line, `<path> <source>`: a repository-relative POSIX path
+    and a source name as a failure reports it. `#` starts a comment and blank
+    lines are ignored. The path is everything before the last run of
+    whitespace, so a path holding a space is still one path.
+    """
+    where = path.name
+    if not path.is_file():
+        problems.append(
+            f"{where}: missing; the allowlist is a committed file read on every "
+            "run, and a missing file is not an empty one"
+        )
+        return {}
+    text = read_text(path)
+    if text is None:
+        problems.append(f"{where}: not valid UTF-8, so its entries cannot be read")
+        return {}
+    entries = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        entry = line.split("#", 1)[0].strip()
+        if not entry:
+            continue
+        parts = entry.rsplit(None, 1)
+        if len(parts) != 2:
+            problems.append(
+                f"{where}:{number}: {entry!r} is not `<path> <source>`; an entry "
+                "names the file and the source it permits there"
+            )
+            continue
+        key = (parts[0], parts[1])
+        if key[1] not in KNOWN_NAMES:
+            problems.append(
+                f"{where}:{number}: {key[1]!r} names no source this check knows; "
+                "copy the name from the failure the entry answers"
+            )
+            continue
+        if key in entries:
+            problems.append(f"{where}:{number}: {key[0]} {key[1]} is listed twice")
+            continue
+        entries[key] = number
+    return entries
+
+
+def check_tree(root, allowlist_path=ALLOWLIST):
     """Every clause over the tree at `root`.
 
-    Returns (problems, files read), the second a sorted list of the
-    repository-relative POSIX paths
-    the SOURCE and DEPENDENCY clauses read. An empty `problems` is a pass --
-    unless nothing was read, which raises
+    Returns (problems, files read, allowlisted uses): the second a sorted
+    list of the repository-relative POSIX paths the SOURCE and DEPENDENCY
+    clauses read, the third how many allowlist entries answered a use. An
+    empty `problems` is a pass -- unless nothing was read, which raises
     CheckError instead: a check over nothing is not a pass, and it is not a
     breach of FR-036a either, so it must not exit 1 as one. A root that is not
     a directory raises the same.
@@ -488,14 +551,20 @@ def check_tree(root):
         raise CheckError(f"{root}: not a directory this check can read")
 
     problems = []
+    allowlist_path = Path(allowlist_path)
+    allowed = read_allowlist(allowlist_path, problems)
+    used = set()
     read = []
 
     def found(where, number, category, name):
+        if (where, name) in allowed:
+            used.add((where, name))
+            return
         at = f"{where}:{number}" if number else where
         problems.append(
             f"{at}: reads {category} source {name!r}; FR-036a forbids deriving "
             "an identifier or correlator from it, however the value is hashed, "
-            "salted or kept"
+            f"salted or kept, and {allowlist_path.name} lists no use of it here"
         )
 
     for directory in walk(root):
@@ -538,12 +607,20 @@ def check_tree(root):
                     if name is not None:
                         found(where, 0, DEPENDENCY_SOURCES[name], name)
 
+    for (where, name), number in sorted(allowed.items(), key=lambda item: item[1]):
+        if (where, name) not in used:
+            problems.append(
+                f"{allowlist_path.name}:{number}: {where} {name} permits nothing; "
+                "no use of that source is in that file, and an entry records a "
+                "use taken, never one granted ahead of it"
+            )
+
     if not problems and not read:
         raise CheckError(
             f"{root}: no Rust source, script or manifest; a check over nothing "
             "is not a pass"
         )
-    return problems, sorted(read)
+    return problems, sorted(read), len(used)
 
 
 def walk(root):
@@ -570,10 +647,13 @@ def main():
     parser.add_argument(
         "--root", default=str(REPO), help="tree to check; the repository by default"
     )
+    parser.add_argument(
+        "--allowlist", default=str(ALLOWLIST), help="the fingerprinting allowlist to read"
+    )
     args = parser.parse_args()
 
     try:
-        problems, read = check_tree(args.root)
+        problems, read, allowlisted = check_tree(args.root, args.allowlist)
     except CheckError as error:
         print(f"Fingerprinting check could not run: {error}", file=sys.stderr)
         return 2
@@ -589,7 +669,10 @@ def main():
         )
         return 1
 
-    print(f"Fingerprinting check passed: {len(read)} files read.")
+    print(
+        f"Fingerprinting check passed: {len(read)} files read, "
+        f"{allowlisted} allowlisted uses."
+    )
     return 0
 
 
