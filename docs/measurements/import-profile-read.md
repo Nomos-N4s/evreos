@@ -281,11 +281,14 @@ Five release builds of `evreos-shell` under the workspace's release profile
 `strip = "symbols"`), each measured as the binary's `st_size`. B, C and E
 were re-measured after the fixes review rounds 1 to 7 on the pull
 request required, which changed the reader, the verified copy, the address
-filter and the bookmark store that C and E reach; A and D reach none of that code and were not rebuilt. `evreos-shell`
-builds as one codegen unit under fat LTO, so a change anywhere in the crate
-can move the layout of what it links: E moved from 586,768 to 586,880 bytes
-between review rounds 5 and 6 with no change to code it reaches, both figures
-built from the same path. The deltas below are good to about a hundred
+filter and the bookmark store that C and E reach. `evreos-shell` builds as
+one codegen unit under fat LTO, so a change anywhere in the crate can move
+the layout of what it links: E moved from 586,768 to 586,880 bytes between
+review rounds 5 and 6 with no change to code it reaches, both figures built
+from the same path. So A, the merge base, is exact, and D, which was not
+rebuilt, may have moved by as much; it is a floor for an option not taken,
+and a hundred bytes either way changes neither its standing nor the ratio
+below at the precision given. The deltas below are good to about a hundred
 bytes:
 
 | Build | What it contains | Bytes |
