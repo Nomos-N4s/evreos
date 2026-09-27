@@ -2377,7 +2377,8 @@ specification statement that lands as an amendment there.
   keyed table. The import questions have evidence, under their own record
   rather than this identifier, at `docs/measurements/import-profile-read.md`,
   taken on a Linux instrument that quickstart A7 does not admit as a result
-  and pending the tier runs: no SQLite dependency is taken — the stores are locked against the library
+  and pending the tier runs, or a founder decision admitting it sooner: no
+  SQLite dependency is taken — the stores are locked against the library
   while their browsers run, so they are copied and read by an in-tree reader
   — with the tier runs owed there. The third question, the byte and
   millisecond cost of `evreos-engine-webview` and the windowing crate on the

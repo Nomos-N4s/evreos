@@ -136,7 +136,8 @@ reads Chrome, Firefox and Edge profile stores; whether they read reliably while
 their browser runs, and the reader's byte cost, are measured at
 `docs/measurements/import-profile-read.md` as evidence from a Linux
 instrument that quickstart A7 does not admit as a result; the tier-1 and
-tier-2 runs on each tier's pinned runner are what settle them. No server-side store of anything
+tier-2 runs on each tier's pinned runner are what settle them, unless a
+founder decision admits the Linux figures sooner. No server-side store of anything
 this client holds.
 
 **Testing**: `cargo test --all`, `cargo fmt --all --check` and `cargo clippy
