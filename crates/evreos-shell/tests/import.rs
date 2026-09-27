@@ -1115,7 +1115,9 @@ fn denied_crates() -> Vec<String> {
 /// `[target.…]` all name `foo`, however their dots are spaced or their parts
 /// quoted or escaped, and so does `foo` as a key of an inline table under
 /// any of those, `dependencies = { foo = "1" }`. A multi-line string, `"""`
-/// or `'''`, is read as one string, so a header or key inside it is none.
+/// or `'''`, is read as one string, so a header or key inside it is none,
+/// and an array or inline table that runs over several lines is read as one
+/// line, so a line inside it is neither a header nor a key of its own.
 /// The catalogue is allowed only as its own package: a key naming it that
 /// renames another, `evreos-i18n = { package = "evreos-net" }`, or takes its
 /// package from the workspace's manifest, which this one cannot show, is
@@ -1125,8 +1127,15 @@ fn denied_crates() -> Vec<String> {
 fn denied_in(manifest: &str) -> Vec<String> {
     let mut table: Vec<String> = Vec::new();
     let mut denied = Vec::new();
+    let mut pending = String::new();
     for line in without_multiline_strings(manifest).lines() {
-        let line = line[..outside_strings(line, '#').unwrap_or(line.len())].trim();
+        pending.push_str(&line[..outside_strings(line, '#').unwrap_or(line.len())]);
+        pending.push(' ');
+        if open_brackets(&pending) > 0 {
+            continue;
+        }
+        let whole = std::mem::take(&mut pending);
+        let line = whole.trim();
         if let Some(header) = line.strip_prefix('[') {
             let header = header.strip_prefix('[').unwrap_or(header);
             let end = outside_strings(header, ']').unwrap_or(header.len());
@@ -1138,6 +1147,28 @@ fn denied_in(manifest: &str) -> Vec<String> {
         }
     }
     denied
+}
+
+/// How many brackets and braces `text` leaves open outside its strings.
+fn open_brackets(text: &str) -> isize {
+    let mut depth = 0;
+    let mut quote = None;
+    let mut escaped = false;
+    for ch in text.chars() {
+        match quote {
+            Some('"') if escaped => escaped = false,
+            Some('"') if ch == '\\' => escaped = true,
+            Some(open) if ch == open => quote = None,
+            Some(_) => {}
+            None => match ch {
+                '"' | '\'' => quote = Some(ch),
+                '[' | '{' => depth += 1,
+                ']' | '}' => depth -= 1,
+                _ => {}
+            },
+        }
+    }
+    depth
 }
 
 /// `manifest` with each multi-line string, `"""…"""` or `'''…'''`, replaced by
@@ -1446,6 +1477,36 @@ rustix = "1"
         denied_in(manifest),
         ["evreos_net", "x", "winit", "libc", "rustix"]
     );
+}
+
+#[test]
+fn a_manifest_value_over_several_lines_is_read_whole() {
+    // A line inside an array or inline table that runs over several lines
+    // would otherwise be read as a header or a key of its own.
+    for (manifest, expected) in [
+        (
+            "[dependencies]\nevreos-i18n = { path = \"../evreos-net\", features = [\n], package = \"evreos-net\" }\n",
+            &[ALLOWED_CRATE][..],
+        ),
+        (
+            "dependencies = { a = { path = \"a\", features = [\n] }, foo = \"1\" }\n",
+            &["a", "foo"][..],
+        ),
+        (
+            "[dependencies]\nfoo = { path = \"f\", x = [\n[\"y\"]] }\nbar = \"1\"\n",
+            &["foo", "bar"][..],
+        ),
+        (
+            "[dependencies]\nfoo = { features = [ # a ] in a comment\n  \"x\",\n] }\n[dev-dependencies]\nbar = \"1\"\n",
+            &["foo"][..],
+        ),
+        (
+            "[dependencies]\nevreos-i18n = {\n  path = \"../evreos-net\",\n  package = \"evreos-net\",\n}\n",
+            &[ALLOWED_CRATE][..],
+        ),
+    ] {
+        assert_eq!(denied_in(manifest), expected, "{manifest:?}");
+    }
 }
 
 #[test]
