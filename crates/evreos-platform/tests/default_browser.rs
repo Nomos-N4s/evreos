@@ -45,6 +45,10 @@ impl Memory {
 }
 
 impl Registry for Memory {
+    fn key_exists(&self, key: &str) -> io::Result<bool> {
+        Ok(self.has_key(key))
+    }
+
     fn set_string(&mut self, key: &str, name: &str, value: &str) -> io::Result<()> {
         let index = self.writes;
         self.writes += 1;
@@ -418,9 +422,14 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
         assert_eq!(key.get_string(&value.name).unwrap(), value.data);
     }
 
+    for key in &registration.owned_keys {
+        assert!(registry.key_exists(key).unwrap(), "{key}");
+    }
+
     unregister(&mut registry, &APP).unwrap();
     for key in &registration.owned_keys {
         assert!(root.open(key).is_err(), "{key} survived the uninstall");
+        assert!(!registry.key_exists(key).unwrap(), "{key}");
     }
     let registered = root.open(REGISTERED_APPLICATIONS).unwrap();
     assert!(registered.get_string("SampleBrowser").is_err());
@@ -493,4 +502,22 @@ fn a_removal_that_fails_does_not_stop_the_others() {
         registry.value(REGISTERED_APPLICATIONS, "SampleBrowser"),
         None
     );
+}
+
+#[test]
+fn a_failed_re_registration_leaves_the_existing_one_listed() {
+    let count = Registration::of(&APP).unwrap().values.len();
+    for fail_at in 0..count {
+        let mut registry = with_neighbours();
+        register(&mut registry, &APP).unwrap();
+        let registered = registry.keys.clone();
+        registry.writes = 0;
+        registry.fail_at = Some(fail_at);
+
+        let error = register(&mut registry, &APP).unwrap_err();
+        assert_eq!(error.to_string(), "write refused");
+        // The same application re-registered writes the same values, so
+        // nothing it had is lost.
+        assert_eq!(registry.keys, registered, "failing write {fail_at}");
+    }
 }

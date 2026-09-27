@@ -50,6 +50,14 @@ impl WindowsRegistry {
 }
 
 impl Registry for WindowsRegistry {
+    fn key_exists(&self, key: &str) -> io::Result<bool> {
+        match self.root.open(key) {
+            Ok(_) => Ok(true),
+            Err(error) if error.code().0 == NOT_FOUND => Ok(false),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     fn set_string(&mut self, key: &str, name: &str, value: &str) -> io::Result<()> {
         Ok(self.root.create(key)?.set_string(name, value)?)
     }

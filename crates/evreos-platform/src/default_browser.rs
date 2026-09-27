@@ -93,6 +93,8 @@ impl From<InvalidApplication> for io::Error {
 ///
 /// An empty value name is the key's default value.
 pub trait Registry {
+    /// Whether a key exists.
+    fn key_exists(&self, key: &str) -> io::Result<bool>;
     /// Sets a string value, creating the key and every key above it.
     fn set_string(&mut self, key: &str, name: &str, value: &str) -> io::Result<()>;
     /// Removes a key with everything below it. A key that does not exist is
@@ -211,14 +213,24 @@ impl Registration {
 
 /// Registers `app` so that the system lists it as a browser.
 ///
-/// If a write fails, everything this registration owns is removed again, so
-/// a failed registration leaves nothing listed, and the write's error is
-/// returned.
+/// If a write fails, the write's error is returned. A first registration is
+/// then removed again, so it leaves nothing listed. A registration that was
+/// already there, which the member may have chosen as their default, is left
+/// in place rather than removed: the values written before the failure
+/// replace their earlier copies, and the rest keep theirs.
 pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
     let registration = Registration::of(app)?;
+    let mut first = true;
+    for key in &registration.owned_keys {
+        if registry.key_exists(key)? {
+            first = false;
+        }
+    }
     for value in &registration.values {
         if let Err(error) = registry.set_string(&value.key, &value.name, &value.data) {
-            let _ = remove(registry, &registration);
+            if first {
+                let _ = remove(registry, &registration);
+            }
             return Err(error);
         }
     }
