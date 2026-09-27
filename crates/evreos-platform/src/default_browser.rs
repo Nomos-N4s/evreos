@@ -7,6 +7,12 @@
 //! This module does both: [`register`], then [`open_settings`]. [`route`]
 //! says which platforms take that route.
 //!
+//! **Tier 2** (macOS) has no route here. Documented calls exist, but what
+//! they do at the macOS 13 floor is unverified until it is established on the
+//! tier-2 pinned runner, as `docs/measurements/n12-default-browser-macos.md`
+//! records; until then [`route`] reports it unestablished rather than assume
+//! an API exists.
+//!
 //! **Registration** is a fixed set of string values under the current user's
 //! hive: the browser's entry under `Software\Clients\StartMenuInternet`, its
 //! `Capabilities` naming a ProgID for `http`, `https`, `.htm` and `.html`,
