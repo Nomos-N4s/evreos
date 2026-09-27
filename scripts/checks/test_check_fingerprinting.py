@@ -122,6 +122,7 @@ names = [name for _, name, _ in check.COMPILED]
 report("every source name is unique", len(names) == len(set(names)))
 report("no source name holds whitespace, which an entry could not spell",
        all(name.split() == [name] for name in names))
+report("the eight categories T061 names are all present", len(check.SOURCES) == 8)
 
 # --- a clean tree -------------------------------------------------------------
 
@@ -169,6 +170,12 @@ CAUGHT = (
      "let cores = std::thread::available_parallelism();\n"),
     ("processor model or count", "brand_string",
      'let model = sysctl("machdep.cpu.brand_string");\n'),
+    ("high-resolution timing correlator", "rdtsc",
+     "let ticks = unsafe { core::arch::x86_64::_rdtsc() };\n"),
+    ("high-resolution timing correlator", "QueryPerformanceFrequency",
+     "QueryPerformanceFrequency(&mut frequency);\n"),
+    ("high-resolution timing correlator", "mach_absolute_time",
+     "let now = unsafe { mach_absolute_time() };\n"),
 )
 
 for category, name, body in CAUGHT:

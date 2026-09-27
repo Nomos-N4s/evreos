@@ -81,6 +81,15 @@ It reads the tree and fails on:
                 FR-036a binds on the characteristic, not on the one field a
                 crash reporter happens to label it with, and the count is the
                 same kind of fact about the same part.
+    high-resolution timing correlators
+                the raw counters whose origin or rate is a fact about the
+                machine rather than an interval the shell measured: `rdtsc`,
+                `QueryPerformanceCounter` and `QueryPerformanceFrequency`,
+                `mach_absolute_time` and its continuous twin,
+                `CLOCK_MONOTONIC_RAW`, `CLOCK_BOOTTIME`, `GetTickCount`, the
+                boot time and uptime, and `performance.now` and
+                `performance.timeOrigin` in script -- the class research
+                section 4.3 names.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -89,6 +98,12 @@ A window's own scale factor -- winit's `scale_factor()`, script's
 the member chose, which Principle X's scaling to 200% requires, and the
 accessibility spike already does; a rule on it would fail every conformant
 window, the chrome's among them. A derivation that uses it rests on review.
+
+`std::time::Instant` is not read: it is opaque, and all it yields is an
+interval between two readings in one process, which the tab model uses for its
+load timeouts. A correlator built from such intervals -- timing a fixed
+workload to fingerprint the processor -- is composed from innocent parts and
+rests on review.
 
 The locale is not a source here: FR-035 has the shell read the member's
 language, and FR-039c's closed report contents and FR-039d's closed counter
@@ -290,6 +305,21 @@ SOURCES = {
         ("/sys/devices/system/cpu", r"/sys/devices/system/cpu"),
         ("hardwareConcurrency", r"hardwareConcurrency"),
         ("processorCount", r"(?:active)?processorCount"),
+    ),
+    "high-resolution timing correlator": (
+        ("rdtsc", r"_*rdtscp?"),
+        ("QueryPerformanceCounter", r"QueryPerformanceCounter"),
+        ("QueryPerformanceFrequency", r"QueryPerformanceFrequency"),
+        ("mach_absolute_time", r"mach_absolute_time"),
+        ("mach_continuous_time", r"mach_continuous_time"),
+        ("CLOCK_MONOTONIC_RAW", r"CLOCK_MONOTONIC_RAW"),
+        ("CLOCK_BOOTTIME", r"CLOCK_BOOTTIME"),
+        ("GetTickCount", r"GetTickCount(?:64)?"),
+        ("/proc/uptime", r"/proc/uptime"),
+        ("kern.boottime", r"kern\.boottime"),
+        ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
+        ("performance.now", r"performance\.now"),
+        ("performance.timeOrigin", r"performance\.timeOrigin"),
     ),
 }
 
