@@ -65,7 +65,9 @@ It reads the tree and fails on:
                 Every source is matched as a whole token with case folded,
                 because registry names and paths are case-insensitive on the
                 release platforms and a spelling nobody used is still the same
-                key.
+                key -- except where a name's case is what tells it from
+                ordinary code: chrono's `Local`, macOS's `hostName` and the
+                environment variables are matched in their own case.
 
     machine and volume identifiers
                 the Windows MachineGuid and the Cryptography key that holds
