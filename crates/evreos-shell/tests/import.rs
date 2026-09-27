@@ -1567,7 +1567,9 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             // The exception above goes by the reader's name, so neither a
             // rename nor an alias may take it:
             // `use crate::store::StoreRegistry as Database;` or
-            // `type Database = crate::store::StoreRegistry;`.
+            // `type Database = crate::store::StoreRegistry;`. Across the
+            // crate, `no_item_in_the_crate_is_renamed_to_the_reader`
+            // refuses the same renames and aliases.
             "Database" if matches!(ident(i.wrapping_sub(1)), Some("as" | "type")) => {
                 found.push("renames something to `Database`".to_string());
             }
@@ -1986,6 +1988,43 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
                         && !DERIVES.contains(&name)
                         && !ATTRIBUTES.contains(&name),
                     "{} gives a macro the name `{name}`, which the import may invoke",
+                    file.display()
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn no_item_in_the_crate_is_renamed_to_the_reader() {
+    // The import may call `open` after `Database`, the in-tree reader, and
+    // nothing else. A rename or an alias to that name anywhere in the crate,
+    // `pub use StoreRegistry as Database;` in the stores or
+    // `type Database = …;`, would let one of them through, so none exists.
+    fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                sources(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    sources(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    assert!(!files.is_empty());
+    for file in files {
+        let toks = tokens(&fs::read_to_string(&file).unwrap());
+        for pair in toks.windows(2) {
+            if let [Tok::Ident(before), Tok::Ident(name)] = pair {
+                let name = name.strip_prefix("r#").unwrap_or(name);
+                assert!(
+                    !(name == "Database" && (before == "as" || before == "type")),
+                    "{} names something `Database` by `{before}`",
                     file.display()
                 );
             }
