@@ -203,11 +203,13 @@ address as principal. `.github/workflows/commit-hygiene.yml` passes it the
 copy of `.github/allowed-signers` on the base branch. A file with no key entry
 is reported as "signing is not yet enabled" and skipped — never failed — so
 the mechanism could land before the key without breaking every pull request.
-The founder's key is now listed, so once the file carrying it is on `main`,
-every commit in a later pull request must be signed by it.
+The founder's keys are now listed, one for the founder's machine and one for
+the cloud environment the founder develops in, so once the file carrying them
+is on `main`, every commit in a later pull request must be signed by one of
+them.
 
-What remains, and who can do it: the founder signs every commit from then
-on. The file's own comment gives the git configuration. Nobody else holds the
+What remains, and who can do it: every commit is signed from then on, by
+one of the listed keys. The file's own comment gives the git configuration. Nobody else holds the
 key, so nobody else can take this step; a change anyone else makes to that
 file authorises nothing, because the copy the check trusts is the one already
 on `main`.
@@ -236,6 +238,7 @@ Three consequences of trusting the base branch's copy:
 | Date | State | Verified how |
 | --- | --- | --- |
 | 2026-09-02 | Not applied. `main` carries no protection rule; `.github/allowed-signers` lists no key. | Recorded from the repository state; the forge endpoint above has not been queried by this change. |
+| 2026-09-27 | Not applied. `main` carries no protection rule; `.github/allowed-signers` lists two keys under the founder's address once CAR-352 merges, so the signature check enforces from the next pull request. | Recorded from the repository state; the forge endpoint above has not been queried by this change. |
 
 When the settings are applied, add a row naming the date, whether a classic
 rule or a ruleset is in use, and the endpoint output compared. Until a row
