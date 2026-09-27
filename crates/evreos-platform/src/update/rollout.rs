@@ -84,9 +84,14 @@ impl RolloutDraw {
         if !cfg!(unix) {
             return;
         }
-        if let Some(dir) = path.parent().filter(|dir| !dir.as_os_str().is_empty()) {
-            let _ = fs::File::open(dir).and_then(|dir| dir.sync_all());
-        }
+        // A bare file name's parent is empty: its directory is the current
+        // one.
+        let dir = match path.parent() {
+            Some(dir) if dir.as_os_str().is_empty() => Path::new("."),
+            Some(dir) => dir,
+            None => return,
+        };
+        let _ = fs::File::open(dir).and_then(|dir| dir.sync_all());
     }
 
     /// Keeps `draw`, written at `partial`, at `path`, and returns the value
