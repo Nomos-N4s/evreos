@@ -46,7 +46,7 @@ Linux with rustc 1.94.1 and MinGW-w64 GCC 13. The tier-1 target is
 `x86_64-pc-windows-msvc`, which cannot be linked on this host, so these figures
 are indicative of it and not a substitute for it.
 
-Five small executables in a scratch crate outside the workspace, each reading
+Six small executables in a scratch crate outside the workspace, each reading
 its arguments so that nothing is folded away, depend on `evreos-platform` by
 path and use the workspace's `Cargo.lock`:
 
@@ -54,6 +54,7 @@ path and use the workspace's `Cargo.lock`:
 | --- | --- |
 | `baseline` | its arguments and one line of output |
 | `io_error` | the baseline, plus an unwrapped `io::Result` from `std::fs` |
+| `case_tables` | `io_error`, plus `str::to_lowercase`, which the shell already uses |
 | `registry_only` | the baseline, plus `register` and `unregister` through `WindowsRegistry::current_user` |
 | `settings_only` | the baseline, plus `open_settings` |
 | `reached` | the baseline, plus registration, its removal and `open_settings` |
@@ -67,14 +68,18 @@ bytes.
 | --- | ---: | ---: |
 | `baseline` | 251,904 | — |
 | `io_error` | 262,144 | 10,240 |
-| `registry_only` | 272,384 | 20,480 |
+| `case_tables` | 279,552 | 27,648 |
+| `registry_only` | 284,672 | 32,768 |
 | `settings_only` | 263,168 | 11,264 |
-| `reached` | 275,968 | 24,064 |
+| `reached` | 287,744 | 35,840 |
 
 `io_error` shows how much of each figure is only the standard library's error
-formatting, which the shell already carries: 10,240 bytes. Against it,
-registration adds 10,240 bytes, the settings page 1,024, and the two together
-13,824.
+formatting, which the shell already carries: 10,240 bytes. `case_tables` adds
+the standard library's lowercase tables, which the shell already carries for
+search and suggestions and which registration uses to compare value names:
+17,408 bytes more. Against it, registration adds 5,120 bytes, and registration
+with the settings page 8,192. The settings page alone adds 1,024 against
+`io_error`, and uses no case tables.
 
 **The option not adopted.** `open_settings` first handed the page to
 `explorer.exe` through `std::process::Command`. Measured the same way,
@@ -89,9 +94,11 @@ SC-001's download-size and installed-footprint entries for Windows are
 unmeasured: no installer exists yet. Nothing in the shipped binary reaches
 `evreos-platform` at this change; the shell does not depend on it until a
 surface offers FR-013. So the cost as shipped is 0 bytes, and once a surface
-reaches registration and the settings page it is at most 24,064 bytes on this
-build, 0.023 MB. That is an upper bound: the shell already links `windows`
-0.62 and the standard library's error formatting, which the probes count.
+reaches registration and the settings page it is at most 35,840 bytes on this
+build, 0.034 MB. That is an upper bound: the shell already links `windows`
+0.62, the standard library's error formatting and its lowercase tables, which
+the probes count, and against a probe carrying the last two the cost is 8,192
+bytes, 0.008 MB.
 
 No other entry moves. Registration writes 19 string values once, when the
 member asks, and the launch returns without waiting, so there is no idle wake,
@@ -127,6 +134,8 @@ fn main() {
 ```
 
 `io_error` adds `if args.len() > 2 { std::fs::metadata(name).unwrap(); }`.
+`case_tables` is `io_error` printing `name.to_lowercase().len()` in place of
+`name.len()`.
 `settings_only` adds `if args.len() > 2 { open_settings().unwrap(); }`.
 `registry_only` adds:
 
