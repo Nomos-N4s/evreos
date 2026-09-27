@@ -605,3 +605,44 @@ mod check_request {
         assert_eq!(check_request(endpoint()), planned);
     }
 }
+
+mod schedule {
+    use std::time::{Duration, SystemTime};
+
+    use evreos_platform::update::UPDATE_CHECK_WAKE;
+    use evreos_platform::update::schedule::Schedule;
+
+    const HOUR: Duration = Duration::from_secs(3600);
+
+    #[test]
+    fn the_period_and_tolerance_come_from_the_budget_file() {
+        let schedule = Schedule::new();
+        assert_eq!(
+            schedule.period(),
+            Duration::from_secs(UPDATE_CHECK_WAKE.period_seconds)
+        );
+        assert_eq!(schedule.period(), 6 * HOUR);
+        assert_eq!(schedule.tolerance(), Duration::from_secs(2160));
+        assert_eq!(Schedule::default(), schedule);
+    }
+
+    #[test]
+    fn a_first_check_is_due_at_once_and_each_later_one_a_period_on() {
+        let schedule = Schedule::new();
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        assert_eq!(schedule.next_due(None, now), now);
+        let last = now - HOUR;
+        assert_eq!(schedule.next_due(Some(last), now), last + 6 * HOUR);
+        // A check long overdue is due now, not a period from now.
+        let long_ago = now - 48 * HOUR;
+        assert!(schedule.next_due(Some(long_ago), now) <= now);
+    }
+
+    #[test]
+    fn a_clock_moved_back_never_holds_checks_off_past_one_period() {
+        let schedule = Schedule::new();
+        let now = SystemTime::UNIX_EPOCH + Duration::from_secs(1_800_000_000);
+        let future = now + 30 * 24 * HOUR;
+        assert_eq!(schedule.next_due(Some(future), now), now + 6 * HOUR);
+    }
+}

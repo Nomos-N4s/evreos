@@ -10,6 +10,9 @@
 //! [`artefact`] checks an offered update's artefact against its manifest
 //! before anything applies it.
 //!
+//! [`schedule`] decides when a check is due, under the one wake
+//! `budgets.toml` enumerates for it.
+//!
 //! The check leaves the machine only as [`check_request`] plans it: the
 //! `UpdateCheck` purpose, to the update endpoint the brand configuration
 //! names, and nothing about the install.
@@ -17,6 +20,7 @@
 pub mod artefact;
 pub mod manifest;
 pub mod rollout;
+pub mod schedule;
 pub mod wake;
 
 use std::fmt;
