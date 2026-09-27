@@ -54,8 +54,9 @@ It reads the tree and fails on:
                 module, is read as Rust whatever its suffix, and one it
                 embeds through `include_str!` or `include_bytes!` is read
                 whole, like script, bytes that are not UTF-8 decoded as
-                `String::from_utf8_lossy` decodes them; one outside the tree
-                is reported, since nothing in it can be answered for.
+                `String::from_utf8_lossy` decodes them; one outside the tree,
+                or not a file there, is reported, since nothing in it can be
+                answered for.
                 A literal's `\\x` and `\\u{...}` escapes, and script's
                 `\\uHHHH` too, are decoded before matching, so a name spelled
                 with an escape -- `"/etc/machine\\x2did"` -- is the same name.
@@ -971,6 +972,7 @@ def check_tree(root, allowlist_path=ALLOWLIST):
 
     while brought:
         kind, candidates, by = brought.pop(0)
+        settled = False
         for target in candidates:
             try:
                 resolved = target.resolve()
@@ -981,15 +983,18 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     f"{by}: brings {target.name!r} into the build, but it cannot be "
                     f"resolved ({reason}), so no read in it can be answered for"
                 )
+                settled = True
                 continue
             if not resolved.is_relative_to(root):
                 problems.append(
                     f"{by}: brings {target.name} into the build from outside the tree "
                     "this check reads, so no read in it can be answered for"
                 )
+                settled = True
                 continue
             if not is_file:
                 continue
+            settled = True
             where = resolved.relative_to(root).as_posix()
             if where in read:
                 continue
@@ -997,6 +1002,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 scan_rust(resolved, where)
             else:
                 scan_whole(resolved, where, "text", lossy=kind == "bytes")
+        if not settled:
+            problems.append(
+                f"{by}: brings {candidates[0].name} into the build, but no file "
+                "this check can read is there, so no read in it can be answered for"
+            )
 
     if not read:
         raise CheckError(

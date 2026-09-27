@@ -543,10 +543,16 @@ with tempfile.TemporaryDirectory() as tmp:
     (root / "crates" / "x" / "src" / "loop.in").symlink_to("loop.in")
     (base / "allowlist.txt").write_text("", encoding="utf-8")
     try:
-        check.check_tree(root, base / "allowlist.txt")
-        report("a brought file whose link loops ends in a verdict", True)
+        problems = check.check_tree(root, base / "allowlist.txt")[0]
+        report("a brought file whose link loops is reported, not a traceback",
+               mentions(problems, "probe.rs:1", "loop.in"))
     except (OSError, RuntimeError, ValueError) as error:
-        report(f"a brought file whose link loops ends in a verdict, not {error!r}", False)
+        report(f"a brought file whose link loops is reported, not {error!r}", False)
+
+problems = tree(with_rust('fn f() {}\ninclude!("missing.in");\n#[path = "gone.txt"]\nmod gone;\n'))[0]
+report("a brought file that is not there is reported, not skipped",
+       mentions(problems, "probe.rs:2", "missing.in", "no file")
+       and mentions(problems, "probe.rs:3", "gone.txt", "no file"))
 
 problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported, on the line that brings it",
