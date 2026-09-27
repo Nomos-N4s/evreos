@@ -765,6 +765,19 @@ report("...as are a property split from screen, optionally chained or bracketed"
        and mentions(problems, "zone.js:8", "'screen.'"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/whole.js": (
+        "send(JSON.stringify(screen));\n"
+        "const copy = { ...screen };\n"
+        "report(id, screen, 1);\n"
+        "const all = [screen];\n"
+        "const name = screenName(user);\n"
+    ),
+}))[0]
+report("the screen object passed whole to a call, spread or listed is a read",
+       all(mentions(problems, f"whole.js:{line}", "'window.screen'") for line in (1, 2, 3, 4))
+       and not mentions(problems, "whole.js:5"))
+
+problems = tree(passing_tree({
     "crates/x/ui/split.js": (
         "const t = performance\n  .now();\n"
         "const o = performance .\n  timeOrigin;\n"

@@ -116,9 +116,9 @@ It reads the tree and fails on:
                 APIs the release tiers carry and on the `screen` object in
                 script, whether a property is read off it -- dotted,
                 optionally chained or bracketed -- or the object is taken
-                whole, as destructuring takes it. Every dotted script
-                source allows whitespace and a line break between its
-                parts, as a formatter writes a long chain.
+                whole, as destructuring, a spread or a call takes it. Every
+                dotted script source allows whitespace and a line break
+                between its parts, as a formatter writes a long chain.
     installed fonts
                 enumerating the system's font collection, through the
                 platform APIs, fontconfig and `fc-list`, through a font
@@ -442,12 +442,14 @@ SOURCES = {
                 "|colorDepth|pixelDepth|orientation"
             )
         )),
-        # The screen object taken whole, as destructuring takes it:
-        # `const { width } = window.screen`, `= screen;`.
+        # The screen object taken whole, as destructuring, a spread or a call
+        # takes it: `const { width } = window.screen`, `= screen;`,
+        # `{ ...screen }`, `JSON.stringify(screen)`.
         ("window.screen", (
             r"(?:window|self|globalThis|top|parent)\s*(?:\??\.\s*screen(?!\s*\??\.\s*\w)"
             r"|(?:\?\.)?\s*\[\s*[\"'`]screen[\"'`]\s*\])"
             r"|=\s*screen(?=[ \t]*(?:[;,)}\r\n]|\Z))"
+            r"|(?:[(,\[]|\.\.\.)\s*screen(?=\s*[,)\]}])"
         )),
         ("getScreenDetails", r"getScreenDetails"),
         ("DisplayInformation", r"DisplayInformation"),
