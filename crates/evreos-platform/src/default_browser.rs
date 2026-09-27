@@ -4,7 +4,8 @@
 //! (Windows) the most a browser can do is register itself so that it appears
 //! in the system's list of browsers at all, and then open the system's
 //! default-apps page, where the member makes the choice (research §10.2).
-//! This module does both.
+//! This module does both: [`register`], then [`open_settings`]. [`route`]
+//! says which platforms take that route.
 //!
 //! **Registration** is a fixed set of string values under the current user's
 //! hive: the browser's entry under `Software\Clients\StartMenuInternet`, its
@@ -247,4 +248,53 @@ fn is_plain_absolute(path: &str) -> bool {
         _ => false,
     };
     rooted && !path.chars().any(|ch| ch == '"' || ch.is_control())
+}
+
+/// How FR-013 is met on the platform this was built for.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Route {
+    /// [`register`], then [`open_settings`] for the member to choose.
+    RegisterThenSettings,
+    /// No route is established for this platform.
+    Unestablished,
+}
+
+/// The route FR-013 takes on this platform.
+pub const fn route() -> Route {
+    if cfg!(windows) {
+        Route::RegisterThenSettings
+    } else {
+        Route::Unestablished
+    }
+}
+
+/// The tier-1 system page where the member chooses the default browser.
+pub const SETTINGS_PAGE: &str = "ms-settings:defaultapps";
+
+/// Opens [`SETTINGS_PAGE`], after [`register`], for the member to choose
+/// Evreos there. The page is the system's, and Evreos cannot choose for
+/// them.
+///
+/// The page is handed to the system's launcher, which opens it on its own;
+/// this returns once the launch has started and does not wait for it, so it
+/// never blocks the thread that calls it. On a platform whose [`route`] is
+/// not [`Route::RegisterThenSettings`] it returns
+/// [`io::ErrorKind::Unsupported`].
+pub fn open_settings() -> io::Result<()> {
+    #[cfg(windows)]
+    {
+        use ::windows::Foundation::Uri;
+        use ::windows::System::Launcher;
+
+        let page = Uri::CreateUri(&SETTINGS_PAGE.into())?;
+        Launcher::LaunchUriAsync(&page)?;
+        Ok(())
+    }
+    #[cfg(not(windows))]
+    {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no default-browser route is established on this platform",
+        ))
+    }
 }

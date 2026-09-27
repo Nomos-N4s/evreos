@@ -436,3 +436,31 @@ fn the_windows_registry_holds_the_registration_and_loses_it_on_uninstall() {
 fn the_windows_registry_opens_the_current_users_hive() {
     evreos_platform::default_browser::WindowsRegistry::current_user().unwrap();
 }
+
+#[test]
+fn tier_one_registers_then_opens_the_default_apps_page() {
+    use evreos_platform::default_browser::{Route, SETTINGS_PAGE, open_settings, route};
+
+    assert_eq!(SETTINGS_PAGE, "ms-settings:defaultapps");
+    if cfg!(windows) {
+        assert_eq!(route(), Route::RegisterThenSettings);
+    } else {
+        // Every other platform, tier 2 among them, has no route yet, and
+        // says so rather than open anything.
+        assert_eq!(route(), Route::Unestablished);
+        assert_eq!(
+            open_settings().unwrap_err().kind(),
+            io::ErrorKind::Unsupported
+        );
+    }
+}
+
+/// The launcher accepts the page on Windows itself. This opens the system's
+/// default-apps page on the machine running it, which on CI's ephemeral
+/// Windows runner is harmless; the launch is not awaited, so what the page
+/// shows is not checked here.
+#[cfg(windows)]
+#[test]
+fn the_windows_launcher_accepts_the_default_apps_page() {
+    evreos_platform::default_browser::open_settings().unwrap();
+}

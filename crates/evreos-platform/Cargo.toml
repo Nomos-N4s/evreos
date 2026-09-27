@@ -12,13 +12,16 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
-# Tier 1's registry, for default-browser registration. Microsoft's safe
-# binding: its own dependencies, windows-link, windows-result and
-# windows-strings, are already in this workspace's graph at these versions,
-# so it adds one crate. Its byte cost is stated in the pull request that
-# adds it.
+# Tier 1's bindings, both Microsoft's safe ones: windows-registry for
+# default-browser registration, and windows for the launcher that opens the
+# default-apps page. The shell already links windows 0.62 on Windows,
+# through evreos-chrome's accesskit_windows, and every crate
+# windows-registry depends on is in that same family at these versions, so
+# windows-registry is the one crate they add. Their byte cost is stated in
+# the pull request that adds them.
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.6.1"
+windows = { version = "0.62.2", default-features = false, features = ["System", "Foundation"] }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-registry = "0.6.1"
