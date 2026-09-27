@@ -29,9 +29,10 @@
 //! their unit tests aside, each the last item of its file — is held to this:
 //! - it names no dependency of this crate but `evreos-i18n`, for the names of
 //!   its folders, so not `evreos-net`, and no crate through `extern`; of
-//!   `evreos-i18n` it names `Language` and `catalogue` alone, and that
-//!   crate declares no normal dependency for some platforms only and links
-//!   no crate of its own;
+//!   `evreos-i18n` it names `Language` and `catalogue` alone, and no path
+//!   after `catalogue`, the function it calls; and that crate declares no
+//!   normal dependency for some platforms only and links no crate of its
+//!   own;
 //! - it names neither `std::net` nor `std::process`, so opens no socket and
 //!   starts no process, and no part of `std::os` but the Unix
 //!   `OpenOptionsExt`, whose `custom_flags` it may pass `O_NONBLOCK` alone, a

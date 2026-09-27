@@ -1613,6 +1613,12 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             // `Language` a catalogue is keyed by and `catalogue` itself, and
             // nothing else: not the crate bare or renamed, nor any other
             // item. A group may hold those names alone.
+            // `catalogue` is the catalogue's function, and the import calls
+            // it. A module of the same name, which Rust allows beside it,
+            // could re-export anything, so no path may continue after it.
+            "catalogue" if path_sep(i + 1) => {
+                found.push("`catalogue` followed by `::`".to_string());
+            }
             "evreos_i18n" => {
                 let taken = |at: usize| matches!(ident(at), Some("Language" | "catalogue"));
                 if !path_sep(i + 1) {
@@ -1942,6 +1948,14 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use evreos_i18n::{Language as L};", false),
         ("use evreos_i18n::{{Language}};", false),
         ("use evreos_i18n::{Language, net::TcpStream};", false),
+        (
+            "fn f() { evreos_i18n::catalogue::net::TcpStream::connect(\"x\"); }",
+            false,
+        ),
+        (
+            "use evreos_i18n::{catalogue}; fn f() { catalogue :: net::TcpStream::connect(\"x\"); }",
+            false,
+        ),
         ("use super::{std::fs::File};", true),
         ("use crate::store::{core::X};", false),
         ("use crate::store::{Y, std::X};", false),
