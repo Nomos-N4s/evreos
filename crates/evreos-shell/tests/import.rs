@@ -1354,9 +1354,16 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             // could see.
             "remove_file" | "remove_dir" | "remove_dir_all" | "rename" | "create_dir"
             | "create_dir_all" | "hard_link" | "soft_link" | "symlink" | "set_permissions"
-            | "write_all" | "set_len" | "set_times" | "set_modified" | "create_buffered" => {
+            | "write_all" | "set_len" | "set_times" | "set_modified" | "create_buffered"
+            | "write_fmt" | "write_vectored" | "write_all_vectored" | "write_at" | "seek_write" => {
                 found.push(format!("names `{word}`, which writes"))
             }
+            // `write!` on a stream calls its `write_fmt`, which only the
+            // `Write` trait in scope provides; without the name, the one
+            // `write!` the import can make is a formatter's. `fmt::Write`,
+            // which writes only to memory, is refused with it, since the
+            // two share the name and the import uses neither.
+            "Write" => found.push("names `Write`, through which a stream is written".to_string()),
             "write" | "copy" | "create" | "create_new" | "append"
                 if punct(i.wrapping_sub(1), '.')
                     || punct(i.wrapping_sub(1), ':')
@@ -1512,6 +1519,22 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { if !some_macro![] {} }", false),
         ("fn f() { r#match!() }", false),
         ("fn f() -> String { r#format!(\"x\") }", false),
+        (
+            "use std::io::Write; fn f(mut o: std::fs::File) { write!(o, \"x\").unwrap(); }",
+            false,
+        ),
+        (
+            "use std::io::Write as _; fn f(mut o: std::fs::File) { let _ = writeln!(o); }",
+            false,
+        ),
+        (
+            "fn f(mut o: std::fs::File) { o.write_fmt(format_args!(\"x\")).ok(); }",
+            false,
+        ),
+        (
+            "fn f(o: &std::fs::File) { std::io::Write::write_vectored(o, &[]).ok(); }",
+            false,
+        ),
         ("use crate::store::hook; #[hook] fn f() {}", false),
         ("#[crate::store::hook] fn f() {}", false),
         ("#[r#inline] fn f() {}", false),
@@ -1640,7 +1663,7 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ),
         ("fn f() -> u8 { super::g() }", false),
         ("use ::std::fs::File;", false),
-        ("pub use ::core::fmt::Write;", false),
+        ("pub use ::core::fmt::Display;", false),
         (
             "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",
             false,
