@@ -31,12 +31,18 @@ The link stays mandatory. What changes is which tracker may carry it.
 
 ## Evidence
 
-- The founder's direction on 2026-09-27, given while T059 was in progress:
-  pull requests link to Linear, and the GitHub-issue requirement is dropped by
-  an amendment in a separate pull request.
+- The founder's direction on 2026-09-27, given in conversation while T059 was
+  in progress, and committed nowhere else: pull requests link to Linear, and
+  the GitHub-issue requirement is dropped by an amendment in a separate pull
+  request. The description of Linear issue CAR-351, created under the
+  founder's Linear account the same day, records it.
 - T059's pull request, #102, was opened linked to CAR-116 alone under that
-  direction, and says so in its body. The GitHub issue opened for it earlier,
-  #101, was closed as not planned.
+  direction, before the rule changed, and says so in its body. The GitHub
+  issue opened for it earlier, #101, was closed as not planned. The pull
+  request carrying this amendment, #103, is linked to CAR-351 alone in the
+  same way. Until the amendment merges, both fall short of the rule then in
+  force, and both need the founder's override, stated on each before its
+  merge, to land.
 - `AGENTS.md` already lists `Refs CAR-N` beside `Refs #N` as a commit's issue
   reference, and `scripts/check-commit-hygiene.py` accepts both.
 
@@ -48,7 +54,9 @@ The link stays mandatory. What changes is which tracker may carry it.
 
 ## Consequences
 
-Binding from the date above. The constitution moves to 2.1.0, and `CLAUDE.md`,
+Binding from the merge of the pull request that amends the constitution, not
+from the date above; nothing opened before that merge is covered by it. The
+constitution moves to 2.1.0, and `CLAUDE.md`,
 the pull request template, `README.md` and Principle I's compliance statement
 in `specs/001-evreos-v1/plan.md` follow it.
 
