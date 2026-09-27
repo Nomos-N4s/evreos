@@ -66,12 +66,12 @@ bytes.
 | `io_error` | 262,144 | 10,240 |
 | `registry_only` | 267,776 | 15,872 |
 | `settings_only` | 263,168 | 11,264 |
-| `reached` | 271,360 | 19,456 |
+| `reached` | 272,384 | 20,480 |
 
 `io_error` shows how much of each figure is only the standard library's error
 formatting, which the shell already carries: 10,240 bytes. Against it,
 registration adds 5,632 bytes, the settings page 1,024, and the two together
-9,216.
+10,240.
 
 **The option not adopted.** `open_settings` first handed the page to
 `explorer.exe` through `std::process::Command`. Measured the same way,
@@ -86,8 +86,8 @@ SC-001's download-size and installed-footprint entries for Windows are
 unmeasured: no installer exists yet. Nothing in the shipped binary reaches
 `evreos-platform` at this change; the shell does not depend on it until a
 surface offers FR-013. So the cost as shipped is 0 bytes, and once a surface
-reaches registration and the settings page it is at most 19,456 bytes on this
-build, 0.019 MB. That is an upper bound: the shell already links `windows`
+reaches registration and the settings page it is at most 20,480 bytes on this
+build, 0.020 MB. That is an upper bound: the shell already links `windows`
 0.62 and the standard library's error formatting, which the probes count.
 
 No other entry moves. Registration writes 19 string values once, when the
