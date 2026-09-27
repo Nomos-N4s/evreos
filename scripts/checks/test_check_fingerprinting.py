@@ -8,8 +8,8 @@ The same read hashed under a rotating salt fails too, because FR-036a binds on
 the derivation and not on what it produces.
 
 The sources quoted in this file are Python string literals; the check reads
-Rust source, script and markup, never Python, so quoting them here is not a
-breach and needs no assembly trick.
+Rust source, script, markup and Cargo manifests, never Python, so quoting them
+here is not a breach and needs no assembly trick.
 
 Run: python3 scripts/checks/test_check_fingerprinting.py
 """
@@ -117,6 +117,8 @@ report("...having read the update client",
        "crates/evreos-platform/src/update.rs" in read)
 report("...the rollout draw", "crates/evreos-platform/src/update/rollout.rs" in read)
 report("...the shell", any(path.startswith("crates/evreos-shell/src/") for path in read))
+report("...and the workspace manifests", "Cargo.toml" in read
+       and "crates/evreos-platform/Cargo.toml" in read)
 
 # --- the table itself ---------------------------------------------------------
 
@@ -124,6 +126,8 @@ names = [name for _, name, _ in check.COMPILED]
 report("every source name is unique", len(names) == len(set(names)))
 report("no source name holds whitespace, which an entry could not spell",
        all(name.split() == [name] for name in names))
+report("every dependency is filed under a category the sources use",
+       set(check.DEPENDENCY_SOURCES.values()) <= set(check.SOURCES))
 report("the eight categories T061 names are all present", len(check.SOURCES) == 8)
 
 # --- a clean tree -------------------------------------------------------------
@@ -131,7 +135,8 @@ report("the eight categories T061 names are all present", len(check.SOURCES) == 
 problems, read = tree(passing_tree())[:2]
 report("a clean tree passes: Instant, a scale factor, a longer identifier and "
        "comments naming sources are not reads", problems == [])
-report("...reading its Rust source", read == ["crates/x/src/lib.rs"])
+report("...reading its Rust source and its manifest",
+       read == ["crates/x/Cargo.toml", "crates/x/src/lib.rs"])
 
 # --- SOURCE: one caught case per category ------------------------------------
 
@@ -250,6 +255,43 @@ problems = tree(passing_tree({
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",
        mentions(problems, "notes.js:1", "'performance.now'"))
+
+# --- DEPENDENCY ---------------------------------------------------------------
+
+
+def with_manifest(tail):
+    return passing_tree({"crates/x/Cargo.toml": CLEAN_MANIFEST + tail})
+
+
+problems = tree(with_manifest('sysinfo = "0.30"\n'))[0]
+report("a direct dependency on sysinfo fails",
+       mentions(problems, "crates/x/Cargo.toml", "total memory", "'sysinfo'"))
+
+problems = tree(with_manifest('system = { package = "machine-uid", version = "0.5" }\n'))[0]
+report("a renamed dependency is read under its real name",
+       mentions(problems, "Cargo.toml", "'machine-uid'"))
+
+problems = tree(with_manifest("iana_time_zone = \"0.1\"\n"))[0]
+report("a dependency name compares with - and _ folded",
+       mentions(problems, "Cargo.toml", "timezone", "'iana-time-zone'"))
+
+problems = tree(passing_tree({"crates/x/Cargo.toml": CLEAN_MANIFEST + (
+    "\n[target.'cfg(windows)'.dependencies]\nwmi = \"0.13\"\n"
+    "\n[dev-dependencies]\nfont-kit = \"0.14\"\n"
+    "\n[build-dependencies]\nnum_cpus = \"1\"\n"
+)}))[0]
+report("a target-specific dependency fails", mentions(problems, "'wmi'"))
+report("a dev-dependency fails", mentions(problems, "'font-kit'"))
+report("a build-dependency fails", mentions(problems, "'num_cpus'"))
+
+problems = tree(passing_tree({
+    "Cargo.toml": '[workspace]\nmembers = []\n\n[workspace.dependencies]\nmac_address = "1"\n',
+}))[0]
+report("a workspace dependency fails", mentions(problems, "Cargo.toml", "'mac_address'"))
+
+problems = tree(passing_tree({"crates/x/Cargo.toml": "[package\nname = \n"}))[0]
+report("a manifest that is not TOML fails rather than passing unread",
+       mentions(problems, "Cargo.toml", "not TOML"))
 
 # --- unreadable input and an unreached verdict -------------------------------
 

@@ -97,6 +97,17 @@ It reads the tree and fails on:
                 `performance.timeOrigin` in script -- the class research
                 section 4.3 names.
 
+  DEPENDENCY    a direct dependency, in any table of any `Cargo.toml` --
+                ordinary, dev, build, target-specific or the workspace's own
+                -- on a crate that exists to read those characteristics:
+                `machine-uid`, `sysinfo`, `iana-time-zone`, `font-kit`,
+                `mac_address` and the rest of DEPENDENCY_SOURCES below. A
+                crate renamed with `package = ...` is read under its real
+                name. Such a crate reads the source inside code this check
+                never sees, so the manifest line is the one place the use is
+                visible. Names compare with `-` and `_` folded, as crates.io
+                folds them.
+
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
 A window's own scale factor -- winit's `scale_factor()`, script's
@@ -115,14 +126,18 @@ The locale is not a source here: FR-035 has the shell read the member's
 language, and FR-039c's closed report contents and FR-039d's closed counter
 keys already keep it out of crash reports and counters.
 
+A crate that reads a characteristic and is reached only transitively is not
+read: the lockfile holds crates other crates use for their own purposes, and
+what this check answers for is what Evreos itself holds.
+
 A derivation spread across files, or behind a wrapper whose name says nothing,
 rests on review. And none of this touches what a SITE does to fingerprint the
 member, which research section 4.3 sets out of FR-036a's scope and out of this
 architecture's reach.
 
-Files other than Rust source and the script and markup suffixes above are not
-read: Python is the tooling that runs this check and ships in nothing, and
-markdown is where the forbidden sources are quoted.
+Files other than Rust source, the script and markup suffixes above and
+`Cargo.toml` are not read: Python is the tooling that runs this check and ships
+in nothing, and markdown is where the forbidden sources are quoted.
 Directories are matched with case folded where they must be, the release
 platforms' filesystems folding case. Dot-directories and `target/` are not
 read: nothing under either ships.
@@ -130,6 +145,7 @@ read: nothing under either ships.
 import argparse
 import re
 import sys
+import tomllib
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -141,6 +157,9 @@ from rustlex import strip_non_code  # noqa: E402
 
 # Script and markup the shell could ship, read whole.
 SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".html", ".htm")
+
+# The manifest this check reads dependencies from.
+MANIFEST = "Cargo.toml"
 
 # Every source, by category. A source is (name, pattern): the name is what a
 # failure reports and what an allowlist entry spells, the pattern is matched as
@@ -344,6 +363,52 @@ COMPILED = [
     for name, pattern in sources
 ]
 
+# Crates that exist to read one of the characteristics above, by the category
+# they read. Keyed by the name crates.io publishes, compared with `-` and `_`
+# folded.
+DEPENDENCY_SOURCES = {
+    "machine-uid": "machine and volume identifier",
+    "machineid-rs": "machine and volume identifier",
+    "wmi": "machine and volume identifier",
+    "smbios-lib": "machine and volume identifier",
+    "hostname": "machine and volume identifier",
+    "gethostname": "machine and volume identifier",
+    "whoami": "machine and volume identifier",
+    "mac_address": "MAC address or network characteristic",
+    "get_if_addrs": "MAC address or network characteristic",
+    "if-addrs": "MAC address or network characteristic",
+    "local-ip-address": "MAC address or network characteristic",
+    "network-interface": "MAC address or network characteristic",
+    "pnet_datalink": "MAC address or network characteristic",
+    "display-info": "screen geometry",
+    "font-kit": "installed fonts",
+    "fontdb": "installed fonts",
+    "iana-time-zone": "timezone",
+    "sysinfo": "total memory",
+    "sys-info": "total memory",
+    "systemstat": "total memory",
+    "heim": "total memory",
+    "raw-cpuid": "processor model or count",
+    "num_cpus": "processor model or count",
+}
+
+# Every table name Cargo reads dependencies from.
+DEPENDENCY_TABLES = (
+    "dependencies",
+    "dev-dependencies",
+    "dev_dependencies",
+    "build-dependencies",
+    "build_dependencies",
+)
+
+
+def fold_crate(name):
+    """A crate name as crates.io compares it: case and `-`/`_` folded."""
+    return name.lower().replace("_", "-")
+
+
+FOLDED_DEPENDENCY_SOURCES = {fold_crate(name): name for name in DEPENDENCY_SOURCES}
+
 
 class CheckError(Exception):
     """The check could not reach a verdict: the tree it was pointed at is
@@ -375,13 +440,45 @@ def sources_in(line):
     return found
 
 
+def dependencies_in(manifest):
+    """Every crate a parsed manifest depends on directly, by its real name.
+
+    Every dependency table Cargo reads: top-level, `target.<cfg>.`, and the
+    workspace's own `[workspace.dependencies]`. A renamed dependency --
+    `alias = { package = "sysinfo" }` -- is returned under the crate it
+    names, since that is the code that runs.
+    """
+    tables = []
+    for key in DEPENDENCY_TABLES:
+        tables.append(manifest.get(key))
+    for target in (manifest.get("target") or {}).values():
+        if isinstance(target, dict):
+            for key in DEPENDENCY_TABLES:
+                tables.append(target.get(key))
+    workspace = manifest.get("workspace")
+    if isinstance(workspace, dict):
+        tables.append(workspace.get("dependencies"))
+
+    names = []
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        for alias, spec in table.items():
+            real = alias
+            if isinstance(spec, dict) and isinstance(spec.get("package"), str):
+                real = spec["package"]
+            if real not in names:
+                names.append(real)
+    return names
+
+
 def check_tree(root):
     """Every clause over the tree at `root`.
 
     Returns (problems, files read), the second a sorted list of the
     repository-relative POSIX paths
-    this check read. An empty `problems` is a pass -- unless nothing was
-    read, which raises
+    the SOURCE and DEPENDENCY clauses read. An empty `problems` is a pass --
+    unless nothing was read, which raises
     CheckError instead: a check over nothing is not a pass, and it is not a
     breach of FR-036a either, so it must not exit 1 as one. A root that is not
     a directory raises the same.
@@ -425,11 +522,26 @@ def check_tree(root):
                 for number, line in enumerate(text.splitlines(), 1):
                     for category, name in sources_in(line):
                         found(where, number, category, name)
+            elif folded_in(path.name, [MANIFEST]):
+                text = read_text(path)
+                read.append(where)
+                if text is None:
+                    problems.append(f"{where}: not valid UTF-8, so it is not a manifest this check can read")
+                    continue
+                try:
+                    manifest = tomllib.loads(text)
+                except tomllib.TOMLDecodeError as error:
+                    problems.append(f"{where}: not TOML this check can read ({error})")
+                    continue
+                for crate in dependencies_in(manifest):
+                    name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
+                    if name is not None:
+                        found(where, 0, DEPENDENCY_SOURCES[name], name)
 
     if not problems and not read:
         raise CheckError(
-            f"{root}: no Rust source or script; a check over nothing is not a "
-            "pass"
+            f"{root}: no Rust source, script or manifest; a check over nothing "
+            "is not a pass"
         )
     return problems, sorted(read)
 
