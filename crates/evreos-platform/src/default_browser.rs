@@ -20,10 +20,14 @@
 //! `Software\RegisteredApplications` pointing at those capabilities. It is
 //! written per user, so it needs no elevation. [`register`] writes it and
 //! [`unregister`] removes it: the three keys this module owns, whole, and
-//! its one value under `RegisteredApplications`, which other applications
-//! share. Neither touches anything else, so an uninstall leaves the
-//! member's own choice of default, and every other browser's registration,
-//! as it found them.
+//! every value under `RegisteredApplications`, which other applications
+//! share, that points at its capabilities, one left under an earlier name
+//! included. Neither touches anything else of another application's, so an
+//! uninstall leaves the member's own choice of default, and every other
+//! browser's registration, as it found them. The one exception is a key of
+//! the same name as one of this module's, a ProgID say, which an uninstall
+//! removes whole whoever wrote it, since nothing records which keys a
+//! registration created once it has succeeded.
 //!
 //! Microsoft's guidance also has a browser announce a new registration by
 //! calling `SHChangeNotify` with `SHCNE_ASSOCCHANGED`, so that the shell

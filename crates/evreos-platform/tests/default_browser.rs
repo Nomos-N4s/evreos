@@ -4,7 +4,8 @@
 //! Asserts that registering writes the browser's entry, its capabilities
 //! naming a ProgID for `http`, `https`, `.htm` and `.html`, the two ProgIDs
 //! and its `RegisteredApplications` value; that unregistering, as an
-//! uninstall does, removes every one of them and nothing else; that a failed
+//! uninstall does, removes every one of them and nothing of another
+//! application's but a key of the same name as its own; that a failed
 //! first registration leaves nothing listed; and that a failed
 //! re-registration leaves the existing one listed.
 #![forbid(unsafe_code)]
