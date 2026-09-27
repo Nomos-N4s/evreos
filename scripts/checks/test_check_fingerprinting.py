@@ -961,6 +961,7 @@ with tempfile.TemporaryDirectory() as tmp:
     (root / "crates" / "x" / "out").symlink_to(base / "outside")
     (root / "crates" / "x" / "src" / "linked.rs").symlink_to(base / "outside" / "lib.rs")
     (root / "crates" / "x" / "src" / "refused.rs").write_text("", encoding="utf-8")
+    (root / "crates" / "x" / "sealed").mkdir()
     (base / "allowlist.txt").write_text("", encoding="utf-8")
     read_text = Path.read_text
 
@@ -969,11 +970,21 @@ with tempfile.TemporaryDirectory() as tmp:
             raise PermissionError(13, "Permission denied")
         return read_text(path, *args, **kwargs)
 
-    Path.read_text = refusing
+    iterdir = Path.iterdir
+
+    def refusing_list(path):
+        if path.name == "sealed":
+            raise PermissionError(13, "Permission denied")
+        return iterdir(path)
+
+    Path.read_text, Path.iterdir = refusing, refusing_list
     try:
         problems, read, _ = check.check_tree(root, base / "allowlist.txt")
         report("a directory link that loops ends the walk rather than extending it",
-               read.count("crates/x/src/lib.rs") == 1)
+               read.count("crates/x/src/lib.rs") == 1
+               and not any("/loop/" in where for where in read))
+        report("a directory the system refuses to list is reported, not a traceback",
+               mentions(problems, "crates/x/sealed", "not a directory this check can list"))
         report("a directory link that leads outside the tree is reported, not read",
                mentions(problems, "crates/x/out", "outside the tree")
                and not mentions(problems, "'MachineGuid'"))
@@ -985,7 +996,7 @@ with tempfile.TemporaryDirectory() as tmp:
     except OSError as error:
         report(f"links and unreadable files end in a verdict, not {error!r}", False)
     finally:
-        Path.read_text = read_text
+        Path.read_text, Path.iterdir = read_text, iterdir
 
 try:
     tree({"README.md": "nothing this check reads\n"},
