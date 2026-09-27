@@ -342,18 +342,21 @@ fn remove_pointers(
 /// Whether two value names name the same value. The registry compares them
 /// without regard to case, across Unicode and a character at a time, and
 /// keeps a value's first spelling when it is written again under another,
-/// so the name read back may differ in case from the one written.
+/// so the name read back may differ in case from the one written. Each
+/// character is taken to its single small letter where it has one: the
+/// shell already carries the tables that needs, where capitals would add
+/// tables of their own.
 fn same_value_name(a: &str, b: &str) -> bool {
-    fn upper(ch: char) -> char {
-        let mut upper = ch.to_uppercase();
-        match (upper.next(), upper.next()) {
+    fn lower(ch: char) -> char {
+        let mut lower = ch.to_lowercase();
+        match (lower.next(), lower.next()) {
             (Some(single), None) => single,
-            // A character whose capital is several, as ß, is kept as it
-            // is, as the registry's one-to-one table keeps it.
+            // A character whose small letter is several, as İ, is kept as
+            // it is, as the registry's one-to-one table keeps it.
             _ => ch,
         }
     }
-    a.chars().map(upper).eq(b.chars().map(upper))
+    a.chars().map(lower).eq(b.chars().map(lower))
 }
 
 /// Whether `text` is shown as written: not empty, holding no control
