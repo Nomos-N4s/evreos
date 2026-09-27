@@ -1,10 +1,12 @@
-Closes #N
+Refs CAR-N
 
 <!--
 One pull request per issue, and the issue is opened first if none exists
-(Principle I; the repository rules file, Workflow section). The commit-hygiene
-job reads this body for attribution only and never for this link, so the link
-rests on review.
+(Principle I; the repository rules file, Workflow section). Name the Linear
+issue that tracks the work, as `Refs CAR-N`, or `Closes CAR-N` where merging
+finishes it; or a GitHub issue, as `Closes #N` (decisions/0008). The
+commit-hygiene job reads this body for attribution only and never for this
+link, so the link rests on review.
 -->
 
 ## What changes, and why

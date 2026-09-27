@@ -1,6 +1,29 @@
 <!--
 Sync Impact Report
-Version change: 1.1.0 → 2.0.0
+Version change: 2.0.0 → 2.1.0
+
+Amendment 2.0.0 → 2.1.0 (2026-09-27), MINOR — guidance outside the Core Principles
+  expanded:
+  - Classified MINOR. The change is to the Development Workflow, which is not a Core
+    Principle, so MAJOR does not apply. It adds an option: a pull request may be linked to
+    the Linear issue that tracks the work, as well as to a GitHub issue. The Versioning
+    policy names MINOR for guidance materially expanded, and PATCH would understate it,
+    since it changes what a pull request must carry.
+  - What changed: the Development Workflow's first bullet. A pull request is linked to an
+    issue, on GitHub or in Linear. Recorded at `decisions/0008`, which the amendment
+    procedure requires.
+  - What replaces the discipline relaxed, as the amendment procedure asks. The link stays
+    mandatory for every pull request, and every commit still references its issue, which
+    `scripts/check-commit-hygiene.py` enforces for GitHub and Linear references alike. A
+    pull request linked to its Linear issue alone gives up three things a GitHub issue
+    gave, and each is named in `decisions/0008` with what stands in for it: GitHub's own
+    link between the pull request and its issue, replaced by the Linear integration's
+    link-back comment; the issue's closing on merge, which `Closes CAR-N` leaves to that
+    integration; and the issue's being readable by anyone who can read the repository,
+    since the Linear workspace is private to the founder's team.
+  - Follow-on: `CLAUDE.md`'s Workflow section, the pull request template, `README.md`,
+    Principle I's compliance statement in `specs/001-evreos-v1/plan.md` and T002's line in
+    `specs/001-evreos-v1/tasks.md` are aligned in the same pull request.
 
 Amendment 1.1.0 → 2.0.0 (2026-09-02), MAJOR — Principle I narrowed by a recorded
   exception:
@@ -280,8 +303,9 @@ of them requires a MAJOR amendment to this constitution:
 
 ## Development Workflow
 
-- Every change reaches `main` through a pull request linked to a GitHub issue. Direct
-  pushes to `main` are prohibited.
+- Every change reaches `main` through a pull request linked to an issue: a GitHub issue,
+  or the Linear issue that tracks the work (`decisions/0008`). Direct pushes to `main`
+  are prohibited.
 - Commits are atomic: exactly one logical change per commit, each standing, building and
   reverting on its own.
 - Every pull request that adds or changes a feature states the byte and millisecond cost
@@ -353,4 +377,4 @@ release blockers, as is any client-side money logic prohibited by Principle V.
 Complexity that appears to conflict with Principle II or Principle III MUST be justified in
 the pull request that introduces it, or removed.
 
-**Version**: 2.0.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-02
+**Version**: 2.1.0 | **Ratified**: 2026-08-29 | **Last Amended**: 2026-09-27

@@ -80,7 +80,8 @@ where to look and a check could one day parse it.
    its unit, so that the budget file can be checked against the record line by
    line.
 7. **Consequences** — what the decision binds from its date, and what result
-   would reopen it.
+   would reopen it. A decision that its record says takes effect from a later
+   event than its date names that event here.
 8. **Corrections** — dated entries, appended and never edited, each saying what
    it corrected and why.
 
@@ -106,6 +107,7 @@ and the amendment cites the record that carries the founder's reasons.
 | [0005](0005-intercepted-navigation.md) | Intercepted navigation classification | Open | 2026-09-24 | FR-015, SC-009, Principle VI, FR-007a; T021, T022, T083, T099 |
 | [0006](0006-private-window-downloads.md) | Private-window downloads record retention | Decided | 2026-09-25 | FR-007, FR-004, FR-007a, SC-001; T044, T052, T081 |
 | [0007](0007-site-key.md) | Site key definition for permissions and blocking exceptions | Decided | 2026-09-26 | FR-006, FR-008; T048, T049, T069 |
+| [0008](0008-linear-issue-links.md) | A pull request may be linked to its Linear issue alone | Decided | 2026-09-27 | The Development Workflow's issue link; `CLAUDE.md`'s Workflow section |
 
 The next free number is the one after the last row.
 
