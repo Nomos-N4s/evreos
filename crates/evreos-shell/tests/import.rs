@@ -1997,6 +1997,39 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
     }
 }
 
+/// Whether `source` gives something the reader's name, `Database`, by a
+/// rename or an alias.
+fn renames_to_the_reader(source: &str) -> bool {
+    let toks = tokens(source);
+    let word = |i: usize| match toks.get(i) {
+        Some(Tok::Ident(word)) => Some(word.strip_prefix("r#").unwrap_or(word)),
+        _ => None,
+    };
+    (0..toks.len()).any(|i| {
+        word(i) == Some("Database") && matches!(word(i.wrapping_sub(1)), Some("as" | "type"))
+    })
+}
+
+#[test]
+fn a_rename_or_alias_to_the_readers_name_is_found() {
+    for source in [
+        "pub use StoreRegistry as Database;",
+        "pub use StoreRegistry as r#Database;",
+        "type Database = crate::store::StoreRegistry;",
+        "pub(crate) type r#Database = StoreRegistry;",
+    ] {
+        assert!(renames_to_the_reader(source), "{source:?} passed");
+    }
+    for source in [
+        "pub struct Database<'a> { main: &'a [u8] }",
+        "fn f(db: &Database) {}",
+        "use super::sqlite::{Database, Value};",
+        "let as_database = 1;",
+    ] {
+        assert!(!renames_to_the_reader(source), "{source:?}");
+    }
+}
+
 #[test]
 fn no_item_in_the_crate_is_renamed_to_the_reader() {
     // The import may call `open` after `Database`, the in-tree reader, and
@@ -2020,17 +2053,11 @@ fn no_item_in_the_crate_is_renamed_to_the_reader() {
     );
     assert!(!files.is_empty());
     for file in files {
-        let toks = tokens(&fs::read_to_string(&file).unwrap());
-        for pair in toks.windows(2) {
-            if let [Tok::Ident(before), Tok::Ident(name)] = pair {
-                let name = name.strip_prefix("r#").unwrap_or(name);
-                assert!(
-                    !(name == "Database" && (before == "as" || before == "type")),
-                    "{} names something `Database` by `{before}`",
-                    file.display()
-                );
-            }
-        }
+        assert!(
+            !renames_to_the_reader(&fs::read_to_string(&file).unwrap()),
+            "{} renames or aliases something to `Database`",
+            file.display()
+        );
     }
 }
 
