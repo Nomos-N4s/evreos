@@ -451,6 +451,14 @@ report("the word Local in ordinary prose is not chrono's Local", problems == [])
 problems = tree(with_rust('let hostname = url.host_str();\nlet computername = 1;\n'))[0]
 report("a variable named for a host name is not the environment variable", problems == [])
 
+problems = tree(with_rust(
+    "let userdomain = 1;\nlet logonserver = 2;\nlet processor_identifier = 3;\n"
+    "let processor_revision = 4;\nlet processor_level = 5;\nlet number_of_processors = 6;\n"
+    "use chrono::{self as local};\nlet f = local.field;\nlet r = &local;\n"
+))[0]
+report("an identifier spelling a case-matched source in another case is not a read",
+       problems == [])
+
 problems = tree({**with_rust('let zone = "tz";\nlet z = TZ_OFFSET;\n'),
                   "web/zone.js": "const zone = process.env.TZ;\n"})[0]
 report("a TZ literal in another case, or a name that holds TZ, is not the variable",
