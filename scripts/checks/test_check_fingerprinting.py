@@ -322,6 +322,11 @@ report("...while the word Local inside a literal is not, even there",
        not mentions(problems, "probe.rs:4"))
 
 problems = tree(with_rust(
+    "mod local { pub fn now() -> u32 { 0 } }\nfn a() -> u32 { local::now() + LOCAL::today() }\n"
+))[0]
+report("a module named local in another case is not chrono's Local", problems == [])
+
+problems = tree(with_rust(
     'let path = user_data.join("Local State");\nout.push_str("# Local Bookmark Store");\n'
 ))[0]
 report("the word Local in ordinary prose is not chrono's Local", problems == [])
