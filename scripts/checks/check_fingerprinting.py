@@ -51,11 +51,13 @@ It reads the tree and fails on:
                 where an injected script lives. A file a Rust file compiles
                 in through `include!` or `#[path = ...]` is read as Rust
                 whatever its suffix, and one it embeds through `include_str!`
-                is read whole, like script; one outside the tree is reported,
-                since nothing in it can be answered for. A literal's `\\x` and
-                `\\u{...}` escapes, and script's `\\uHHHH` too, are decoded
-                before matching, so a name spelled with an escape --
-                `"/etc/machine\\x2did"` -- is the same name.
+                or `include_bytes!` is read whole, like script, bytes that are
+                not UTF-8 decoded as `String::from_utf8_lossy` decodes them;
+                one outside the tree is reported, since nothing in it can be
+                answered for.
+                A literal's `\\x` and `\\u{...}` escapes, and script's
+                `\\uHHHH` too, are decoded before matching, so a name spelled
+                with an escape -- `"/etc/machine\\x2did"` -- is the same name.
                 Script and markup the shell could ship -- `.js`, `.mjs`,
                 `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
                 whole, comments included: there is no shared scanner for
@@ -575,6 +577,7 @@ BRINGS = (
     ("rust", re.compile(r"\binclude!\s*[(\[{]")),
     ("rust", re.compile(r"#\s*\[\s*path\s*=")),
     ("text", re.compile(r"\binclude_str!\s*[(\[{]")),
+    ("bytes", re.compile(r"\binclude_bytes!\s*[(\[{]")),
 )
 BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
 
@@ -667,14 +670,16 @@ class Unreadable(Exception):
     as a breach is reported, rather than ending the run in a traceback."""
 
 
-def read_text(path):
+def read_text(path, lossy=False):
     """The file's text; raises Unreadable, saying why, when it has none.
+    `lossy` replaces bytes that are not UTF-8 rather than raising.
 
     The BOM is stripped for the reason the other checks strip it: an editor
     that writes one is not a way past a check.
     """
     try:
-        return path.read_text(encoding="utf-8").lstrip("﻿")
+        errors = "replace" if lossy else "strict"
+        return path.read_text(encoding="utf-8", errors=errors).lstrip("﻿")
     except UnicodeDecodeError:
         raise Unreadable("not valid UTF-8") from None
     except OSError as error:
@@ -840,7 +845,8 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     # Files a Rust file brings into the build under a name of its own
     # choosing, as (kind, path, the file and line that name it): compiled in
     # through `include!` or `#[path = ...]`, or embedded through
-    # `include_str!`. Each is read after the walk, once, whatever its suffix.
+    # `include_str!` or `include_bytes!`. Each is read after the walk, once,
+    # whatever its suffix.
     brought = []
 
     def scan_rust(path, where):
@@ -871,10 +877,10 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     number = bare.count("\n", 0, match.start()) + 1
                     brought.append((kind, path.parent / named.group(1), f"{where}:{number}"))
 
-    def scan_whole(path, where, what):
+    def scan_whole(path, where, what, lossy=False):
         read.append(where)
         try:
-            text = read_text(path)
+            text = read_text(path, lossy)
         except Unreadable as error:
             problems.append(f"{where}: {error}, so it is not {what} this check can read")
             return
@@ -939,7 +945,7 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         if kind == "rust":
             scan_rust(resolved, where)
         else:
-            scan_whole(resolved, where, "text")
+            scan_whole(resolved, where, "text", lossy=kind == "bytes")
 
     if not read:
         raise CheckError(

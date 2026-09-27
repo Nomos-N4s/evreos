@@ -485,6 +485,15 @@ report("a macro called with brackets or braces brings its file in too",
        mentions(problems, "crates/x/src/generated.in:1", "'mach_absolute_time'")
        and mentions(problems, "crates/x/src/probe.js.txt:1", "'screen.'"))
 
+problems = tree(passing_tree({
+    "crates/x/src/probe.rs": (
+        'const PROBE: &[u8] = include_bytes!("inject.txt");\n'
+    ),
+    "crates/x/src/inject.txt": b"\xff navigator.hardwareConcurrency\n",
+}))[0]
+report("a file embedded through include_bytes! is read whole, bad UTF-8 replaced",
+       mentions(problems, "crates/x/src/inject.txt:1", "'hardwareConcurrency'"))
+
 problems = tree(with_rust('fn f() {}\ninclude!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported, on the line that brings it",
        mentions(problems, "probe.rs:2", "outside.in", "outside the tree"))
