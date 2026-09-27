@@ -529,6 +529,16 @@ report("a macro called with brackets or braces brings its file in too",
        and mentions(problems, "crates/x/src/probe.js.txt:1", "'screen.'"))
 
 problems = tree(passing_tree({
+    "crates/x/src/web/probe.rs": (
+        'const PROBE: &str =\n'
+        '    include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/inject.js.txt"));\n'
+    ),
+    "crates/x/assets/inject.js.txt": "send(navigator.hardwareConcurrency);\n",
+}))[0]
+report("a path built from CARGO_MANIFEST_DIR is followed from the package's directory",
+       mentions(problems, "crates/x/assets/inject.js.txt:1", "'hardwareConcurrency'"))
+
+problems = tree(passing_tree({
     "crates/x/src/probe.rs": (
         'const PROBE: &[u8] = include_bytes!("inject.txt");\n'
     ),

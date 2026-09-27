@@ -56,9 +56,13 @@ It reads the tree and fails on:
                 whole, like script, bytes that are not UTF-8 decoded as
                 `String::from_utf8_lossy` decodes them; one outside the tree,
                 or not a file there, is reported, since nothing in it can be
-                answered for. A crate root or build script a `Cargo.toml`
-                names by `path` or `build` is read as Rust too, since Cargo
-                compiles it whatever its suffix.
+                answered for. A path built as
+                `concat!(env!("CARGO_MANIFEST_DIR"), "...")` is followed from
+                the package's directory; one built any other way, from
+                `OUT_DIR` among them, is not, and what it brings in rests on
+                review. A crate root or build script a `Cargo.toml` names by
+                `path` or `build` is read as Rust too, since Cargo compiles it
+                whatever its suffix.
                 A literal's `\\x` and `\\u{...}` escapes, and script's
                 `\\uHHHH` too, are decoded before matching and its line
                 continuations joined, so a name spelled with an escape --
@@ -608,6 +612,12 @@ BRINGS = (
     ("bytes", re.compile(r"\binclude_bytes!\s*[(\[{]")),
 )
 BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
+# The same path built from the package's directory, as `include_str!` is
+# usually given one: `concat!(env!("CARGO_MANIFEST_DIR"), "/src/x.js")`.
+BROUGHT_FROM_MANIFEST = re.compile(
+    r'\s*concat!\s*[(\[{]\s*env!\s*[(\[{]\s*"CARGO_MANIFEST_DIR"\s*[)\]}]\s*,'
+    r'\s*(?:r#*)?"([^"]+)"'
+)
 
 # An inline module's opening brace, or any other brace, in code with literals
 # blanked.
@@ -767,6 +777,15 @@ def inline_modules(bare, end):
         else:
             blocks.append(match.group(1))
     return [name for name in blocks if name]
+
+
+def manifest_dir(path):
+    """The directory of the nearest `Cargo.toml` above `path`, which is
+    `CARGO_MANIFEST_DIR` when Cargo compiles it; `path`'s own when none is."""
+    for directory in path.parents:
+        if (directory / MANIFEST).is_file():
+            return directory
+    return path.parent
 
 
 def module_paths(path, modules, named):
@@ -972,10 +991,13 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         for kind, pattern in BRINGS:
             for match in pattern.finditer(bare):
                 named = BROUGHT_PATH.match(code, match.end())
-                if not named:
+                built = None if named else BROUGHT_FROM_MANIFEST.match(code, match.end())
+                if not (named or built):
                     continue
                 number = bare.count("\n", 0, match.start()) + 1
-                if kind == "module":
+                if built:
+                    candidates = (manifest_dir(path) / built.group(1).lstrip("/\\"),)
+                elif kind == "module":
                     modules = inline_modules(bare, match.start())
                     candidates = module_paths(path, modules, named.group(1))
                 else:
