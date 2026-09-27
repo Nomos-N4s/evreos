@@ -9,11 +9,11 @@
   web view "may be reported for". `specs/001-evreos-v1/tasks.md` orders every
   measurement behind the reference machines T013 procures, with
   decisions/0004 as the one exception, for T015 and T016 alone, and this
-  build's target is not the tier-1 one. The figures below are therefore recorded as the evidence the
-  choice of bindings rests on, and as the baseline the tier-1 build will be
-  compared against. They become the tier-1 figure when that build confirms
-  them on the tier-1 pinned runner, or sooner only if a founder decision
-  admits them.
+  build's target is not the tier-1 one. The figures below are therefore
+  recorded as the evidence the choice of bindings rests on, and as the
+  baseline the tier-1 build will be compared against. They become the tier-1
+  figure when that build confirms them on the tier-1 pinned runner, or sooner
+  only if a founder decision admits them.
 
 ## The question
 
