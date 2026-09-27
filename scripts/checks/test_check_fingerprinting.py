@@ -360,6 +360,14 @@ report("a /proc file named by joining its name onto /proc is the same read",
 problems = tree(with_rust("let uptime = started.elapsed();\n"))[0]
 report("...while a field named uptime is not", problems == [])
 
+problems = tree(with_rust('let up = read(Path::new("/proc").join(r"uptime"));\n'))[0]
+report("a source opening with punctuation is found after a word character too",
+       mentions(problems, "probe.rs:1", "'/proc/uptime'"))
+
+problems = tree(with_rust('const PROBE: &str = "let s=screen;";\n'))[0]
+report("...and so is an alternative that opens with punctuation mid-pattern",
+       mentions(problems, "probe.rs:1", "'window.screen'"))
+
 problems, read = tree(passing_tree({
     "crates/x/src/probe.rs": (
         '#[path = "probe_impl.txt"]\nmod probe_impl;\n'

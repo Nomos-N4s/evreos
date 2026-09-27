@@ -517,23 +517,14 @@ SCRIPT_SHAPED = {
 
 # A whole token: nothing that could continue an identifier on either side, so
 # `sysinfo` is not found inside `mysysinfo_cache` and `bssid` not inside a
-# longer word.
-EDGE_BEFORE = r"(?<![A-Za-z0-9_])"
-EDGE_AFTER = r"(?![A-Za-z0-9_])"
+# longer word. The edge applies only where the match itself begins or ends
+# with a word character: a match that opens with `/`, `"` or `=` is delimited
+# already, and `/System/Library/Fonts` or `r"uptime"` must not hide it.
+EDGE_BEFORE = r"(?:(?<![A-Za-z0-9_])|(?![A-Za-z0-9_]))"
+EDGE_AFTER = r"(?:(?![A-Za-z0-9_])|(?<![A-Za-z0-9_]))"
 
-# A path-shaped pattern -- one that opens with `/` -- needs no leading edge:
-# the slash delimits it already, and a directory in front of it, as in
-# `/System/Library/Fonts`, must not hide it.
 COMPILED = [
-    (
-        category,
-        name,
-        re.compile(
-            ("" if pattern.startswith("/") else EDGE_BEFORE)
-            + "(?:" + pattern + ")" + EDGE_AFTER,
-            re.IGNORECASE,
-        ),
-    )
+    (category, name, re.compile(EDGE_BEFORE + "(?:" + pattern + ")" + EDGE_AFTER, re.IGNORECASE))
     for category, sources in SOURCES.items()
     for name, pattern in sources
 ]
