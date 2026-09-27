@@ -108,21 +108,21 @@ It reads the tree and fails on:
                 script learns local addresses.
     screen geometry
                 enumerating monitors or screens and reading their size,
-                resolution, colour depth or arrangement, on every platform
-                API the release tiers carry and on the `screen` object in
+                resolution, colour depth or arrangement, through the platform
+                APIs the release tiers carry and on the `screen` object in
                 script, whether a property is read off it -- dotted,
                 optionally chained or bracketed -- or the object is taken
                 whole, as destructuring takes it. Every dotted script
                 source allows whitespace and a line break between its
                 parts, as a formatter writes a long chain.
     installed fonts
-                enumerating the system's font collection, on every platform
-                API, through fontconfig and `fc-list`, through a font
+                enumerating the system's font collection, through the
+                platform APIs, fontconfig and `fc-list`, through a font
                 library's system-font loader, and by listing a system font
                 directory.
     timezone
-                the system timezone and the local UTC offset, through every
-                platform API and libc's `localtime`, `tzname` and
+                the system timezone and the local UTC offset, through the
+                platform APIs and libc's `localtime`, `tzname` and
                 `timezone`, `/etc/localtime`, the `TZ` variable, the `time`
                 crate's `now_local` and local offsets, chrono's `Local`
                 wherever a line names it -- by path, in an import list, as
@@ -134,8 +134,8 @@ It reads the tree and fails on:
                 is matched in its own case only: the word opens ordinary
                 prose such as "Local State".
     total memory
-                the physical memory the machine carries, through every
-                platform API, `/proc/meminfo`, `sysinfo` and
+                the physical memory the machine carries, through the
+                platform APIs, `/proc/meminfo`, `sysinfo` and
                 `navigator.deviceMemory`.
     processor model and count
                 the processor's brand string, CPUID, the registry and sysctl
@@ -221,6 +221,11 @@ review until one does.
 A crate that reads a characteristic and is reached only transitively is not
 read: the lockfile holds crates other crates use for their own purposes, and
 what this check answers for is what Evreos itself holds.
+
+Every category is the spellings SOURCES and DEPENDENCY_SOURCES list: the
+platform names, the binding crates, paths and tools known when each was
+written. A crate, binding or tool that spells a source some other way is not
+read, and rests on review; one found is added to the table.
 
 A derivation spread across files, or behind a wrapper whose name says nothing,
 rests on review. So does a source name assembled from pieces -- `concat!`,
