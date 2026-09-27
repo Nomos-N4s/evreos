@@ -15,6 +15,16 @@ use std::fmt;
 /// that the recursive descent below cannot exhaust a worker thread's stack.
 const MAX_DEPTH: usize = 256;
 
+/// The most values one document may hold. Each costs a few dozen bytes in
+/// memory however few it takes in the file (`[0,0,…]` spends two bytes on
+/// each), so without a bound a file within the copy's size limit could make
+/// the parse hold many times its size. A `Bookmarks` file spends a dozen
+/// values on a bookmark, so this admits a third of a million bookmarks and
+/// bounds what the values cost to a few hundred megabytes whatever the file
+/// holds. The text of its strings and numbers is copied too, once, so the
+/// parse also holds up to the document's own size.
+const MAX_VALUES: usize = 4_000_000;
+
 /// A parsed JSON value. Numbers keep their text, since the one consumer reads
 /// Chromium's timestamps, which it stores as strings anyway.
 #[derive(Debug, Clone, PartialEq)]
@@ -87,6 +97,7 @@ pub fn parse(text: &str) -> Result<Json, JsonError> {
         bytes: text.as_bytes(),
         text,
         at: 0,
+        values: 0,
     };
     let value = parser.value(0)?;
     parser.whitespace();
@@ -100,6 +111,8 @@ struct Parser<'a> {
     bytes: &'a [u8],
     text: &'a str,
     at: usize,
+    /// Values parsed so far, held to [`MAX_VALUES`].
+    values: usize,
 }
 
 impl Parser<'_> {
@@ -137,6 +150,10 @@ impl Parser<'_> {
     fn value(&mut self, depth: usize) -> Result<Json, JsonError> {
         if depth > MAX_DEPTH {
             return Err(self.error("nesting no deeper than 256"));
+        }
+        self.values += 1;
+        if self.values > MAX_VALUES {
+            return Err(self.error("no more than 4,000,000 values"));
         }
         self.whitespace();
         match self.bytes.get(self.at) {
@@ -352,6 +369,14 @@ mod tests {
         assert!(parse(&deep).is_err());
         let fine = "[".repeat(10) + &"]".repeat(10);
         assert!(parse(&fine).is_ok());
+    }
+
+    #[test]
+    fn a_document_of_more_values_than_the_bound_is_refused() {
+        let at_bound = format!("[{}0]", "0,".repeat(MAX_VALUES - 2));
+        assert!(parse(&at_bound).is_ok(), "the array and its values");
+        let over = format!("[{}0]", "0,".repeat(MAX_VALUES - 1));
+        assert!(parse(&over).is_err());
     }
 
     #[test]

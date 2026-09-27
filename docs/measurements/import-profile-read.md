@@ -229,7 +229,12 @@ the same stopped profiles after review round 11, reads the same counts.
   with a doubling pause capped at 400 ms, about 1.6 s in all. The copy never
   touches disk, so a crash mid-import leaves no copy of another browser's
   history behind. The cost is memory: the store's size, for as long as the
-  read takes, and never more than 1 GiB for any one of its files; a copy
+  read takes, and never more than 1 GiB for any one of its files. Parsing
+  Chromium's `Bookmarks` or `Local State`, each a JSON document, holds a
+  second copy of its strings' and numbers' text, at most its own size, and
+  a few dozen bytes for each value in it; a document may hold at most four
+  million values, a few hundred megabytes (271 MB at the bound, measured).
+  A copy
   refused for an open write lets go of what it held before it reads the
   files again, one at a time, to fingerprint them. A `History` or `places.sqlite` runs to tens of megabytes on a
   profile used for years. SC-004's condition — ten tabs, sampled through a
