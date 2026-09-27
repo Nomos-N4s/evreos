@@ -17,10 +17,10 @@
 # request must be signed by it. Only the founder can sign, because only the
 # founder holds the private key.
 #
-# What is missing is the key, not the signing. Commits here already carry SSH
-# signatures; without a key to check them against, a signature is a claim
-# nobody can verify. Listing the public key below is what turns it into one
-# this repository can check. Add it in a signed commit and keep signing. On the
+# The history before the key was listed is not signed by it: its commits
+# carry no signature, and the forge's merge commits carry the forge's own.
+# The check reads only the commits of the pull request in front of it, so
+# that history is out of its reach. From now on, sign every commit. On the
 # founder's machine, once per clone:
 #
 #   git config gpg.format ssh
