@@ -62,6 +62,12 @@ It reads the tree and fails on:
                 API, through fontconfig and `fc-list`, through a font
                 library's system-font loader, and by listing a system font
                 directory.
+    timezone
+                the system timezone and the local UTC offset, through every
+                platform API, `/etc/localtime`, the `TZ` variable, the
+                `time` and `chrono` crates' local-time entry points, and
+                `getTimezoneOffset` and `resolvedOptions().timeZone` in
+                script.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
 
@@ -70,6 +76,10 @@ A window's own scale factor -- winit's `scale_factor()`, script's
 the member chose, which Principle X's scaling to 200% requires, and the
 accessibility spike already does; a rule on it would fail every conformant
 window, the chrome's among them. A derivation that uses it rests on review.
+
+The locale is not a source here: FR-035 has the shell read the member's
+language, and FR-039c's closed report contents and FR-039d's closed counter
+keys already keep it out of crash reports and counters.
 
 A derivation spread across files, or behind a wrapper whose name says nothing,
 rests on review. And none of this touches what a SITE does to fingerprint the
@@ -211,6 +221,25 @@ SOURCES = {
         ("/usr/share/fonts", r"/usr/share/fonts"),
         ("/Library/Fonts", r"/Library/Fonts"),
         ("Windows\\Fonts", r"Windows[\\/]+Fonts"),
+    ),
+    "timezone": (
+        ("iana_time_zone", r"iana_time_zone"),
+        ("get_timezone", r"get_timezone"),
+        ("GetTimeZoneInformation", r"GetTimeZoneInformation(?:ForYear)?"),
+        ("GetDynamicTimeZoneInformation", r"GetDynamicTimeZoneInformation"),
+        ("/etc/localtime", r"/etc/localtime"),
+        ("/etc/timezone", r"/etc/timezone"),
+        ("NSTimeZone", r"NSTimeZone"),
+        ("CFTimeZoneCopy", r"CFTimeZoneCopy(?:System|Default)"),
+        ("localtime_r", r"localtime_[rs]"),
+        ("tm_gmtoff", r"tm_gmtoff"),
+        ("tzset", r"tzset"),
+        ("current_local_offset", r"current_local_offset"),
+        ("local_offset_at", r"local_offset_at"),
+        ("chrono::Local", r"chrono::Local|Local::(?:now|today)"),
+        ("TZ", r"var(?:_os)?\(\s*\"TZ\"\s*\)"),
+        ("getTimezoneOffset", r"getTimezoneOffset"),
+        ("resolvedOptions().timeZone", r"resolvedOptions\(\s*\)\.timeZone"),
     ),
 }
 

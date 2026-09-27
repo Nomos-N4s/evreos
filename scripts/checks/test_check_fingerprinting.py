@@ -153,6 +153,12 @@ CAUGHT = (
      "EnumFontFamiliesExW(dc, &logfont, Some(collect), 0, 0);\n"),
     ("installed fonts", "load_system_fonts",
      "database.load_system_fonts();\n"),
+    ("timezone", "iana_time_zone",
+     "let zone = iana_time_zone::get_timezone();\n"),
+    ("timezone", "current_local_offset",
+     "let offset = time::UtcOffset::current_local_offset();\n"),
+    ("timezone", "TZ",
+     'let zone = std::env::var("TZ");\n'),
 )
 
 for category, name, body in CAUGHT:
