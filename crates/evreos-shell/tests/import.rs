@@ -1089,6 +1089,13 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             // The standard library, less the parts that open a socket, start
             // a process or reach the platform, and only by a plain path.
             "std" | "core" | "alloc" => match next_word {
+                // Of the platform's own parts, only the file-opening options
+                // the copy uses to open a store without waiting on it.
+                Some("os")
+                    if path_sep(i + 4)
+                        && ident(i + 6) == Some("unix")
+                        && path_sep(i + 7)
+                        && ident(i + 9) == Some("fs") => {}
                 Some("net" | "process" | "os") | None => {
                     found.push(format!("`{word}` followed by {next:?}"));
                 }
@@ -1135,6 +1142,9 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use std::{net};", false),
         ("use ::std::process::Command;", false),
         ("use core::net::Ipv4Addr;", false),
+        ("use std::os::unix::net::UnixStream;", false),
+        ("use std::os::fd::FromRawFd;", false),
+        ("use std::os::{unix::fs};", false),
         (
             "fn f() -> &'static str { return r\"\\\"; } use crate::tabs;",
             false,
@@ -1182,6 +1192,7 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("use super::store::HistoryStore;", true),
         ("pub(crate) fn f() {} pub(super) fn g() {}", false),
         ("pub(in crate) fn f() {}", false),
+        ("fn f() { use std::os::unix::fs::OpenOptionsExt; }", false),
         ("fn f() -> u8 { super::g() }", false),
         (
             "fn f() -> u8 { if true { super::g() } else { super::h() } }",

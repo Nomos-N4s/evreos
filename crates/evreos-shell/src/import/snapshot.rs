@@ -40,7 +40,7 @@
 
 #![forbid(unsafe_code)]
 
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -183,25 +183,75 @@ pub const MAX_STORE_FILE_BYTES: u64 = 1 << 30;
 /// Open `path` if it is there and is a regular file. A pipe would block the
 /// open and a device such as `/dev/zero` never ends, and a profile directory
 /// can hold either under a store's name, behind a link or not; neither is a
-/// store, so each is an error rather than a read.
+/// store, so each is an error rather than a read. The path is checked before
+/// it is opened, and what was opened is checked again, so a pipe or device
+/// swapped in between is refused too; on Unix the open itself cannot block,
+/// since a pipe opened without waiting for a writer returns at once.
 fn open_if_present(path: &Path) -> io::Result<Option<File>> {
     match fs::metadata(path) {
-        Ok(meta) if !meta.is_file() => {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "not a regular file",
-            ));
-        }
+        Ok(meta) if !meta.is_file() => return Err(not_regular()),
         Ok(_) => {}
         Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
         Err(error) => return Err(error),
     }
-    match File::open(path) {
+    match open_regular(path) {
         Ok(file) => Ok(Some(file)),
         Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(error) => Err(error),
     }
 }
+
+fn not_regular() -> io::Error {
+    io::Error::new(io::ErrorKind::InvalidData, "not a regular file")
+}
+
+/// Open `path` without waiting on it, and keep it only if what was opened is
+/// a regular file.
+fn open_regular(path: &Path) -> io::Result<File> {
+    let mut options = OpenOptions::new();
+    options.read(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        options.custom_flags(O_NONBLOCK);
+    }
+    let file = options.open(path)?;
+    if file.metadata()?.is_file() {
+        Ok(file)
+    } else {
+        Err(not_regular())
+    }
+}
+
+/// `O_NONBLOCK`, which the standard library does not name, as each Unix
+/// defines it. On a regular file it changes nothing; on a pipe it lets the
+/// open return without a writer. A Unix not listed opens without it, and is
+/// left with the check made before the open.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+const O_NONBLOCK: i32 = 0o4000;
+#[cfg(any(
+    target_os = "macos",
+    target_os = "ios",
+    target_os = "freebsd",
+    target_os = "netbsd",
+    target_os = "openbsd",
+    target_os = "dragonfly"
+))]
+const O_NONBLOCK: i32 = 0x0004;
+#[cfg(all(
+    unix,
+    not(any(
+        target_os = "linux",
+        target_os = "android",
+        target_os = "macos",
+        target_os = "ios",
+        target_os = "freebsd",
+        target_os = "netbsd",
+        target_os = "openbsd",
+        target_os = "dragonfly"
+    ))
+))]
+const O_NONBLOCK: i32 = 0;
 
 /// The whole of the regular file at `path`, or `None` if it does not exist;
 /// an error if it is not a regular file or holds more than `limit` bytes.
@@ -705,6 +755,18 @@ mod tests {
                 .is_ok_and(|status| status.success());
             if made {
                 assert!(Disk.read(&pipe).is_err(), "a pipe, which would block");
+                // A pipe swapped in after the path was checked: the open
+                // itself must return, not wait for a writer.
+                let (sent, received) = std::sync::mpsc::channel();
+                let swapped = pipe.clone();
+                std::thread::spawn(move || {
+                    let _ = sent.send(open_regular(&swapped).is_err());
+                });
+                assert_eq!(
+                    received.recv_timeout(Duration::from_secs(5)),
+                    Ok(true),
+                    "opening a pipe returned, and refused it"
+                );
             }
         }
         std::fs::remove_dir_all(&dir).unwrap();
