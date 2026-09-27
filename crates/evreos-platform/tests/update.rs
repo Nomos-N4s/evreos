@@ -119,20 +119,15 @@ fn a_signature_made_under_another_domain_is_refused() {
 }
 
 #[test]
-fn a_forgery_under_a_weak_key_is_refused() {
-    // With the identity point as the key, R the identity and s zero satisfy
-    // Ed25519's equation for every message: plain verification accepts the
-    // forgery, and strict verification, which rejects small-order points,
-    // refuses it.
+fn a_weak_key_is_not_a_key() {
+    // The identity point, and the other small-order points, are valid
+    // encodings no signing key has.
     let mut identity = [0u8; 32];
     identity[0] = 1;
-    let weak = UpdateKey::from_bytes(&identity).unwrap();
-    let mut forged = Fields::default().preimage();
-    forged.extend_from_slice(&identity);
-    forged.extend_from_slice(&[0u8; 32]);
-    assert_eq!(
-        VerifiedManifest::verify(&forged, &weak),
-        Err(Refusal::Signature)
+    assert!(UpdateKey::from_bytes(&identity).is_none());
+    assert!(UpdateKey::from_bytes(&[0u8; 32]).is_none());
+    assert!(
+        UpdateKey::from_bytes(&SigningKey::from_bytes(&SEED).verifying_key().to_bytes()).is_some()
     );
 }
 

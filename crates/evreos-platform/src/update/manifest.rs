@@ -21,9 +21,15 @@ pub struct UpdateKey(VerifyingKey);
 
 impl UpdateKey {
     /// The key from its 32 bytes, or `None` if they are not a valid Ed25519
-    /// public key.
+    /// public key or are a weak one, of small order, which no signing key
+    /// the signing procedure makes can have. Strict verification refuses
+    /// forgeries under a weak key anyway; refusing the key itself reports a
+    /// misconfigured build before any manifest is read.
     pub fn from_bytes(bytes: &[u8; 32]) -> Option<Self> {
-        VerifyingKey::from_bytes(bytes).ok().map(Self)
+        VerifyingKey::from_bytes(bytes)
+            .ok()
+            .filter(|key| !key.is_weak())
+            .map(Self)
     }
 }
 
@@ -184,4 +190,37 @@ fn array<const N: usize>(rest: &mut &[u8], field: &'static str) -> Result<[u8; N
     let mut out = [0; N];
     out.copy_from_slice(take(rest, N, field)?);
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use ed25519_dalek::VerifyingKey;
+
+    use super::{DOMAIN, Refusal, UpdateKey, VerifiedManifest};
+
+    #[test]
+    fn a_forgery_under_a_weak_key_is_refused() {
+        // With the identity point as the key, R the identity and s zero
+        // satisfy Ed25519's equation for every message: plain verification
+        // accepts the forgery, and strict verification, which rejects
+        // small-order points, refuses it. `from_bytes` refuses such a key,
+        // so the key is built here as only this module can.
+        let mut identity = [0u8; 32];
+        identity[0] = 1;
+        let weak = UpdateKey(VerifyingKey::from_bytes(&identity).unwrap());
+        let mut forged = DOMAIN.to_vec();
+        forged.extend_from_slice(&14u16.to_be_bytes());
+        forged.extend_from_slice(b"windows-x86_64");
+        forged.extend_from_slice(&[0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 3]);
+        forged.extend_from_slice(&4096u64.to_be_bytes());
+        forged.extend_from_slice(&[0xab; 32]);
+        forged.extend_from_slice(&250_000u32.to_be_bytes());
+        forged.extend_from_slice(&4_000_000_000u64.to_be_bytes());
+        forged.extend_from_slice(&identity);
+        forged.extend_from_slice(&[0u8; 32]);
+        assert_eq!(
+            VerifiedManifest::verify(&forged, &weak),
+            Err(Refusal::Signature)
+        );
+    }
 }
