@@ -379,10 +379,14 @@ report("a byte-order mark is not a way past the check",
 problems = tree(passing_tree({
     "crates/x/target/debug/build/dep.rs": 'let g = "MachineGuid";\n',
     "crates/x/TARGET/vendor/dep.rs": 'let g = "MachineGuid";\n',
-    ".cache/dep.rs": 'let g = "MachineGuid";\n',
+    ".git/dep.rs": 'let g = "MachineGuid";\n',
 }))[0]
-report("Cargo's target/ beside a manifest, in any case, and dot-directories are "
-       "not read", problems == [])
+report("Cargo's target/ beside a manifest, in any case, and .git/ are not read",
+       problems == [])
+
+problems = tree(passing_tree({".probe/src/lib.rs": 'let g = "MachineGuid";\n'}))[0]
+report("any other dot-directory is read, since a workspace member may live there",
+       mentions(problems, ".probe/src/lib.rs:1", "'MachineGuid'"))
 
 problems = tree(passing_tree({
     "crates/x/src/target/mod.rs": 'let g = "MachineGuid";\n',
