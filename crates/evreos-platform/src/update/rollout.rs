@@ -44,33 +44,31 @@ impl RolloutDraw {
     /// kept and both return it. Replacing a file that is not a value makes
     /// no such promise: the last process to replace it wins.
     pub fn load_or_draw(path: &Path) -> io::Result<Self> {
-        let unreadable = match fs::read(path) {
-            Ok(bytes) => match Self::parse(&bytes) {
-                Some(draw) => return Ok(draw),
-                None => true,
-            },
-            Err(error) if error.kind() == io::ErrorKind::NotFound => false,
+        match fs::read(path) {
+            Ok(bytes) => {
+                if let Some(draw) = Self::parse(&bytes) {
+                    return Ok(draw);
+                }
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error),
-        };
+        }
         let draw = Self::draw()?;
         let partial = Self::partial_path(path);
         let written = Self::write_synced(&partial, draw);
-        let kept = written.and_then(|()| Self::keep(path, &partial, draw, unreadable));
+        let kept = written.and_then(|()| Self::keep(path, &partial, draw));
         let _ = fs::remove_file(&partial);
         kept
     }
 
     /// Keeps `draw`, written at `partial`, at `path`, and returns the value
     /// kept there.
-    fn keep(path: &Path, partial: &Path, draw: Self, unreadable: bool) -> io::Result<Self> {
-        if unreadable {
-            // A file that is not a value is replaced whole.
-            fs::rename(partial, path)?;
-            return Ok(draw);
-        }
+    fn keep(path: &Path, partial: &Path, draw: Self) -> io::Result<Self> {
         match fs::hard_link(partial, path) {
             Ok(()) => Ok(draw),
-            // Another process kept its draw first: that is the value.
+            // A file is there already. If it is a value, another process
+            // kept its draw first, and that is the value; if it is not, it
+            // is replaced whole.
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
                 match fs::read(path).ok().and_then(|bytes| Self::parse(&bytes)) {
                     Some(kept) => Ok(kept),
