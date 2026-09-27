@@ -159,8 +159,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install the pinned toolchain
-        # Named for the reason the build job names it: a runner update must
-        # not silently change what the platform crate builds on.
+        # Installed by name, as the other jobs install theirs, rather than
+        # taken from the runner image. The name is the stable channel, which
+        # moves with each Rust release; it is not pinned to a version.
         run: |
           rustup toolchain install stable --profile minimal --component clippy
           rustup default stable
