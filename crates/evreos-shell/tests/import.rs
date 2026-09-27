@@ -756,6 +756,35 @@ fn discovery_finds_each_browsers_profiles_by_the_names_they_carry() {
 }
 
 #[test]
+fn discovery_never_follows_a_firefox_profile_path_to_a_share() {
+    // A path opening on two separators names a network share on Windows; on
+    // Linux `//dir` is `/dir`, so a real local directory stands in for the
+    // share, and a discovery that followed the path would find it.
+    let app = temp_dir("share");
+    let local = app.join("local-profile");
+    fs::create_dir_all(&local).unwrap();
+    let shared = format!("/{}", local.display());
+    fs::write(
+        app.join("profiles.ini"),
+        format!(
+            "[Profile0]\nName=share\nIsRelative=0\nPath={shared}\n\n\
+             [Profile1]\nName=local\nIsRelative=0\nPath={}\n",
+            local.display()
+        ),
+    )
+    .unwrap();
+    let found: Vec<String> = discover(&ProfileLocations {
+        firefox: Some(app.clone()),
+        ..ProfileLocations::default()
+    })
+    .into_iter()
+    .map(|profile| profile.name)
+    .collect();
+    assert_eq!(found, ["local"]);
+    fs::remove_dir_all(app).unwrap();
+}
+
+#[test]
 fn a_profile_with_no_stores_imports_nothing_and_succeeds() {
     let (root, stores, job) = import(
         SourceProfile::new(

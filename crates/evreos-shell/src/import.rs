@@ -35,7 +35,11 @@
 //! `#[path]` and no `cfg_attr`; invokes no macro but a short list of the
 //! standard library's; and is written in ASCII outside its literals and
 //! comments, so no character a reader cannot see hides a path.
-//! `tests/import.rs` asserts each of these token by token.
+//! `tests/import.rs` asserts each of these token by token. What it asserts is
+//! what the code names, not where a path leads: a profile the member points
+//! the import at on a network share is read from that share, as the member
+//! chose. Discovery, which runs before the member chooses, never follows a
+//! Firefox profile path to one.
 //!
 //! # How a running browser's store is read
 //!

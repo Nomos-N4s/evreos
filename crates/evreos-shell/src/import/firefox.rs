@@ -258,6 +258,16 @@ fn walk(
     Ok(out)
 }
 
+/// Whether a `Path=` from `profiles.ini` opens on two separators, which on
+/// Windows names a network share (`\\host\share`) or a device path, and so
+/// would join onto nothing under `app_dir` either. Looking at such a path
+/// opens a connection to the host it names, which discovery, run before the
+/// member has chosen anything, must never do; so it never follows one.
+fn names_a_share(raw: &str) -> bool {
+    let rest = raw.trim_start_matches(['/', '\\']);
+    raw.len() - rest.len() >= 2
+}
+
 /// The profiles `profiles.ini` lists under `app_dir`, by the names it gives.
 pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
     let Some(ini) = read_bounded(&app_dir.join("profiles.ini"), MAX_PROFILE_LIST_BYTES)
@@ -275,7 +285,7 @@ pub(super) fn discover(app_dir: &Path) -> Vec<SourceProfile> {
     let mut flush =
         |section: &str, name: &mut Option<String>, path: &mut Option<String>, relative: bool| {
             if section.starts_with("Profile") {
-                if let Some(raw) = path.take() {
+                if let Some(raw) = path.take().filter(|raw| !names_a_share(raw)) {
                     let dir: PathBuf = if relative {
                         app_dir.join(&raw)
                     } else {
