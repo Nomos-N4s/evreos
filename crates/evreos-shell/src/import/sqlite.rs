@@ -805,7 +805,13 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
             {
                 let keyed = split_top_level(inner);
                 if keyed.len() == 1 {
-                    if let Some(name) = tokenize(keyed[0]).first().and_then(Token::name) {
+                    // Parentheses around the name, `PRIMARY KEY((id))`,
+                    // leave it the column's.
+                    let mut first = tokenize(keyed[0]).into_iter().next();
+                    while let Some(Token::Group(inner)) = &first {
+                        first = tokenize(inner).into_iter().next();
+                    }
+                    if let Some(name) = first.as_ref().and_then(Token::name) {
                         table_key = Some(name);
                     }
                 }
@@ -829,7 +835,7 @@ fn parse_create_table(sql: &str) -> Result<(Vec<String>, Option<usize>), SqliteE
                 {
                     word
                 }
-                Token::Quoted(word) => word,
+                Token::Quoted(word) | Token::Text(word) => word,
                 _ => break,
             };
             declared.push(word.to_ascii_uppercase());
@@ -1320,6 +1326,16 @@ mod tests {
             (
                 "CREATE TABLE \"x(y\"(id INTEGER PRIMARY KEY, u TEXT)",
                 &["id", "u"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id 'INTEGER' PRIMARY KEY, url TEXT)",
+                &["id", "url"],
+                Some(0),
+            ),
+            (
+                "CREATE TABLE t(id INTEGER, url TEXT, PRIMARY KEY((id)))",
+                &["id", "url"],
                 Some(0),
             ),
             (
