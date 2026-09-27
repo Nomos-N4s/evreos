@@ -1107,15 +1107,21 @@ fn denied_crates() -> Vec<String> {
 fn resolve_denied_crates() -> Vec<String> {
     // Offline, cargo can resolve only the packages it holds, which are the
     // ones a build for this host fetched, so the graph is filtered to the
-    // host. A dependency the manifest declares for another platform alone is
-    // then missing from it, and fails the test rather than go unchecked.
+    // host. A dependency declared for some platforms only may then be missing
+    // from it, so any such dependency fails the test rather than go
+    // unchecked. One declared for every platform is in it, but for an
+    // optional one, since the graph is taken with default features.
     let resolved = cargo_metadata(&["--filter-platform", &host_triple()]);
     let declared = cargo_metadata(&["--no-deps"]);
-    let missing = unresolved(&declared, &resolved);
+    let manifest = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("Cargo.toml")
+        .canonicalize()
+        .unwrap();
+    let specific = platform_specific(&declared, &manifest);
     assert!(
-        missing.is_empty(),
-        "declared for another platform, so the names its code uses cannot be \
-         resolved here: {missing:?}"
+        specific.is_empty(),
+        "declared for some platforms only, so the names its code uses may not \
+         be resolved here; extend the check before adding one: {specific:?}"
     );
     let catalogue = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../evreos-i18n/Cargo.toml")
@@ -1163,59 +1169,59 @@ fn host_triple() -> String {
         .to_string()
 }
 
-/// The packages the root package declares as normal dependencies, in
-/// `declared`, a `--no-deps` report, that the root's node in `resolved`
-/// does not hold.
-fn unresolved(declared: &Json, resolved: &Json) -> Vec<String> {
+/// The normal dependencies the package whose manifest is `manifest`
+/// declares, in `declared`, a `--no-deps` report, only for some platforms.
+/// One declared for every platform is in the host's graph wherever the test
+/// runs, but for an optional one, which the default features leave out;
+/// one declared for a platform may be missing from it, and its name with
+/// it, so none is taken on trust.
+fn platform_specific(declared: &Json, manifest: &Path) -> Vec<String> {
     let str_at =
         |value: &Json, key: &str| value.get(key).and_then(Json::as_str).map(str::to_string);
     let array = |value: Option<&Json>| value.and_then(Json::as_array).unwrap_or_default().to_vec();
-    let resolve = resolved.get("resolve").expect("a resolved graph");
-    let root = str_at(resolve, "root").expect("a root package");
-    let name_of = |id: &str| {
-        array(resolved.get("packages"))
-            .iter()
-            .find(|package| str_at(package, "id").as_deref() == Some(id))
-            .and_then(|package| str_at(package, "name"))
-    };
-    let held: Vec<String> = array(resolve.get("nodes"))
-        .iter()
-        .find(|node| str_at(node, "id").as_deref() == Some(root.as_str()))
-        .map(|node| array(node.get("deps")))
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|dep| str_at(dep, "pkg").and_then(|pkg| name_of(&pkg)))
-        .collect();
     let package = array(declared.get("packages"))
         .into_iter()
-        .find(|package| str_at(package, "id").as_deref() == Some(root.as_str()))
-        .expect("the root package declared");
+        .find(|package| {
+            str_at(package, "manifest_path")
+                .and_then(|path| Path::new(&path).canonicalize().ok())
+                .as_deref()
+                == Some(manifest)
+        })
+        .expect("the package declared");
     array(package.get("dependencies"))
         .iter()
         .filter(|dep| dep.get("kind") == Some(&Json::Null))
-        .filter_map(|dep| str_at(dep, "name"))
-        .filter(|name| !held.contains(name))
+        .filter(|dep| dep.get("target") != Some(&Json::Null))
+        .filter_map(|dep| str_at(dep, "rename").or_else(|| str_at(dep, "name")))
         .collect()
 }
 
 #[test]
-fn a_dependency_for_another_platform_is_not_passed_over() {
-    let declared = json::parse(
-        r#"{"packages": [{"id": "root", "dependencies": [
-            {"name": "held", "kind": null, "target": null},
-            {"name": "elsewhere", "kind": null, "target": "cfg(windows)"},
-            {"name": "tested", "kind": "dev", "target": null}
-        ]}]}"#,
-    )
-    .unwrap();
-    let resolved = json::parse(
-        r#"{"packages": [{"id": "h", "name": "held"}],
-        "resolve": {"root": "root", "nodes": [
-            {"id": "root", "deps": [{"name": "held", "pkg": "h", "dep_kinds": []}]}
+fn a_dependency_for_some_platforms_is_not_passed_over() {
+    let dir = temp_dir("platforms");
+    let manifest = dir.join("Cargo.toml");
+    fs::write(&manifest, "").unwrap();
+    let declared = json::parse(&format!(
+        r#"{{"packages": [
+            {{"manifest_path": "/elsewhere/Cargo.toml", "dependencies": [
+                {{"name": "other", "kind": null, "target": "cfg(windows)"}}
+            ]}},
+            {{"manifest_path": {manifest:?}, "dependencies": [
+                {{"name": "everywhere", "kind": null, "target": null}},
+                {{"name": "zz", "kind": null, "target": "cfg(unix)"}},
+                {{"name": "zz", "rename": "bar", "kind": null, "target": "cfg(windows)"}},
+                {{"name": "tested", "kind": "dev", "target": "cfg(windows)"}},
+                {{"name": "built", "kind": "build", "target": null}}
+            ]}}
         ]}}"#,
-    )
+        manifest = manifest.display().to_string(),
+    ))
     .unwrap();
-    assert_eq!(unresolved(&declared, &resolved), ["elsewhere"]);
+    assert_eq!(
+        platform_specific(&declared, &manifest.canonicalize().unwrap()),
+        ["zz", "bar"]
+    );
+    fs::remove_dir_all(dir).unwrap();
 }
 
 /// The names the root package's code gives its library's dependencies, as
