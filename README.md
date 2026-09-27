@@ -297,7 +297,7 @@ Under **Principle I** of the constitution, commit authorship and hygiene are str
 2. **Conventional Commits**: Every commit subject must follow the Conventional Commits specification (e.g., `feat(engine): ...`, `fix(net): ...`, `docs(i18n): ...`).
 3. **Issue Linking**: Non-merge commits must link to their associated issue: the Linear issue that tracks the work (e.g., `Refs CAR-116`), or a GitHub issue (e.g., `Refs #48` or `Closes #12`).
 4. **Prohibition of AI Attribution**: No git trailers (such as `Co-authored-by:`) or footer strings attributing work to AI generators may appear anywhere in commit messages, pull request titles, or pull request bodies.
-5. **Signed Commits**: Commits must be cryptographically signed against the authorized public key once enabled in `.github/allowed-signers`.
+5. **Signed Commits**: Commits must be cryptographically signed by one of the founder's public keys listed in `.github/allowed-signers`, checked from the base branch's copy.
 
 Verify a commit range locally before pushing:
 
