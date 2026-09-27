@@ -362,8 +362,9 @@ fn is_plain_text(text: &str) -> bool {
 /// Whether `path` is an absolute Windows path that can sit between quotes on
 /// a command line: on a drive (`C:\`), or on a share (`\\server\`) whose
 /// server name starts with a letter or digit, so never a `\\?\` or `\\.\`
-/// device path; and holding no `%`, which Windows would read as the start of
-/// a placeholder such as `%1`.
+/// device path; holding no `%`, which Windows would read as the start of a
+/// placeholder such as `%1`; and not ending in `\`, which before the closing
+/// quote would be read as escaping it.
 fn is_plain_absolute(path: &str) -> bool {
     let rooted = match path.as_bytes() {
         [drive, b':', b'\\', ..] => drive.is_ascii_alphabetic(),
@@ -371,6 +372,7 @@ fn is_plain_absolute(path: &str) -> bool {
         _ => false,
     };
     rooted
+        && !path.ends_with('\\')
         && !path
             .chars()
             .any(|ch| ch == '"' || ch == '%' || ch.is_control())
