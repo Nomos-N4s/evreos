@@ -217,7 +217,7 @@ library's for the same filter — visible, visited, `http`, `https` or `file` �
 on every profile the runs produced: 6,613, 5,992, 539, 484 and 8,829 rows. Its
 bookmark counts equal what the DevTools driver created (3,245 and 495) and
 Firefox's four default bookmarks. The reader as this change ships it, run over
-the same stopped profiles after review round 7, reads the same counts.
+the same stopped profiles after review round 8, reads the same counts.
 
 ## What was adopted
 
@@ -259,18 +259,18 @@ the same stopped profiles after review round 7, reads the same counts.
 - **The read runs on the worker pool; the write runs where the stores live.**
   With the browsers stopped, and the reader as this change ships it —
   three runs each through `examples/import_timing.rs`, re-measured after
-  review round 7 on the pull request —
+  review round 8 on the pull request —
   reading took 2–22 ms for the live profiles here, once each file was in
   the file cache (in the round-4 runs, the first read of each Edge profile,
-  from a cold cache, took 278–357 ms), and 38–46 ms for a synthetic profile of 20,000
+  from a cold cache, took 278–357 ms), and 37–39 ms for a synthetic profile of 20,000
   bookmarks in 400 folders; against a running browser a read retries, and
   the slowest live trial in the tables above took 550 ms. Writing, which
-  happens on the thread that owns the stores, took 1–13 ms for the live
-  profiles and 26–39 ms for the 20,000 bookmarks. Inside the import's batch
+  happens on the thread that owns the stores, took 1–14 ms for the live
+  profiles and 25–36 ms for the 20,000 bookmarks. Inside the import's batch
   a new row finds its parent and position from an index built when the
   batch starts, so the write is linear in the store and the rows it adds
   together, the batch copying, indexing and validating the store once each:
-  50,000 bookmarks in one folder take 74–109 ms. Before review round 2 on
+  50,000 bookmarks in one folder take 74–108 ms. Before review round 2 on
   the pull request each row scanned the whole store, which made the same
   20,000 bookmarks take 264 ms and 50,000 in one folder take 7.0 s.
 
@@ -279,7 +279,7 @@ the same stopped profiles after review round 7, reads the same counts.
 Five release builds of `evreos-shell` under the workspace's release profile
 (`opt-level = "z"`, `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`,
 `strip = "symbols"`), each measured as the binary's `st_size`. B, C and E
-were re-measured after the fixes review rounds 1 to 7 on the pull
+were re-measured after the fixes review rounds 1 to 8 on the pull
 request required, which changed the reader, the verified copy, the address
 filter and the bookmark store that C and E reach. `evreos-shell` builds as
 one codegen unit under fat LTO, so a change anywhere in the crate can move
