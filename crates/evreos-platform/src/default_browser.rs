@@ -247,14 +247,19 @@ impl Registration {
 
 /// Registers `app` so that the system lists it as a browser.
 ///
-/// If a write fails, the write's error is returned. A first registration,
-/// one whose entry under `StartMenuInternet` did not exist, is then undone:
-/// its value under [`REGISTERED_APPLICATIONS`] is removed, and so is every
-/// key it owns that it created, so nothing is listed. A key it owns that
-/// existed before, a ProgID of the same name say, keeps its place, with the
-/// values written before the failure in it. A registration that was already
-/// there, which the member may have chosen as their default, is left in
-/// place: the values written before the failure replace their earlier
+/// Its value under [`REGISTERED_APPLICATIONS`] is written last, and then
+/// every other value there pointing at its capabilities, one left under an
+/// earlier name with the same key say, is removed, so that only the value
+/// matching `ApplicationName` remains.
+///
+/// If a write or one of those removals fails, its error is returned. A first
+/// registration, one whose entry under `StartMenuInternet` did not exist, is
+/// then undone: every value pointing at its capabilities is removed, and so
+/// is every key it owns that it created, so nothing is listed. A key it owns
+/// that existed before, a ProgID of the same name say, keeps its place, with
+/// the values written before the failure in it. A registration that was
+/// already there, which the member may have chosen as their default, is left
+/// in place: the values written before the failure replace their earlier
 /// copies, and the rest keep theirs.
 pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
     let registration = Registration::of(app)?;
@@ -264,23 +269,24 @@ pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Resu
     }
     // The entry under StartMenuInternet is the first owned key.
     let first = !existed[0];
-    for value in &registration.values {
-        if let Err(error) = registry.set_string(&value.key, &value.name, &value.data) {
-            if first {
-                let _ = remove_pointers(registry, &registration, None);
-                for (key, existed) in registration.owned_keys.iter().zip(&existed) {
-                    if !existed {
-                        let _ = registry.remove_key(key);
-                    }
-                }
+    let written = registration
+        .values
+        .iter()
+        .try_for_each(|value| registry.set_string(&value.key, &value.name, &value.data))
+        // A registration under an earlier name with the same key points at
+        // the same capabilities from a value of its own name, which no
+        // longer matches ApplicationName; only this registration's value
+        // may remain.
+        .and_then(|()| remove_pointers(registry, &registration, Some(&registration.name)));
+    if written.is_err() && first {
+        let _ = remove_pointers(registry, &registration, None);
+        for (key, existed) in registration.owned_keys.iter().zip(&existed) {
+            if !existed {
+                let _ = registry.remove_key(key);
             }
-            return Err(error);
         }
     }
-    // A registration under an earlier name with the same key points at the
-    // same capabilities from a value of its own name, which no longer
-    // matches ApplicationName; only this registration's value may remain.
-    remove_pointers(registry, &registration, Some(&registration.name))
+    written
 }
 
 /// Removes what [`register`] wrote for `app`, as an uninstall must.
@@ -318,7 +324,7 @@ fn remove_pointers(
 ) -> io::Result<()> {
     let mut result = Ok(());
     for (name, data) in registry.string_values(REGISTERED_APPLICATIONS)? {
-        let kept = keep.is_some_and(|keep| keep.eq_ignore_ascii_case(&name));
+        let kept = keep.is_some_and(|keep| same_value_name(keep, &name));
         if !kept && data.eq_ignore_ascii_case(&registration.capabilities) {
             let removed = registry.remove_value(REGISTERED_APPLICATIONS, &name);
             if result.is_ok() {
@@ -327,6 +333,23 @@ fn remove_pointers(
         }
     }
     result
+}
+
+/// Whether two value names name the same value. The registry compares them
+/// without regard to case, across Unicode and a character at a time, and
+/// keeps a value's first spelling when it is written again under another,
+/// so the name read back may differ in case from the one written.
+fn same_value_name(a: &str, b: &str) -> bool {
+    fn upper(ch: char) -> char {
+        let mut upper = ch.to_uppercase();
+        match (upper.next(), upper.next()) {
+            (Some(single), None) => single,
+            // A character whose capital is several, as ß, is kept as it
+            // is, as the registry's one-to-one table keeps it.
+            _ => ch,
+        }
+    }
+    a.chars().map(upper).eq(b.chars().map(upper))
 }
 
 /// Whether `text` is shown as written: not empty, holding no control

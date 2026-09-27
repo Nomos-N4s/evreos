@@ -18,10 +18,14 @@ use evreos_platform::default_browser::{
 };
 
 /// A registry held in memory: every key that exists, and every value, by
-/// key and name. Key paths compare case-insensitively, as the system's do.
+/// key and name. Key paths and value names compare case-insensitively
+/// across Unicode, as the system's do, and a value written again under a
+/// name spelled in another case keeps its first spelling, as the system's
+/// does.
 #[derive(Default)]
 struct Memory {
-    keys: BTreeMap<String, BTreeMap<String, String>>,
+    /// Values by folded name, each with its name as first spelled.
+    keys: BTreeMap<String, BTreeMap<String, (String, String)>>,
     /// Fails the write whose index this is, counting from zero.
     fail_at: Option<usize>,
     writes: usize,
@@ -32,7 +36,7 @@ struct Memory {
 }
 
 fn fold(key: &str) -> String {
-    key.to_ascii_lowercase()
+    key.to_lowercase()
 }
 
 impl Memory {
@@ -40,7 +44,7 @@ impl Memory {
         self.keys
             .get(&fold(key))?
             .get(&fold(name))
-            .map(String::as_str)
+            .map(|(_, value)| value.as_str())
     }
 
     fn has_key(&self, key: &str) -> bool {
@@ -70,7 +74,9 @@ impl Registry for Memory {
         self.keys
             .get_mut(&fold(key))
             .expect("created above")
-            .insert(fold(name), value.to_string());
+            .entry(fold(name))
+            .and_modify(|(_, data)| *data = value.to_string())
+            .or_insert_with(|| (name.to_string(), value.to_string()));
         Ok(())
     }
 
@@ -81,7 +87,7 @@ impl Registry for Memory {
             .map(|values| {
                 values
                     .iter()
-                    .map(|(name, value)| (name.clone(), value.clone()))
+                    .map(|(_, (name, value))| (name.clone(), value.clone()))
                     .collect()
             })
             .unwrap_or_default())
@@ -751,4 +757,31 @@ fn another_applications_value_of_the_same_name_is_not_removed() {
             );
         }
     }
+}
+
+#[test]
+fn a_rename_in_another_case_stays_listed() {
+    // The registry compares value names without regard to case across
+    // Unicode, and keeps the first spelling when a value is written again;
+    // the test registry does too.
+    let first = Application {
+        name: "Élan Browser",
+        ..APP
+    };
+    let renamed = Application {
+        name: "élan Browser",
+        ..APP
+    };
+    let capabilities = Registration::of(&first).unwrap().capabilities;
+    let mut registry = with_neighbours();
+    register(&mut registry, &first).unwrap();
+    register(&mut registry, &renamed).unwrap();
+
+    let pointers: Vec<_> = registry
+        .string_values(REGISTERED_APPLICATIONS)
+        .unwrap()
+        .into_iter()
+        .filter(|(_, data)| *data == capabilities)
+        .collect();
+    assert_eq!(pointers, [("Élan Browser".to_string(), capabilities)]);
 }
