@@ -1291,11 +1291,18 @@ fn a_crate_the_catalogue_links_is_found() {
     let dir = temp_dir("catalogue-links");
     let catalogue = dir.join("Cargo.toml");
     fs::write(&catalogue, "").unwrap();
+    // Another package, listed first, links a crate, so the catalogue must be
+    // picked out by its manifest for the result to be its own.
     let metadata = |deps: &str| {
         json::parse(&format!(
-            r#"{{"packages": [{{"id": "cat", "manifest_path": {path:?}}}],
+            r#"{{"packages": [
+                {{"id": "other", "manifest_path": "/elsewhere/Cargo.toml"}},
+                {{"id": "cat", "manifest_path": {path:?}}}
+            ],
             "resolve": {{"root": "root", "nodes": [
                 {{"id": "root", "deps": []}},
+                {{"id": "other", "deps": [{{"name": "winit", "pkg": "w",
+                    "dep_kinds": [{{"kind": null, "target": null}}]}}]}},
                 {{"id": "cat", "deps": [{deps}]}}
             ]}}}}"#,
             path = catalogue.display().to_string(),
