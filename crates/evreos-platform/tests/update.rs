@@ -374,6 +374,25 @@ mod rollout {
         assert!(!dir.exists());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn a_file_found_but_unreadable_when_keeping_a_draw_is_left_as_it_is() {
+        // A link to a file that is not there: the first read finds nothing,
+        // so a value is drawn, but linking it into place finds the name
+        // taken, and reading what is there fails. That failure is returned,
+        // and the link is not replaced.
+        let path = scratch("dangling");
+        std::os::unix::fs::symlink(path.with_file_name("nowhere"), &path).unwrap();
+        let error = RolloutDraw::load_or_draw(&path).unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        assert!(
+            fs::symlink_metadata(&path)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
+    }
+
     #[test]
     fn debug_output_leaves_the_value_out() {
         let path = scratch("debug");
