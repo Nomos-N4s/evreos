@@ -75,7 +75,8 @@ python3 synth_naive.py wal /tmp/w2 60
 
 The read, write and batch times, each run three times with the browsers
 stopped, over the five profiles the runs above left and the synthetic one.
-The row and bookmark counts they print are the record's cross-check:
+The row and bookmark counts they print are the reader's side of the
+record's cross-check:
 
 ```
 cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/ph/Default
@@ -86,4 +87,14 @@ cargo run --release -p evreos-shell --example import_timing -- firefox /tmp/f
 python3 big_bookmarks.py /tmp/big
 cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/big/Default
 cargo run --release -p evreos-shell --example import_timing -- batch
+```
+
+The library's side, with the browsers stopped, counts the same rows under
+the reader's filter — visible, visited, and `http`, `https` or `file`:
+
+```
+q_chromium="select count(*) from urls where hidden=0 and last_visit_time>11644473600000000 and (url like 'http://%' or url like 'https://%' or url like 'file:%')"
+q_firefox="select count(*) from moz_places where hidden=0 and last_visit_date>0 and (url like 'http://%' or url like 'https://%' or url like 'file:%')"
+for p in /tmp/ph /tmp/eh /tmp/p /tmp/e; do python3 probe_lib.py $p/Default/History "$q_chromium"; done
+python3 probe_lib.py /tmp/f/places.sqlite "$q_firefox"
 ```
