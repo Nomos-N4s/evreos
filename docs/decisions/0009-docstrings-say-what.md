@@ -12,8 +12,8 @@ How much a docstring or code comment may say. The checks under
 restate the specification, argue each rule afresh, and state what a passing
 check guarantees. New code copies that density. Every such sentence is a claim
 a reviewer must check against another document, and it goes stale when either
-side changes. Changing the practice changes how review rounds under the
-Development Workflow are conducted, so an implementer may not decide it.
+side changes. The rule belongs in the constitution, which only a recorded
+founder decision can amend, so an implementer may not decide it.
 
 ## Decision
 
