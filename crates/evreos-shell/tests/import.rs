@@ -911,13 +911,15 @@ fn tokens(source: &str) -> Vec<Tok> {
             let word: String = chars[start..i].iter().collect();
             match (word.as_str(), at(i)) {
                 ("r", Some('#')) if at(i + 1).is_some_and(|c| c.is_alphabetic() || c == '_') => {
-                    // A raw identifier, `r#crate`, is the identifier itself.
+                    // A raw identifier, `r#match`, keeps its `r#`: it names
+                    // the identifier itself, but is never the keyword.
                     let start = i + 1;
                     i = start;
                     while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
                         i += 1;
                     }
-                    out.push(Tok::Ident(chars[start..i].iter().collect()));
+                    let name: String = chars[start..i].iter().collect();
+                    out.push(Tok::Ident(format!("r#{name}")));
                 }
                 ("r" | "br" | "cr", Some('"' | '#')) => {
                     i = raw(i);
@@ -1038,10 +1040,13 @@ fn the_reach_check_denies_every_dependency_but_the_catalogue() {
 fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
     let denied = denied_crates();
     let toks = tokens(source);
+    // An identifier as it names things, `r#` and all removed; and whether it
+    // was written raw, which no keyword is.
     let ident = |i: usize| match toks.get(i) {
-        Some(Tok::Ident(word)) => Some(word.as_str()),
+        Some(Tok::Ident(word)) => Some(word.strip_prefix("r#").unwrap_or(word)),
         _ => None,
     };
+    let raw = |i: usize| matches!(toks.get(i), Some(Tok::Ident(word)) if word.starts_with("r#"));
     let punct = |i: usize, ch: char| toks.get(i) == Some(&Tok::Punct(ch));
     let path_sep = |i: usize| punct(i, ':') && punct(i + 1, ':');
     // Whether each token sits inside a path's `{…}` group, at any depth. A
@@ -1192,8 +1197,13 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
                 Some(_) => {}
             },
             // A macro named without a path, from anywhere in the crate.
-            _ if punct(i + 1, '!') && !punct(i + 2, '=') && !KEYWORDS.contains(&word) => {
-                if !MACROS.contains(&word) {
+            // A raw identifier is never a keyword, so `r#match!` is a macro,
+            // and none of the standard library's is invoked that way.
+            _ if punct(i + 1, '!')
+                && !punct(i + 2, '=')
+                && (raw(i) || !KEYWORDS.contains(&word)) =>
+            {
+                if raw(i) || !MACROS.contains(&word) {
                     found.push(format!("invokes `{word}!`"));
                 }
             }
@@ -1267,6 +1277,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { evreos_net::connect() }", false),
         ("fn f() { some_macro!() }", false),
         ("fn f() { if !some_macro![] {} }", false),
+        ("fn f() { r#match!() }", false),
+        ("fn f() -> String { r#format!(\"x\") }", false),
         ("include!(\"../x.rs\");", false),
         ("#[path = \"../x.rs\"] mod x;", true),
         (
@@ -1321,6 +1333,49 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             Vec::<String>::new(),
             "{source:?}"
         );
+    }
+}
+
+#[test]
+fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
+    // The import's macros are allowed by name. A `macro_rules!` of the same
+    // name anywhere in this crate, or macros brought in by `#[macro_use]`,
+    // could stand in for one of them inside the import, so neither exists.
+    fn sources(dir: &Path, out: &mut Vec<PathBuf>) {
+        for entry in fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                sources(&path, out);
+            } else if path.extension().is_some_and(|ext| ext == "rs") {
+                out.push(path);
+            }
+        }
+    }
+    let mut files = Vec::new();
+    sources(
+        &Path::new(env!("CARGO_MANIFEST_DIR")).join("src"),
+        &mut files,
+    );
+    assert!(!files.is_empty());
+    for file in files {
+        let toks = tokens(&fs::read_to_string(&file).unwrap());
+        for (i, tok) in toks.iter().enumerate() {
+            let word = match tok {
+                Tok::Ident(word) => word.strip_prefix("r#").unwrap_or(word),
+                _ => continue,
+            };
+            assert_ne!(word, "macro_use", "{}", file.display());
+            if word == "macro_rules" && toks.get(i + 1) == Some(&Tok::Punct('!')) {
+                if let Some(Tok::Ident(name)) = toks.get(i + 2) {
+                    let name = name.strip_prefix("r#").unwrap_or(name);
+                    assert!(
+                        !MACROS.contains(&name),
+                        "{} defines `{name}!`, which the import may invoke",
+                        file.display()
+                    );
+                }
+            }
+        }
     }
 }
 
