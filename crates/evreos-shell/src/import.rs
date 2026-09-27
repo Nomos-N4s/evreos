@@ -48,7 +48,10 @@
 //!
 //! The rules state what the code is held to. `tests/import.rs` checks each
 //! of them token by token, in the forms its cases name; a form it does not
-//! refuse is a gap in the check, not a licence in the rule. What it asserts is
+//! refuse is a gap in the check, not a licence in the rule. It reads the
+//! code's tokens, not their meaning: it catches a change that reaches further
+//! by accident or by habit, but it is not a proof against code written to slip
+//! past it, which is what review is for. What it asserts is
 //! what the code names, not where a path leads: a profile the member points
 //! the import at on a network share is read from that share, as the member
 //! chose. Discovery, which runs before the member chooses, follows a Firefox
