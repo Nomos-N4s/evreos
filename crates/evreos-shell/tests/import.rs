@@ -910,8 +910,28 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
         // that module is set aside: any other test-only item is checked.
         let shipped = match code.find("#[cfg(test)]modtests{") {
             Some(at) => {
-                assert!(
-                    code.ends_with('}') && !code[at..].contains("#[cfg(test)]modtests{}"),
+                // With literals and comments gone, every brace is code, so
+                // the module's own closing brace is where the count returns
+                // to zero; it must be the last character of the file.
+                let open = at + "#[cfg(test)]modtests".len();
+                let mut depth = 0usize;
+                let mut close = None;
+                for (offset, ch) in code[open..].char_indices() {
+                    match ch {
+                        '{' => depth += 1,
+                        '}' => {
+                            depth -= 1;
+                            if depth == 0 {
+                                close = Some(open + offset);
+                                break;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                assert_eq!(
+                    close,
+                    Some(code.len() - 1),
                     "{}: the test module is not the file's last item",
                     file.display()
                 );
