@@ -2,6 +2,8 @@
 
 - **Task**: T060 (`specs/001-evreos-v1/tasks.md`) / CAR-118
 - **Serves**: FR-014, FR-036a, and research §10.1 (plan decision G9)
+- **Read by**: `crates/evreos-platform/src/update/manifest.rs`, which implements
+  the bytes and the signature check below.
 
 FR-014 requires the browser to update itself, verifying the update's
 authenticity before applying it, and to release to a proportion of users at a

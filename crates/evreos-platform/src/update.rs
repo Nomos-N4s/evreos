@@ -1,5 +1,10 @@
 //! FR-014: the browser updating itself.
+//!
+//! The update service publishes a signed manifest, whose bytes
+//! `docs/formats/update-manifest.md` fixes. [`manifest`] reads it and
+//! verifies it against the key pinned in the shipped binary.
 
+pub mod manifest;
 pub mod wake;
 
 use self::wake::Wake;

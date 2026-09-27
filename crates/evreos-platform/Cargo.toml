@@ -12,6 +12,14 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+# FR-014's signed update manifest is verified with Ed25519, strictly, as
+# research §6.1 settles and plan.md adopts ed25519-dalek for. Without its
+# default features it verifies and does no signing, keeps no precomputed
+# tables, and brings sha2 and digest at the versions the workspace already
+# resolves. Its byte cost is stated in the pull request that adds it.
+[dependencies]
+ed25519-dalek = { version = "2.2.0", default-features = false }
+
 # Tier 1's bindings, both Microsoft's safe ones: windows-registry for
 # default-browser registration, and windows for the launcher that opens the
 # default-apps page. The shell already links windows 0.62 on Windows,
@@ -22,6 +30,10 @@ publish.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows-registry = "0.6.1"
 windows = { version = "0.62.2", default-features = false, features = ["System", "Foundation"] }
+
+[dev-dependencies]
+# Signs the manifests the tests verify; tests alone sign.
+ed25519-dalek = { version = "2.2.0", default-features = false }
 
 [target.'cfg(windows)'.dev-dependencies]
 windows-registry = "0.6.1"
