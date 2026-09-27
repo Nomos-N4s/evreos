@@ -91,13 +91,12 @@
   pull request.
 - Every pull request MUST be linked to an issue: the Linear issue that tracks
   the work (`Refs CAR-N` or `Closes CAR-N` in the PR body), or a GitHub issue
-  (`Closes #N`). Open one first if none exists; do not open a GitHub issue for
-  work Linear already tracks (`decisions/0008`).
+  (`Closes #N`). Open one first if none exists.
 - Commit messages follow conventional commits: `type(scope): lowercase
   imperative subject` (e.g. `chore(speckit): set up Spec Kit`), matching the
   style used across this account's other repositories (see Nomos-N4s/nomos).
   Every commit message references the issue it serves (`Refs CAR-N`,
-  `Closes #N` or `Refs #N`).
+  `Closes CAR-N`, `Refs #N` or `Closes #N`).
 - Commits are atomic: exactly one logical change per commit. Never bundle
   unrelated changes; split mechanical moves and refactors from behavior
   changes so each commit stands, builds, and reverts on its own.
