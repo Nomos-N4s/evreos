@@ -253,7 +253,7 @@ pub struct ImportCounts {
 /// Why a job failed, as its state records it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ImportFailure {
-    /// The profile directory is gone.
+    /// The profile directory is not there, or is not a directory.
     ProfileMissing,
     /// No attempt got a still copy of a store, and the browser was seen
     /// writing it.
@@ -263,10 +263,10 @@ pub enum ImportFailure {
     SourceInterrupted,
     /// A store is not in a format this reader understands.
     Unreadable,
-    /// A store could not be read from disk: access to it was refused, it is
-    /// not a regular file, one of its files is over 1 GiB, or the read
-    /// itself failed. A store read whole that is too large to parse is
-    /// [`ImportFailure::Unreadable`].
+    /// The profile directory or one of its stores could not be read from
+    /// disk: access to it was refused, a store is not a regular file, one of
+    /// its files is over 1 GiB, or the read itself failed. A store read whole
+    /// that is too large to parse is [`ImportFailure::Unreadable`].
     ReadFailed,
     /// Evreos's own stores could not be written. Nothing was imported,
     /// unless the error is [`ImportError::RollbackFailed`], which says the
@@ -292,8 +292,11 @@ pub enum ImportState {
 /// value read from the source profile, so an error can be logged as it is.
 #[derive(Debug)]
 pub enum ImportError {
-    /// The profile directory does not exist.
+    /// The profile directory does not exist, or is not a directory.
     ProfileMissing,
+    /// The profile directory could not be looked at: access to it, or to a
+    /// directory above it, was refused, or the lookup itself failed.
+    ProfileUnreadable(io::Error),
     /// No attempt got a still copy of the named store, and it was seen
     /// changing, so its browser is writing it; the member can
     /// close that browser and try again.
@@ -347,6 +350,7 @@ impl ImportError {
     pub fn failure(&self) -> ImportFailure {
         match self {
             Self::ProfileMissing => ImportFailure::ProfileMissing,
+            Self::ProfileUnreadable(_) => ImportFailure::ReadFailed,
             Self::SourceBusy { .. } => ImportFailure::SourceBusy,
             Self::SourceInterrupted { .. } => ImportFailure::SourceInterrupted,
             Self::Unreadable { .. } => ImportFailure::Unreadable,
@@ -383,6 +387,9 @@ impl fmt::Display for ImportError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::ProfileMissing => write!(f, "the source profile does not exist"),
+            Self::ProfileUnreadable(error) => {
+                write!(f, "the source profile could not be looked at: {error}")
+            }
             Self::SourceBusy { store, attempts } => write!(
                 f,
                 "{store} was seen changing and no still copy of it was taken in {attempts} attempts"
@@ -540,8 +547,22 @@ pub fn read_profile_with(
     policy: SnapshotPolicy,
     source: &mut impl FileSource,
 ) -> Result<ImportedData, ImportError> {
-    if !profile.path.is_dir() {
-        return Err(ImportError::ProfileMissing);
+    // Only a profile that is not there, or is not a directory, is missing:
+    // one that cannot be looked at, for want of access to it or to a
+    // directory above it, fails as a read, as a store that cannot be read
+    // does.
+    match fs::metadata(&profile.path) {
+        Ok(meta) if meta.is_dir() => {}
+        Ok(_) => return Err(ImportError::ProfileMissing),
+        Err(error)
+            if matches!(
+                error.kind(),
+                io::ErrorKind::NotFound | io::ErrorKind::NotADirectory
+            ) =>
+        {
+            return Err(ImportError::ProfileMissing);
+        }
+        Err(error) => return Err(ImportError::ProfileUnreadable(error)),
     }
     let (roots, history) = match profile.browser {
         SourceBrowser::Chrome | SourceBrowser::Edge => {

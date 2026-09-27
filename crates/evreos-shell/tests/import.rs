@@ -578,6 +578,38 @@ fn a_missing_profile_fails_and_writes_nothing() {
     fs::remove_dir_all(root).unwrap();
 }
 
+#[cfg(unix)]
+#[test]
+fn a_profile_that_cannot_be_looked_at_fails_as_a_read_not_as_missing() {
+    let root = temp_dir("unlooked");
+    let mut stores = StoreRegistry::open(&root);
+    // Two links that lead to each other: the lookup fails with neither
+    // "not found" nor "not a directory", as a refused one would; the test
+    // runs where access cannot be refused to it.
+    let looped = root.join("a");
+    std::os::unix::fs::symlink(root.join("b"), &looped).unwrap();
+    std::os::unix::fs::symlink(&looped, root.join("b")).unwrap();
+    let profile = SourceProfile::new(SourceBrowser::Chrome, "looped", &looped);
+    let mut job = ImportJob::new(profile, ImportScope::ALL);
+    let error = job.run(&mut stores, Language::En).unwrap_err();
+    assert!(
+        matches!(error, ImportError::ProfileUnreadable(_)),
+        "{error}"
+    );
+    assert_eq!(job.state(), ImportState::Failed(ImportFailure::ReadFailed));
+
+    // Under a regular file, the profile is simply not there.
+    fs::write(root.join("file"), b"").unwrap();
+    let under = SourceProfile::new(SourceBrowser::Chrome, "under", root.join("file/p"));
+    let mut job = ImportJob::new(under, ImportScope::ALL);
+    assert!(matches!(
+        job.run(&mut stores, Language::En),
+        Err(ImportError::ProfileMissing)
+    ));
+    assert!(stores.history().is_empty());
+    fs::remove_dir_all(root).unwrap();
+}
+
 #[test]
 fn a_corrupt_store_fails_the_import_before_anything_is_written() {
     let source = temp_dir("corrupt_source");
