@@ -1,6 +1,6 @@
 # The crate the shell reaches platform services through: default-browser
-# registration first (FR-013), then the secure credential store, update
-# verification and local rollout evaluation (research §2.8). It holds no
+# registration (FR-013), update verification and local rollout evaluation
+# (FR-014), and later the secure credential store (research §2.8). It holds no
 # `unsafe`: every platform service is reached through a safe binding, and
 # the change that adds a binding states its byte cost against budgets.toml
 # under Principle II.
@@ -11,6 +11,25 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+# FR-014's signed update manifest is verified with Ed25519, strictly, as
+# research §6.1 settles and plan.md adopts ed25519-dalek for. This crate
+# calls no signing, and without its default features ed25519-dalek keeps no
+# precomputed tables. It brings sha2 and digest at the versions the lockfile
+# already resolves, but on Windows and macOS the shell's graph has neither:
+# there this crate's update code adds, with getrandom, fourteen crates the
+# shell does not link today, and more at build time only. They are listed at
+# docs/measurements/update-check.md beside their byte cost.
+[dependencies]
+# The update check leaves the machine only as an evreos-net request, the
+# workspace's one egress chokepoint.
+evreos-net = { path = "../evreos-net" }
+ed25519-dalek = { version = "2.2.0", default-features = false }
+# The rollout draw's randomness, from the operating system. The lockfile
+# already holds this version, through winit's ahash on Linux alone.
+getrandom = { version = "0.3.4", default-features = false }
+# The artefact's SHA-256. ed25519-dalek already brings this version.
+sha2 = { version = "0.10.9", default-features = false }
 
 # Tier 1's bindings, both Microsoft's safe ones: windows-registry for
 # default-browser registration, and windows for the launcher that opens the
