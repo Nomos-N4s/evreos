@@ -555,3 +555,28 @@ fn a_failed_re_registration_leaves_the_existing_one_listed() {
         assert_eq!(registry.keys, registered, "failing write {fail_at}");
     }
 }
+
+#[test]
+fn a_failed_first_registration_keeps_a_key_it_did_not_create() {
+    const FOREIGN: &str = r"Software\Classes\SampleBrowser.URL";
+    let count = Registration::of(&APP).unwrap().values.len();
+    for fail_at in 0..count {
+        let mut registry = with_neighbours();
+        registry.set_string(FOREIGN, "", "foreign").unwrap();
+        registry.writes = 0;
+        registry.fail_at = Some(fail_at);
+
+        register(&mut registry, &APP).unwrap_err();
+        assert!(!registry.has_key(CLIENT), "failing write {fail_at}");
+        assert!(
+            !registry.has_key(r"Software\Classes\SampleBrowser.HTML"),
+            "failing write {fail_at}"
+        );
+        assert_eq!(
+            registry.value(REGISTERED_APPLICATIONS, "Sample Browser"),
+            None,
+            "failing write {fail_at}"
+        );
+        assert!(registry.has_key(FOREIGN), "failing write {fail_at}");
+    }
+}

@@ -237,23 +237,32 @@ impl Registration {
 
 /// Registers `app` so that the system lists it as a browser.
 ///
-/// If a write fails, the write's error is returned. A first registration is
-/// then removed again, so it leaves nothing listed. A registration that was
-/// already there, which the member may have chosen as their default, is left
-/// in place rather than removed: the values written before the failure
-/// replace their earlier copies, and the rest keep theirs.
+/// If a write fails, the write's error is returned. A first registration,
+/// one whose entry under `StartMenuInternet` did not exist, is then undone:
+/// its value under [`REGISTERED_APPLICATIONS`] is removed, and so is every
+/// key it owns that it created, so nothing is listed. A key it owns that
+/// existed before, a ProgID of the same name say, keeps its place, with the
+/// values written before the failure in it. A registration that was already
+/// there, which the member may have chosen as their default, is left in
+/// place: the values written before the failure replace their earlier
+/// copies, and the rest keep theirs.
 pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
     let registration = Registration::of(app)?;
-    let mut first = true;
+    let mut existed = Vec::with_capacity(registration.owned_keys.len());
     for key in &registration.owned_keys {
-        if registry.key_exists(key)? {
-            first = false;
-        }
+        existed.push(registry.key_exists(key)?);
     }
+    // The entry under StartMenuInternet is the first owned key.
+    let first = !existed[0];
     for value in &registration.values {
         if let Err(error) = registry.set_string(&value.key, &value.name, &value.data) {
             if first {
-                let _ = remove(registry, &registration);
+                let _ = registry.remove_value(REGISTERED_APPLICATIONS, &registration.name);
+                for (key, existed) in registration.owned_keys.iter().zip(&existed) {
+                    if !existed {
+                        let _ = registry.remove_key(key);
+                    }
+                }
             }
             return Err(error);
         }
