@@ -847,7 +847,10 @@ fn tokens(source: &str) -> Vec<Tok> {
     };
     while i < chars.len() {
         let ch = chars[i];
-        if ch.is_whitespace() {
+        // Only ASCII whitespace separates tokens here. rustc also skips the
+        // two direction marks, U+200E and U+200F, so any character outside
+        // ASCII is kept as a token of its own, for the check to refuse.
+        if ch.is_ascii_whitespace() || ch == '\u{b}' {
             i += 1;
         } else if ch == '/' && at(i + 1) == Some('/') {
             while i < chars.len() && chars[i] != '\n' {
@@ -1007,6 +1010,21 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
         end = start;
     }
 
+    // Outside its literals and comments the import is written in ASCII. A
+    // character beyond it is either invisible to a reader and skipped by the
+    // compiler, as the direction marks are, or part of an identifier this
+    // test would read differently from the compiler; either can hide a path.
+    for tok in &toks[..end] {
+        let outside_ascii = match tok {
+            Tok::Ident(word) => !word.is_ascii(),
+            Tok::Punct(ch) => !ch.is_ascii(),
+            Tok::Lit => false,
+        };
+        if outside_ascii {
+            found.push(format!("a character outside ASCII in code: {tok:?}"));
+        }
+    }
+
     for i in 0..end {
         let Some(word) = ident(i) else {
             continue;
@@ -1107,6 +1125,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { let _ = '\\''; crate::tabs::g(); }", false),
         ("fn f<'a>(x: &'a u8) { crate::tabs::g(x) }", false),
         ("use r#crate::tabs;", false),
+        ("use super::\u{200E}super::tabs;", false),
+        ("use super::{\u{200F}super::tabs as t};", false),
+        ("fn f() { m\u{200E}!() }", false),
+        ("fn f() { let x\u{301} = 1; }", false),
+        ("fn f() { let caf\u{e9} = 1; }", false),
         ("extern crate evreos_net;", false),
         ("fn f() { evreos_net::connect() }", false),
         ("fn f() { some_macro!() }", false),
