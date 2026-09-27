@@ -346,6 +346,20 @@ report("the word Local in ordinary prose is not chrono's Local", problems == [])
 problems = tree(with_rust('let hostname = url.host_str();\nlet computername = 1;\n'))[0]
 report("a variable named for a host name is not the environment variable", problems == [])
 
+problems = tree({**with_rust(
+    'let a = std::env::var("ComputerName");\n'
+    'let b = std::env::var_os("processor_identifier");\n'
+    'let c = ExpandEnvironmentStringsW(w!("%Number_Of_Processors%"));\n'
+    'let d = std::env::var("hostname");\n'
+), "web/probe.js": "const host = process.env.userDomain;\n"})[0]
+report("a Windows environment variable named in another case is still a read",
+       mentions(problems, "probe.rs:1", "'COMPUTERNAME'")
+       and mentions(problems, "probe.rs:2", "'PROCESSOR_IDENTIFIER'")
+       and mentions(problems, "probe.rs:3", "'NUMBER_OF_PROCESSORS'")
+       and mentions(problems, "web/probe.js:1", "'USERDOMAIN'"))
+report("...while POSIX, which reads its variables in their own case, is not",
+       not mentions(problems, "probe.rs:4"))
+
 problems = tree(with_rust(
     "let w = self.screen.width;\nlet t = self.performance.now;\nlet f = doc.document.fonts;\n"
 ))[0]

@@ -67,7 +67,11 @@ It reads the tree and fails on:
                 release platforms and a spelling nobody used is still the same
                 key -- except where a name's case is what tells it from
                 ordinary code: chrono's `Local`, macOS's `hostName` and the
-                environment variables are matched in their own case.
+                POSIX `HOSTNAME` variable are matched in their own case. A
+                Windows environment variable, which Windows reads in any case,
+                is matched as a bare token in upper case, and in any case as a
+                whole quoted literal, a `%NAME%` expansion or an `env.NAME`
+                property.
 
     machine and volume identifiers
                 the Windows MachineGuid and the Cryptography key that holds
@@ -269,10 +273,22 @@ def destructured(name, obj):
     )
 
 
+def windows_env(name):
+    """The pattern for a Windows environment variable: `name` as a bare token
+    in upper case, or in any case as a whole quoted literal (a C string's
+    `\\0` included), a `%name%` expansion or an `env.name` property."""
+    return (
+        r"(?-i:" + name + r")"
+        r"|[\"'`]" + name + r"(?:\\0)?[\"'`]|%" + name + r"%"
+        r"|\benv\s*\??\.\s*" + name
+    )
+
+
 # Every source, by category. A source is (name, pattern): the name is what a
 # failure reports and what an allowlist entry spells, the pattern is matched as
-# a whole token with case folded. A name holds no whitespace, because an
-# allowlist entry is `<path> <name>` and a path may.
+# a whole token, with case folded where it does not say `(?-i:...)`. A name
+# holds no whitespace, because an allowlist entry is `<path> <name>` and a
+# path may.
 SOURCES = {
     "machine and volume identifier": (
         ("MachineGuid", r"MachineGuid"),
@@ -329,11 +345,11 @@ SOURCES = {
         ("ioreg", r"ioreg"),
         ("system_profiler", r"system_profiler"),
         ("getHighEntropyValues", r"getHighEntropyValues"),
-        # Environment variables, in the case Windows and POSIX spell them: a
-        # host name is read as often from the environment as from an API.
-        ("COMPUTERNAME", r"(?-i:COMPUTERNAME)"),
-        ("USERDOMAIN", r"(?-i:USERDOMAIN)"),
-        ("LOGONSERVER", r"(?-i:LOGONSERVER)"),
+        # Environment variables: a host name is read as often from the
+        # environment as from an API.
+        ("COMPUTERNAME", windows_env("COMPUTERNAME")),
+        ("USERDOMAIN", windows_env("USERDOMAIN")),
+        ("LOGONSERVER", windows_env("LOGONSERVER")),
         ("HOSTNAME", r"(?-i:HOSTNAME)"),
         ("GetVolumeInformation", r"GetVolumeInformation(?:ByHandle)?[AW]?"),
         ("VolumeSerialNumber", r"VolumeSerialNumber"),
@@ -494,10 +510,10 @@ SOURCES = {
         ("hw.logicalcpu", r"hw\.logicalcpu"),
         ("/sys/devices/system/cpu", r"/sys/devices/system/cpu"),
         ("hardwareConcurrency", r"hardwareConcurrency"),
-        ("PROCESSOR_IDENTIFIER", r"(?-i:PROCESSOR_IDENTIFIER)"),
-        ("PROCESSOR_REVISION", r"(?-i:PROCESSOR_REVISION)"),
-        ("PROCESSOR_LEVEL", r"(?-i:PROCESSOR_LEVEL)"),
-        ("NUMBER_OF_PROCESSORS", r"(?-i:NUMBER_OF_PROCESSORS)"),
+        ("PROCESSOR_IDENTIFIER", windows_env("PROCESSOR_IDENTIFIER")),
+        ("PROCESSOR_REVISION", windows_env("PROCESSOR_REVISION")),
+        ("PROCESSOR_LEVEL", windows_env("PROCESSOR_LEVEL")),
+        ("NUMBER_OF_PROCESSORS", windows_env("NUMBER_OF_PROCESSORS")),
         ("processorCount", r"(?:Get|KeQuery)?(?:Active|Maximum)?ProcessorCount"),
     ),
     "high-resolution timing correlator": (
