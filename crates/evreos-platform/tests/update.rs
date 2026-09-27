@@ -305,6 +305,16 @@ mod rollout {
     }
 
     #[test]
+    fn debug_output_leaves_the_value_out() {
+        let path = scratch("debug");
+        fs::write(&path, "123456\n").unwrap();
+        let draw = RolloutDraw::load_or_draw(&path).unwrap();
+        let shown = format!("{draw:?} {draw:#?}");
+        assert!(!shown.bytes().any(|b| b.is_ascii_digit()), "{shown}");
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+    }
+
+    #[test]
     fn draws_spread_across_the_range() {
         // Not a test of randomness, only that draws are not stuck: a
         // hundred draws land in more than one tenth of the range.

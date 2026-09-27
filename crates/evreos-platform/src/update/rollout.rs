@@ -8,6 +8,7 @@
 //! it. It comes from the operating system's randomness, never from anything
 //! about the machine, which FR-036a forbids deriving a correlator from.
 
+use std::fmt;
 use std::fs;
 use std::io;
 use std::path::Path;
@@ -15,8 +16,17 @@ use std::path::Path;
 use super::manifest::ROLLOUT_WHOLE;
 
 /// This install's rollout value, from 0 to 999,999.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+///
+/// Its `Debug` output leaves the value out, so that a log line or a crash
+/// report that prints one does not carry it off the machine.
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct RolloutDraw(u32);
+
+impl fmt::Debug for RolloutDraw {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("RolloutDraw(..)")
+    }
+}
 
 impl RolloutDraw {
     /// The value kept at `path`, or, when there is none, or none that reads
