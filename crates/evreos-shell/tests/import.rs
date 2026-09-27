@@ -959,10 +959,51 @@ const KEYWORDS: &[&str] = &[
     "as", "break", "else", "if", "in", "let", "match", "move", "mut", "return", "while", "yield",
 ];
 
+/// The dependency the import may name: the message catalogue, for the names
+/// of the folders it writes.
+const ALLOWED_CRATE: &str = "evreos_i18n";
+
+/// Every dependency of this crate the import may not name, as its code spells
+/// them, read from the `[dependencies]` table of its manifest.
+fn denied_crates() -> Vec<String> {
+    let manifest =
+        fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("Cargo.toml")).unwrap();
+    let mut in_dependencies = false;
+    let mut denied = Vec::new();
+    for line in manifest.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_dependencies = line == "[dependencies]";
+        } else if in_dependencies {
+            if let Some((name, _)) = line.split_once('=') {
+                let name = name.trim().replace('-', "_");
+                if !name.is_empty() && !name.starts_with('#') && name != ALLOWED_CRATE {
+                    denied.push(name);
+                }
+            }
+        }
+    }
+    denied
+}
+
+#[test]
+fn the_reach_check_denies_every_dependency_but_the_catalogue() {
+    let denied = denied_crates();
+    assert!(denied.iter().any(|name| name == "evreos_net"), "{denied:?}");
+    assert!(!denied.iter().any(|name| name == ALLOWED_CRATE));
+    for name in &denied {
+        let source = format!("fn f() {{ {name}::g() }}");
+        assert!(
+            !reach_violations(&source, false).is_empty(),
+            "{name} passed"
+        );
+    }
+}
+
 /// Every way the shipped part of one import source file reaches past the
 /// stores, the standard library's computation, or its own directory. `at_root`
 /// is true for `import.rs`, whose `super` is the crate root.
 fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
+    let denied = denied_crates();
     let toks = tokens(source);
     let ident = |i: usize| match toks.get(i) {
         Some(Tok::Ident(word)) => Some(word.as_str()),
@@ -1056,14 +1097,13 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
         };
         let next_word = if path_sep(i + 1) { ident(i + 3) } else { None };
         match word {
-            // The egress crate, and the crate's other dependencies, which an
-            // import has no use for.
-            "evreos_net"
-            | "evreos_chrome"
-            | "evreos_engine"
-            | "evreos_engine_headless"
-            | "winit"
-            | "extern" => found.push(format!("names `{word}`")),
+            // The egress crate, and every other dependency of this crate but
+            // the catalogue's, read from its manifest so that one added later
+            // is refused too; and `extern`, which could name any crate.
+            _ if denied.iter().any(|name| name == word) => {
+                found.push(format!("names the dependency `{word}`"));
+            }
+            "extern" => found.push("names `extern`".to_string()),
             // `pub(crate)` is a visibility; any other `crate` leads to the
             // crate root, and only the stores may be reached from it.
             "crate" if !visibility && next_word != Some("store") => {
