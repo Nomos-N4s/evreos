@@ -52,8 +52,19 @@ It reads the tree and fails on:
                 interfaces), the connection-type interfaces, and
                 `RTCPeerConnection`, which is how script learns local
                 addresses.
+    screen geometry
+                enumerating monitors or screens and reading their size,
+                resolution, colour depth or arrangement, on every platform
+                API the release tiers carry and on the `screen` object in
+                script.
 
 WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
+
+A window's own scale factor -- winit's `scale_factor()`, script's
+`devicePixelRatio` -- is not read. Every window reads it to render at the size
+the member chose, which Principle X's scaling to 200% requires, and the
+accessibility spike already does; a rule on it would fail every conformant
+window, the chrome's among them. A derivation that uses it rests on review.
 
 A derivation spread across files, or behind a wrapper whose name says nothing,
 rests on review. And none of this touches what a SITE does to fingerprint the
@@ -148,6 +159,31 @@ SOURCES = {
         ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
         ("CWWiFiClient", r"CWWiFiClient"),
         ("bssid", r"bssid"),
+    ),
+    "screen geometry": (
+        ("available_monitors", r"available_monitors"),
+        ("primary_monitor", r"primary_monitor"),
+        ("current_monitor", r"current_monitor"),
+        ("MonitorHandle", r"MonitorHandle"),
+        ("EnumDisplayMonitors", r"EnumDisplayMonitors"),
+        ("GetMonitorInfo", r"GetMonitorInfo[AW]?"),
+        ("EnumDisplayDevices", r"EnumDisplayDevices[AW]?"),
+        ("EnumDisplaySettings", r"EnumDisplaySettings(?:Ex)?[AW]?"),
+        ("GetSystemMetrics", r"GetSystemMetrics(?:ForDpi)?"),
+        ("GetDeviceCaps", r"GetDeviceCaps"),
+        ("NSScreen", r"NSScreen"),
+        ("CGDisplay", r"CGDisplay(?:Bounds|PixelsWide|PixelsHigh|CopyDisplayMode|ScreenSize)"),
+        ("CGMainDisplayID", r"CGMainDisplayID"),
+        ("CGGetActiveDisplayList", r"CGGetActiveDisplayList"),
+        ("gdk_screen", r"gdk_screen_\w+"),
+        ("gdk_monitor", r"gdk_monitor_\w+"),
+        ("gdk::Screen", r"gdk::Screen"),
+        ("gdk::Monitor", r"gdk::Monitor"),
+        ("XDisplayWidth", r"XDisplayWidth"),
+        ("XDisplayHeight", r"XDisplayHeight"),
+        ("XRRGetScreenResources", r"XRRGetScreenResources(?:Current)?"),
+        ("screen.", r"screen\.(?:width|height|availWidth|availHeight|availLeft|availTop|colorDepth|pixelDepth|orientation)"),
+        ("getScreenDetails", r"getScreenDetails"),
     ),
 }
 

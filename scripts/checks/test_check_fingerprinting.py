@@ -145,6 +145,10 @@ CAUGHT = (
      "let adapters = GetAdaptersAddresses(AF_UNSPEC, 0, None, buffer, &mut size);\n"),
     ("MAC address or network characteristic", "/sys/class/net",
      'let mac = read("/sys/class/net/eth0/address");\n'),
+    ("screen geometry", "primary_monitor",
+     "let size = event_loop.primary_monitor().map(|m| m.size());\n"),
+    ("screen geometry", "GetSystemMetrics",
+     "let width = GetSystemMetrics(SM_CXSCREEN);\n"),
 )
 
 for category, name, body in CAUGHT:
