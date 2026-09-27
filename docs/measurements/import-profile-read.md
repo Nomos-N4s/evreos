@@ -281,7 +281,7 @@ Five release builds of `evreos-shell` under the workspace's release profile
 `strip = "symbols"`), each measured as the binary's `st_size`. B, C and E
 were re-measured after the fixes review rounds 1 to 9 on the pull
 request required, which changed the reader, the verified copy, the address
-filter and the bookmark store that C and E reach. `evreos-shell` builds as
+filter, discovery and the bookmark store that C and E reach. `evreos-shell` builds as
 one codegen unit under fat LTO, so a change anywhere in the crate can move
 the layout of what it links: E moved from 586,768 to 586,880 bytes between
 review rounds 5 and 6 with no change to code it reaches, both figures built
