@@ -850,8 +850,8 @@ fn tokens(source: &str) -> Vec<Tok> {
         // Only ASCII whitespace separates tokens here. rustc also skips the
         // two direction marks, U+200E and U+200F, so they and every other
         // character outside ASCII stay in the token stream, for the check to
-        // refuse: a letter as part of an identifier, anything else as a
-        // token of its own.
+        // refuse: a letter or digit as part of an identifier, anything else
+        // as a token of its own, and never inside a number.
         if ch.is_ascii_whitespace() || ch == '\u{b}' {
             i += 1;
         } else if ch == '/' && at(i + 1) == Some('/') {
@@ -905,7 +905,9 @@ fn tokens(source: &str) -> Vec<Tok> {
                 _ => out.push(Tok::Ident(word)),
             }
         } else if ch.is_ascii_digit() {
-            while at(i).is_some_and(|c| c.is_alphanumeric() || c == '_') {
+            // A number's digits and suffix are ASCII; anything past them is
+            // read as a token of its own, so none hides inside a literal.
+            while at(i).is_some_and(|c| c.is_ascii_alphanumeric() || c == '_') {
                 i += 1;
             }
             out.push(Tok::Lit);
@@ -1230,6 +1232,8 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { m\u{200E}!() }", false),
         ("fn f() { let x\u{301} = 1; }", false),
         ("fn f() { let caf\u{e9} = 1; }", false),
+        ("fn f() { let x = 1\u{e9}; }", false),
+        ("fn f() { let x\u{b2} = 1; }", false),
         ("extern crate evreos_net;", false),
         ("fn f() { evreos_net::connect() }", false),
         ("fn f() { some_macro!() }", false),
