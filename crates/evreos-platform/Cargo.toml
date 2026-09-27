@@ -1,0 +1,30 @@
+# The crate the shell reaches platform services through: default-browser
+# registration first (FR-013), then the secure credential store, update
+# verification and local rollout evaluation (research §2.8). It holds no
+# `unsafe`: every platform service is reached through a safe binding, and
+# the change that adds a binding states its byte cost against budgets.toml
+# under Principle II.
+[package]
+name = "evreos-platform"
+version = "0.0.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+# Tier 1's bindings, both Microsoft's safe ones: windows-registry for
+# default-browser registration, and windows for the launcher that opens the
+# default-apps page. The shell already links windows 0.62 on Windows,
+# through evreos-chrome's accesskit_windows, and every crate
+# windows-registry depends on is in that same family at these versions, so
+# windows-registry is the one crate they add. Their byte cost is recorded
+# at docs/measurements/default-browser-registration.md.
+[target.'cfg(windows)'.dependencies]
+windows-registry = "0.6.1"
+windows = { version = "0.62.2", default-features = false, features = ["System", "Foundation"] }
+
+[target.'cfg(windows)'.dev-dependencies]
+windows-registry = "0.6.1"
+
+[lints]
+workspace = true

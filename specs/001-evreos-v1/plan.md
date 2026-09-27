@@ -883,9 +883,10 @@ crates/
 ├── evreos-net/                     # the sole egress chokepoint; closed Purpose enum
 ├── evreos-i18n/                    # Language/Place types and the FR-035 catalogues
 ├── evreos-chrome/                  # whatever spike S4 selects
-├── evreos-platform/                # default-browser registration, secure
-│                                   #   credential store, update verification,
-│                                   #   local rollout evaluation
+├── evreos-platform/                # EXISTS — default-browser registration;
+│                                   #   later the secure credential store,
+│                                   #   update verification, local rollout
+│                                   #   evaluation
 ├── evreos-signing/                 # preimage, Ed25519 strict verification
 ├── evreos-appreg/                  # app registry, roster, publishing delegation
 ├── evreos-capabilities/            # catalogue, ceiling, grants, intersection
