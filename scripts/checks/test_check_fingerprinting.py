@@ -362,6 +362,15 @@ problems = tree(with_rust('include!("../../../../outside.in");\n'))[0]
 report("a file brought in from outside the tree is reported",
        mentions(problems, "probe.rs", "outside.in", "outside the tree"))
 
+problems = tree(with_rust("let a = xMachineGuid;\nlet b = MachineGuidx;\nlet c = MachineGuid_2;\n"))[0]
+report("a source continued by an identifier on either side alone is not a read",
+       problems == [])
+
+problems = tree(with_rust("let a = (MachineGuid);\nlet b = [MachineGuid];\n"))[0]
+report("...while one set off by punctuation on both sides is",
+       mentions(problems, "probe.rs:1", "'MachineGuid'")
+       and mentions(problems, "probe.rs:2", "'MachineGuid'"))
+
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
 
