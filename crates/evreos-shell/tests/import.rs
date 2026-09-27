@@ -1533,7 +1533,7 @@ fn a_manifest_value_over_several_lines_is_read_whole() {
     // would otherwise be read as a header or a key of its own.
     for (manifest, expected) in [
         (
-            "[dependencies]\nevreos-i18n = { path = \"../evreos-net\", features = [\n], package = \"evreos-net\" }\n",
+            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", features = [\n], package = \"evreos-net\" }\n",
             &[ALLOWED_CRATE][..],
         ),
         (
@@ -1549,7 +1549,7 @@ fn a_manifest_value_over_several_lines_is_read_whole() {
             &["foo"][..],
         ),
         (
-            "[dependencies]\nevreos-i18n = {\n  path = \"../evreos-net\",\n  package = \"evreos-net\",\n}\n",
+            "[dependencies]\nevreos-i18n = {\n  path = \"../evreos-i18n\",\n  package = \"evreos-net\",\n}\n",
             &[ALLOWED_CRATE][..],
         ),
     ] {
@@ -1559,15 +1559,40 @@ fn a_manifest_value_over_several_lines_is_read_whole() {
 
 #[test]
 fn the_catalogue_is_allowed_only_as_its_own_package() {
+    // Each manifest reads the catalogue from its own directory, so only the
+    // rename can refuse it: the same manifest naming the catalogue's own
+    // package instead is allowed.
     for manifest in [
-        "[dependencies]\nevreos-i18n = { path = \"n\", package = \"evreos-net\" }\n",
-        "[dependencies]\nevreos_i18n = { package = 'evreos-net' }\n",
-        "[dependencies.evreos-i18n]\npath = \"n\"\npackage = \"evreos-net\"\n",
-        "[dependencies]\nevreos-i18n.package = \"evreos-net\"\n",
-        "[target.'cfg(unix)'.dependencies]\nevreos-i18n = { package = \"evreos-net\" }\n",
-        "dependencies = { evreos-i18n = { package = \"evreos-net\" } }\n",
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" }\n",
+        "[dependencies]\nevreos_i18n = { path = '../evreos-i18n', package = 'evreos-net' }\n",
+        "[dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\npackage = \"evreos-net\"\n",
+        "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.package = \"evreos-net\"\n",
+        "dependencies = { evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" } }\n",
+        "dependencies.evreos-i18n.path = \"../evreos-i18n\"\n\
+         dependencies.evreos-i18n.package = \"evreos-net\"\n",
+        "[target.'cfg(unix)'.dependencies]\n\
+         evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" }\n",
+        "[target.'cfg(unix)'.dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\npackage = \"evreos-net\"\n",
+        "[target.'cfg(unix)'.dependencies]\n\
+         evreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.package = \"evreos-net\"\n",
+        "[target.'cfg(unix)']\n\
+         dependencies = { evreos-i18n = { path = \"../evreos-i18n\", package = \"evreos-net\" } }\n",
+        "[target.'cfg(unix)']\ndependencies.evreos-i18n.path = \"../evreos-i18n\"\n\
+         dependencies.evreos-i18n.package = \"evreos-net\"\n",
+        "[dependencies]\n\"evreos-i18n\" = { \"path\" = \"../evreos-i18n\", \"package\" = \"evreos-net\" }\n",
+        "[target.'cfg(unix)'.dependencies]\n\
+         \"evreos-i18n\" = { \"path\" = \"../evreos-i18n\", \"package\" = \"evreos-net\" }\n",
+        "[dependencies]\n'evreos-i18n' . path = '../evreos-i18n'\n'evreos-i18n' . package = 'evreos-net'\n",
+        "[dependencies]\n\"evreos\\u002di18n\" = { path = \"../evreos-i18n\", package = \"evreos\\u002dnet\" }\n",
+        // Read as empty, so refused though it names the catalogue.
+        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", package = \"\"\"evreos-i18n\"\"\" }\n",
     ] {
         assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
+        let own = manifest
+            .replace("evreos-net", "evreos-i18n")
+            .replace("evreos\\u002dnet", "evreos\\u002di18n")
+            .replace("\"\"\"evreos-i18n\"\"\"", "\"evreos-i18n\"");
+        assert!(denied_in(&own).is_empty(), "{own:?}");
     }
     for manifest in [
         "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\" }\n",
@@ -1587,7 +1612,6 @@ fn the_catalogue_is_allowed_only_from_its_own_directory() {
         "[dependencies]\nevreos-i18n = { version = \"1\" }\n",
         "[dependencies]\nevreos-i18n = { path = \"../evreos-net\" }\n",
         "[dependencies]\nevreos-i18n = { git = \"https://example.invalid/i18n\" }\n",
-        "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", registry = \"other\" }\n",
         "[dependencies.evreos-i18n]\nversion = \"1\"\n",
         "[dependencies]\nevreos-i18n.git = \"https://example.invalid/i18n\"\n",
         "[dependencies]\nevreos-i18n = { workspace = true }\n",
@@ -1598,6 +1622,31 @@ fn the_catalogue_is_allowed_only_from_its_own_directory() {
          [target.'cfg(unix)'.dependencies]\nevreos-i18n = \"1\"\n",
     ] {
         assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
+    }
+    // Each reads the catalogue from its own directory and from another
+    // source as well, so only the other source can refuse it: the same
+    // manifest without it is allowed.
+    for (manifest, other) in [
+        (
+            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", git = \"https://example.invalid/i18n\" }\n",
+            ", git = \"https://example.invalid/i18n\"",
+        ),
+        (
+            "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\nevreos-i18n.git = \"https://example.invalid/i18n\"\n",
+            "evreos-i18n.git = \"https://example.invalid/i18n\"\n",
+        ),
+        (
+            "[dependencies]\nevreos-i18n = { path = \"../evreos-i18n\", registry = \"other\" }\n",
+            ", registry = \"other\"",
+        ),
+        (
+            "[dependencies.evreos-i18n]\npath = \"../evreos-i18n\"\nregistry-index = \"https://example.invalid/index\"\n",
+            "registry-index = \"https://example.invalid/index\"\n",
+        ),
+    ] {
+        assert_eq!(denied_in(manifest), [ALLOWED_CRATE], "{manifest:?}");
+        let alone = manifest.replace(other, "");
+        assert!(denied_in(&alone).is_empty(), "{alone:?}");
     }
     for manifest in [
         "[dependencies]\nevreos-i18n.path = \"../evreos-i18n\"\n",
