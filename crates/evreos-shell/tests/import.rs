@@ -1165,7 +1165,9 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             // may go no further up: neither `super::super`, nor a group that
             // names `super` again, nor a rename.
             "super" if !visibility => {
-                if punct(i.wrapping_sub(1), ':') || in_path_group(i) {
+                // After `::` it continues a path; after a lone `:`, as in
+                // `T: super::Trait`, it starts one.
+                if path_sep(i.wrapping_sub(2)) || in_path_group(i) {
                     found.push("`super` inside a path".to_string());
                 } else if at_root {
                     if next_word != Some("store") {
@@ -1335,6 +1337,11 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("pub(in crate) fn f() {}", false),
         ("fn f() { use std::os::unix::fs::OpenOptionsExt; }", false),
         ("fn f() -> u8 { super::g() }", false),
+        (
+            "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",
+            false,
+        ),
+        ("fn h<T>() where T: super::snapshot::FileSource {}", false),
         (
             "fn f() -> u8 { if true { super::g() } else { super::h() } }",
             false,
