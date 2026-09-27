@@ -554,8 +554,14 @@ class CheckError(Exception):
     in the log -- as the sibling checks exit for the same class."""
 
 
+class Unreadable(Exception):
+    """A file this check reads could not be read as text: it is not UTF-8,
+    or the operating system refused it. The caller reports it naming the file,
+    as a breach is reported, rather than ending the run in a traceback."""
+
+
 def read_text(path):
-    """The file's text, or None when it is not UTF-8; the caller reports.
+    """The file's text; raises Unreadable, saying why, when it has none.
 
     The BOM is stripped for the reason the other checks strip it: an editor
     that writes one is not a way past a check.
@@ -563,7 +569,9 @@ def read_text(path):
     try:
         return path.read_text(encoding="utf-8").lstrip("﻿")
     except UnicodeDecodeError:
-        return None
+        raise Unreadable("not valid UTF-8") from None
+    except OSError as error:
+        raise Unreadable(f"not readable ({error.strerror or error})") from None
 
 
 def decode_escapes(text):
@@ -665,9 +673,10 @@ def read_allowlist(path, problems):
             "run, and a missing file is not an empty one"
         )
         return {}
-    text = read_text(path)
-    if text is None:
-        problems.append(f"{where}: not valid UTF-8, so its entries cannot be read")
+    try:
+        text = read_text(path)
+    except Unreadable as error:
+        problems.append(f"{where}: {error}, so its entries cannot be read")
         return {}
     entries = {}
     for number, line in enumerate(text.splitlines(), 1):
@@ -727,10 +736,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     brought = []
 
     def scan_rust(path, where):
-        text = read_text(path)
         read.append(where)
-        if text is None:
-            problems.append(f"{where}: not valid UTF-8, so it is not Rust this check can read")
+        try:
+            text = read_text(path)
+        except Unreadable as error:
+            problems.append(f"{where}: {error}, so it is not Rust this check can read")
             return
         code = strip_non_code(text, keep_literals=True)
         bare = strip_non_code(text)
@@ -747,10 +757,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 brought.append((kind, path.parent / match.group(1), where))
 
     def scan_whole(path, where, what):
-        text = read_text(path)
         read.append(where)
-        if text is None:
-            problems.append(f"{where}: not valid UTF-8, so it is not {what} this check can read")
+        try:
+            text = read_text(path)
+        except Unreadable as error:
+            problems.append(f"{where}: {error}, so it is not {what} this check can read")
             return
         for number, category, name in sources_in(text):
             found(where, number, category, name)
@@ -766,37 +777,35 @@ def check_tree(root, allowlist_path=ALLOWLIST):
             f"salted or kept, and {allowlist_path.name} lists no use of it here"
         )
 
-    for directory in walk(root):
-        for path in sorted(directory.iterdir()):
-            if not path.is_file():
-                continue
-            where = path.relative_to(root).as_posix()
-            if is_rust_source(path):
-                scan_rust(path, where)
-            elif suffix_of(path) in SCRIPT_SUFFIXES:
-                scan_whole(path, where, "script")
-            elif folded_in(path.name, [MANIFEST]):
+    for path in walk(root, problems):
+        where = path.relative_to(root).as_posix()
+        if is_rust_source(path):
+            scan_rust(path, where)
+        elif suffix_of(path) in SCRIPT_SUFFIXES:
+            scan_whole(path, where, "script")
+        elif folded_in(path.name, [MANIFEST]):
+            read.append(where)
+            try:
                 text = read_text(path)
-                read.append(where)
-                if text is None:
-                    problems.append(f"{where}: not valid UTF-8, so it is not a manifest this check can read")
-                    continue
-                try:
-                    manifest = tomllib.loads(text)
-                except tomllib.TOMLDecodeError as error:
-                    problems.append(f"{where}: not TOML this check can read ({error})")
-                    continue
-                workspace = manifest.get("workspace")
-                if isinstance(workspace, dict):
-                    workspaces[path.parent] = workspace.get("dependencies")
-                inherited = next(
-                    (workspaces[d] for d in (path.parent, *path.parent.parents) if d in workspaces),
-                    None,
-                )
-                for crate in dependencies_in(manifest, inherited):
-                    name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
-                    if name is not None:
-                        found(where, 0, DEPENDENCY_SOURCES[name], name)
+            except Unreadable as error:
+                problems.append(f"{where}: {error}, so it is not a manifest this check can read")
+                continue
+            try:
+                manifest = tomllib.loads(text)
+            except tomllib.TOMLDecodeError as error:
+                problems.append(f"{where}: not TOML this check can read ({error})")
+                continue
+            workspace = manifest.get("workspace")
+            if isinstance(workspace, dict):
+                workspaces[path.parent] = workspace.get("dependencies")
+            inherited = next(
+                (workspaces[d] for d in (path.parent, *path.parent.parents) if d in workspaces),
+                None,
+            )
+            for crate in dependencies_in(manifest, inherited):
+                name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
+                if name is not None:
+                    found(where, 0, DEPENDENCY_SOURCES[name], name)
 
     while brought:
         kind, target, by = brought.pop(0)
@@ -833,8 +842,9 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     return problems, sorted(read), len(used)
 
 
-def walk(root):
-    """Every directory under `root` this check reads, `root` included.
+def walk(root, problems):
+    """Every file in the directories under `root` this check reads, `root`
+    included, directory by directory.
 
     `.git/` is pruned, and so is Cargo's build output: a `target/`
     beside a `Cargo.toml`, which holds every vendored dependency's source and
@@ -842,10 +852,28 @@ def walk(root):
     `crates/target/` a crate, and Cargo builds both. The fold on `target` and
     on the manifest name is casefs's rule -- `TARGET/` is the same directory
     on the platforms that build the release.
+
+    A directory that cannot be listed is reported and not read. A directory
+    reached a second time through a symbolic link is not read again, so a
+    link that loops ends the walk rather than extending it, and one that
+    leads outside the tree is reported: nothing there can be answered for.
     """
-    kept = [root]
+    kept, seen, files = [root], set(), []
     for directory in kept:
-        entries = sorted(directory.iterdir())
+        where = directory.relative_to(root).as_posix()
+        real = directory.resolve()
+        if not real.is_relative_to(root):
+            problems.append(f"{where}: links outside the tree this check reads, so it is not read")
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError as error:
+            problems.append(f"{where}: not a directory this check can list ({error.strerror or error})")
+            continue
+        files.extend(path for path in entries if path.is_file())
         beside_manifest = any(
             path.is_file() and folded_in(path.name, [MANIFEST]) for path in entries
         )
@@ -857,7 +885,7 @@ def walk(root):
             if beside_manifest and folded_in(path.name, ["target"]):
                 continue
             kept.append(path)
-    return kept
+    return files
 
 
 def main():

@@ -589,6 +589,32 @@ report("a module named target is read, since Cargo builds it",
 report("...and so is a crate named target",
        mentions(problems, "crates/target/src/lib.rs:1", "'MachineGuid'"))
 
+with tempfile.TemporaryDirectory() as tmp:
+    base = Path(tmp)
+    root = base / "tree"
+    for relative, content in passing_tree().items():
+        (root / relative).parent.mkdir(parents=True, exist_ok=True)
+        (root / relative).write_text(content, encoding="utf-8")
+    (base / "outside").mkdir()
+    (base / "outside" / "lib.rs").write_text('let g = "MachineGuid";\n', encoding="utf-8")
+    (root / "crates" / "x" / "loop").symlink_to(root / "crates")
+    (root / "crates" / "x" / "out").symlink_to(base / "outside")
+    if Path("/proc/self/mem").exists():
+        (root / "crates" / "x" / "src" / "mem.rs").symlink_to("/proc/self/mem")
+    (base / "allowlist.txt").write_text("", encoding="utf-8")
+    try:
+        problems, read, _ = check.check_tree(root, base / "allowlist.txt")
+        report("a directory link that loops ends the walk rather than extending it",
+               read.count("crates/x/src/lib.rs") == 1)
+        report("a directory link that leads outside the tree is reported, not read",
+               mentions(problems, "crates/x/out", "outside the tree")
+               and not mentions(problems, "'MachineGuid'"))
+        if Path("/proc/self/mem").exists():
+            report("a file the system refuses to read is reported, not a traceback",
+                   mentions(problems, "crates/x/src/mem.rs", "not readable"))
+    except OSError as error:
+        report(f"links and unreadable files end in a verdict, not {error!r}", False)
+
 try:
     tree({"README.md": "nothing this check reads\n"})
     report("a tree with nothing to read raises rather than passing", False)
