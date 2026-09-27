@@ -292,6 +292,18 @@ report("the word Local in ordinary prose is not chrono's Local", problems == [])
 problems = tree(with_rust('let hostname = url.host_str();\nlet computername = 1;\n'))[0]
 report("a variable named for a host name is not the environment variable", problems == [])
 
+problems = tree(with_rust(
+    "let w = self.screen.width;\nlet t = self.performance.now;\nlet f = doc.document.fonts;\n"
+))[0]
+report("a Rust field access that spells a script path is not a read", problems == [])
+
+problems = tree(with_rust(
+    'const PROBE: &str = "send(screen.width, performance.now())";\n'
+))[0]
+report("...while the same path in a script the shell injects is",
+       mentions(problems, "probe.rs:1", "'screen.'")
+       and mentions(problems, "probe.rs:1", "'performance.now'"))
+
 problems = tree(with_rust("let a = 1;\nlet b = 2;\nlet guid = MachineGuid();\n"))[0]
 report("a failure names the line the read is on", mentions(problems, "probe.rs:3"))
 

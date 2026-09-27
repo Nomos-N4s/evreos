@@ -39,7 +39,13 @@ It reads the tree and fails on:
                 with comments stripped and string literals kept through
                 rustlex: the paths and registry names these reads use live
                 inside strings, so blanking strings would blank the evidence,
-                and a script the shell injects is a string too.
+                and a script the shell injects is a string too. The
+                script-shaped sources -- `screen.`, `window.screen`,
+                `document.fonts`, `performance.now`, `performance.timeOrigin`
+                and `navigator.connection` -- are dotted paths an ordinary
+                Rust field access can spell, `self.screen.width` among them,
+                so in Rust they are matched inside string literals only,
+                where an injected script lives.
                 Script and markup the shell could ship -- `.js`, `.mjs`,
                 `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
                 whole, comments included: there is no shared scanner for
@@ -442,6 +448,17 @@ SOURCES = {
     ),
 }
 
+# The sources shaped as script's dotted paths, which a Rust field access can
+# also spell: in Rust they are matched inside string literals only.
+SCRIPT_SHAPED = {
+    "screen.",
+    "window.screen",
+    "document.fonts",
+    "performance.now",
+    "performance.timeOrigin",
+    "navigator.connection",
+}
+
 # A whole token: nothing that could continue an identifier on either side, so
 # `sysinfo` is not found inside `mysysinfo_cache` and `bssid` not inside a
 # longer word.
@@ -524,9 +541,10 @@ def read_text(path):
         return None
 
 
-def sources_in(text):
+def sources_in(text, only=None, skip=()):
     """Every (line number, category, name) of a source read in `text`, in
-    line order and then table order, each source once per line.
+    line order and then table order, each source once per line: of every
+    source, or of those named in `only`, less those named in `skip`.
 
     Matched over the whole text rather than line by line, so a chain a
     formatter breaks across lines -- `screen` on one, `.width` on the next --
@@ -534,6 +552,8 @@ def sources_in(text):
     """
     found = []
     for category, name, pattern in COMPILED:
+        if (only is not None and name not in only) or name in skip:
+            continue
         for match in pattern.finditer(text):
             number = text.count("\n", 0, match.start()) + 1
             if (number, category, name) not in found:
@@ -672,7 +692,14 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                     problems.append(f"{where}: not valid UTF-8, so it is not Rust this check can read")
                     continue
                 code = strip_non_code(text, keep_literals=True)
-                for number, category, name in sources_in(code):
+                bare = strip_non_code(text)
+                literals = "".join(
+                    kept if kept != blank else ("\n" if kept == "\n" else " ")
+                    for kept, blank in zip(code, bare)
+                )
+                reads = sources_in(code, skip=SCRIPT_SHAPED)
+                reads += sources_in(literals, only=SCRIPT_SHAPED)
+                for number, category, name in sorted(reads, key=lambda item: item[0]):
                     found(where, number, category, name)
             elif suffix_of(path) in SCRIPT_SUFFIXES:
                 text = read_text(path)
