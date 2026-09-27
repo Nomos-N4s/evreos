@@ -487,6 +487,17 @@ problems = tree(passing_tree({"crates/x/Cargo.toml": "[package\nname = \n"}))[0]
 report("a manifest that is not TOML fails rather than passing unread",
        mentions(problems, "Cargo.toml", "not TOML"))
 
+try:
+    problems = tree(passing_tree({
+        "crates/x/Cargo.toml": CLEAN_MANIFEST + 'sysinfo = "0.30"\n\n[package.metadata]\n',
+        "crates/y/Cargo.toml": '[package]\nname = "y"\ntarget = "x"\n',
+        "crates/z/Cargo.toml": 'target = ["x"]\n',
+    }))[0]
+    report("a target key that is not a table ends in a verdict, not a traceback",
+           mentions(problems, "crates/x/Cargo.toml", "'sysinfo'"))
+except AttributeError:
+    report("a target key that is not a table ends in a verdict, not a traceback", False)
+
 # --- ALLOWLIST ----------------------------------------------------------------
 
 problems, _, allowlisted = tree(

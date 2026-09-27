@@ -623,7 +623,11 @@ def dependencies_in(manifest, inherited=None):
     tables = []
     for key in DEPENDENCY_TABLES:
         tables.append(manifest.get(key))
-    for target in (manifest.get("target") or {}).values():
+    # Every key is checked for a table before it is read as one: a well-formed
+    # file with `target = "x"` is valid TOML that Cargo rejects, and must not
+    # end the run in a traceback.
+    targets = manifest.get("target")
+    for target in targets.values() if isinstance(targets, dict) else ():
         if isinstance(target, dict):
             for key in DEPENDENCY_TABLES:
                 tables.append(target.get(key))
