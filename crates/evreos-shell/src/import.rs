@@ -26,18 +26,27 @@
 //!
 //! **The network** — reading another browser's files is the local computation
 //! FR-007a permits. The shipped code of this module and its submodules —
-//! their unit tests aside — names no dependency of this crate but
-//! `evreos-i18n`, for the names of its folders, so not `evreos-net`; names
-//! neither `std::net` nor `std::process`, so opens no socket and starts no
-//! process; reaches no part of the standard library's platform module but
-//! the Unix `OpenOptionsExt`, and no part of this crate but the stores;
-//! writes no file but the member's stores, through them, and calls nothing
-//! of the standard library's that writes, creates, removes or renames one;
-//! loads no file but its own five modules, through no `#[path]` and no `cfg_attr`;
-//! invokes no macro but a short list of the standard library's; and is
-//! written in ASCII outside its literals and
-//! comments, so no character a reader cannot see hides a path.
-//! `tests/import.rs` asserts each of these token by token. What it asserts is
+//! their unit tests aside, each the last item of its file — is held to this:
+//! - it names no dependency of this crate but `evreos-i18n`, for the names of
+//!   its folders, so not `evreos-net`, and no crate through `extern`;
+//! - it names neither `std::net` nor `std::process`, so opens no socket and
+//!   starts no process, and no part of `std::os` but the Unix
+//!   `OpenOptionsExt`;
+//! - it reaches no part of this crate but the stores, by `crate::store` or by
+//!   `super` no further up than the import itself;
+//! - it groups nothing directly under `std`;
+//! - it writes no file but the member's stores, through them, and calls
+//!   nothing of the standard library's that writes, creates, removes or
+//!   renames a file, or changes one's permissions;
+//! - it loads no file but its own five modules, through no `#[path]` and no
+//!   `cfg_attr`, and invokes no macro by `name!` but a short list of the
+//!   standard library's, which no `macro_rules!` in the crate may shadow;
+//! - it is written in ASCII outside its literals and comments, so no
+//!   character a reader cannot see hides a path.
+//!
+//! The rules state what the code is held to. `tests/import.rs` checks each
+//! of them token by token, in the forms its cases name; a form it does not
+//! refuse is a gap in the check, not a licence in the rule. What it asserts is
 //! what the code names, not where a path leads: a profile the member points
 //! the import at on a network share is read from that share, as the member
 //! chose. Discovery, which runs before the member chooses, never follows a

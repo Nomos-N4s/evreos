@@ -1426,13 +1426,9 @@ fn the_import_names_no_egress_crate_and_reaches_only_the_stores() {
     // Reading another browser's files is the local computation FR-007a
     // permits; the import must hold no route by which any of it could leave.
     // The crate as a whole depends on evreos-net, so what is asserted is the
-    // module's own reach, token by token rather than by text: it names no
-    // dependency of this crate but evreos-i18n, neither std::net nor
-    // std::process, and no part of std::os but OpenOptionsExt; its only way
-    // into the rest of this crate is the stores it writes; it calls nothing
-    // that writes a file; it loads no file
-    // but its own five modules, through no #[path] and no cfg_attr; it
-    // invokes no macro but those listed in `MACROS`; and its code is ASCII.
+    // module's own reach, token by token rather than by text, as the module
+    // documentation of `import.rs` lists it and `reach_violations` enforces
+    // it, one rule at a time.
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
     let mut files = vec![(src.join("import.rs"), true)];
     for entry in fs::read_dir(src.join("import")).unwrap() {
