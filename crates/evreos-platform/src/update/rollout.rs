@@ -43,9 +43,11 @@ impl RolloutDraw {
     /// then linked into place only if no file is there yet. So when two
     /// processes draw at once for an install that has no file, one value is
     /// kept and both return it. That holds on a file system with hard links,
-    /// as the ones Windows and macOS install to have. On one without, such
-    /// as FAT, the draw is renamed into place instead, and the last process
-    /// to draw wins. Replacing a file that is not a value makes no such
+    /// as the ones Windows and macOS install to have. When linking fails,
+    /// on a file system without them, such as FAT, or for a passing reason,
+    /// a value found there is still the value; only when none is there is
+    /// the draw renamed into place, so two processes doing so at the same
+    /// moment may each keep their own, and the last wins. Replacing a file that is not a value makes no such
     /// promise either: the last process to replace it wins.
     ///
     /// Its errors are the file system's. The file's own absence is never
@@ -89,26 +91,31 @@ impl RolloutDraw {
     /// Keeps `draw`, written at `partial`, at `path`, and returns the value
     /// kept there.
     fn keep(path: &Path, partial: &Path, draw: Self) -> io::Result<Self> {
-        match fs::hard_link(partial, path) {
-            Ok(()) => Ok(draw),
-            // A file is there already. If it is a value, another process
-            // kept its draw first, and that is the value; if it is not, it
-            // is replaced whole. A file that cannot be read is neither, and
-            // is left as it is.
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
-                match Self::parse(&fs::read(path)?) {
-                    Some(kept) => Ok(kept),
-                    None => {
-                        fs::rename(partial, path)?;
-                        Ok(draw)
-                    }
+        let linked = match fs::hard_link(partial, path) {
+            Ok(()) => return Ok(draw),
+            Err(error) => error,
+        };
+        // The name is taken, or the file system could not link it. Either
+        // way, a value already there, which another process kept, is the
+        // value; a file that is not a value is replaced whole; and a file
+        // that cannot be read is left as it is. Only when linking failed
+        // for another reason than the name being taken does a missing file
+        // mean the draw is to be put in place, by a rename, as a file
+        // system without hard links needs.
+        let taken = linked.kind() == io::ErrorKind::AlreadyExists;
+        match fs::read(path) {
+            Ok(bytes) => match Self::parse(&bytes) {
+                Some(kept) => Ok(kept),
+                None => {
+                    fs::rename(partial, path)?;
+                    Ok(draw)
                 }
-            }
-            // A file system without hard links still gets the value.
-            Err(_) => {
+            },
+            Err(error) if !taken && error.kind() == io::ErrorKind::NotFound => {
                 fs::rename(partial, path)?;
                 Ok(draw)
             }
+            Err(error) => Err(error),
         }
     }
 
