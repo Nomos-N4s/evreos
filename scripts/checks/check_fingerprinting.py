@@ -67,7 +67,7 @@ It reads the tree and fails on:
                 release platforms and a spelling nobody used is still the same
                 key -- except where a name's case is what tells it from
                 ordinary code: chrono's `Local`, macOS's `hostName` and the
-                POSIX `HOSTNAME` variable are matched in their own case. A
+                `HOSTNAME` and `TZ` variables are matched in their own case. A
                 Windows environment variable, which Windows reads in any case,
                 is matched as a bare token in upper case, and in any case as a
                 whole quoted literal, a `%NAME%` expansion or an `env.NAME`
@@ -466,7 +466,9 @@ SOURCES = {
         ("TimeZoneSettings", r"TimeZoneSettings"),
         ("GetTimeZone", r"GetTimeZone"),
         ("Zoned::now", r"Zoned::now"),
-        ("TZ", r'var(?:_os)?\(\s*(?:r#*)?"TZ"#*\s*\)'),
+        # `TZ` alone is too short to match bare; a literal holding nothing
+        # else, or a script's `env.TZ`, names the variable.
+        ("TZ", r"(?-i:[\"'`]TZ(?:\\0)?[\"'`]|\benv\s*\??\.\s*TZ)"),
         ("getTimezoneOffset", r"getTimezoneOffset"),
         # The whole options object carries the zone, so the call is the read
         # whether `.timeZone` follows it or a destructuring takes it.

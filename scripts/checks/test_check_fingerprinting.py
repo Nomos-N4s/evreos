@@ -237,6 +237,10 @@ CAUGHT = (
      'let zone = std::env::var("TZ");\n'),
     ("timezone", "TZ",
      'let zone = std::env::var_os(r"TZ");\n'),
+    ("timezone", "TZ",
+     'let zone = unsafe { libc::getenv(c"TZ".as_ptr()) };\n'),
+    ("timezone", "TZ",
+     'let zone = unsafe { libc::getenv(b"TZ\\0".as_ptr().cast()) };\n'),
     ("timezone", "now_local",
      "let now = time::OffsetDateTime::now_local()?;\n"),
     ("timezone", "chrono::Local",
@@ -345,6 +349,13 @@ report("the word Local in ordinary prose is not chrono's Local", problems == [])
 
 problems = tree(with_rust('let hostname = url.host_str();\nlet computername = 1;\n'))[0]
 report("a variable named for a host name is not the environment variable", problems == [])
+
+problems = tree({**with_rust('let zone = "tz";\nlet z = TZ_OFFSET;\n'),
+                  "web/zone.js": "const zone = process.env.TZ;\n"})[0]
+report("a TZ literal in another case, or a name that holds TZ, is not the variable",
+       not mentions(problems, "probe.rs"))
+report("...while a script reading env.TZ is",
+       mentions(problems, "web/zone.js:1", "'TZ'"))
 
 problems = tree({**with_rust(
     'let a = std::env::var("ComputerName");\n'
