@@ -309,6 +309,19 @@ report("the registry key that holds MachineGuid fails through a raw string",
        mentions(problems, "probe.rs:1", "Cryptography"))
 
 problems = tree(with_rust(
+    "use chrono::prelude::*;\n"
+    "fn a() { let d = DateTime::<Local>::from(std::time::SystemTime::now()); }\n"
+    "fn b() { let tz = Local; let _ = Utc::now().with_timezone(&tz); }\n"
+    'fn c() -> &str { "Local State" }\n'
+))[0]
+report("chrono's Local through a turbofish is a read",
+       mentions(problems, "probe.rs:2", "'chrono::Local'"))
+report("...and, under chrono's prelude glob, a bare Local value is too",
+       mentions(problems, "probe.rs:3", "'chrono::Local'"))
+report("...while the word Local inside a literal is not, even there",
+       not mentions(problems, "probe.rs:4"))
+
+problems = tree(with_rust(
     'let path = user_data.join("Local State");\nout.push_str("# Local Bookmark Store");\n'
 ))[0]
 report("the word Local in ordinary prose is not chrono's Local", problems == [])

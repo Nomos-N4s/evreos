@@ -112,9 +112,10 @@ It reads the tree and fails on:
                 `timezone`, `/etc/localtime`, the `TZ` variable, the `time`
                 crate's `now_local` and local offsets, chrono's `Local`
                 wherever a line names it -- by path, in an import list, as
-                `&Local`, `Local.` or `DateTime<Local>` -- jiff's system
-                zone, and `getTimezoneOffset` and `resolvedOptions` in
-                script. `Local` is matched in its own case only: the word
+                `&Local`, `Local.`, `DateTime<Local>` or `::<Local>` -- and,
+                in a file that glob-imports chrono's prelude or offset
+                module, wherever `Local` stands in code, jiff's system zone,
+                and `getTimezoneOffset` and `resolvedOptions` in script. `Local` is matched in its own case only: the word
                 opens ordinary prose such as "Local State".
     total memory
                 the physical memory the machine carries, through every
@@ -440,7 +441,8 @@ SOURCES = {
         ("chrono::Local", (
             r"chrono::(?:offset::)?Local|Local::(?:now|today)"
             r"|chrono::(?:offset::|prelude::)?\{[^}]*(?-i:\bLocal\b)[^}]*\}"
-            r"|DateTime\s*<\s*(?-i:Local)\s*>|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
+            r"|DateTime\s*(?:::\s*)?<\s*(?-i:Local)\s*>|::\s*<\s*(?-i:Local)\s*>"
+            r"|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
         )),
         ("TimeZone::system", r"TimeZone::system"),
         ("Zoned::now", r"Zoned::now"),
@@ -521,6 +523,11 @@ SOURCES = {
 # and those and `\u0043` in script. An escaped backslash is matched first, so
 # `\\x2d` stays the four characters it is.
 ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\}|u[0-9A-Fa-f]{4})")
+
+# A glob import of chrono's prelude or offset module. In a file that has one,
+# any bare `Local` in code is chrono's, and a read of the system timezone.
+CHRONO_GLOB = re.compile(r"chrono::(?:prelude::|offset::)?\*")
+BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
 
 # What a Rust file brings into the build under a name of its own choosing,
 # resolved against that file's directory, as Rust resolves both: a file
@@ -812,7 +819,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         )
         reads = sources_in(decode_escapes(code), skip=SCRIPT_SHAPED)
         reads += sources_in(decode_escapes(literals), only=SCRIPT_SHAPED)
-        for number, category, name in sorted(reads, key=lambda item: item[0]):
+        if CHRONO_GLOB.search(bare):
+            for match in BARE_LOCAL.finditer(bare):
+                number = bare.count("\n", 0, match.start()) + 1
+                reads.append((number, "timezone", "chrono::Local"))
+        for number, category, name in sorted(dict.fromkeys(reads), key=lambda item: item[0]):
             found(where, number, category, name)
         for kind, pattern in BRINGS:
             for match in pattern.finditer(code):
