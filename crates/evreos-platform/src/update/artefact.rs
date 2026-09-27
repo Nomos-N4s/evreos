@@ -60,7 +60,9 @@ impl std::error::Error for ArtefactRefusal {}
 /// `now`, in seconds since 1970-01-01 UTC, is checked against the
 /// manifest's `not after` again before anything is read, since an offer
 /// can be held while its artefact is fetched, and the manifest may expire
-/// in that time.
+/// in that time. So `now` is taken once the artefact is fetched, and
+/// `reader` reads the fetched copy: a reader that fetches as it goes would
+/// be checked against the time the fetch began.
 ///
 /// The check covers the bytes read here. What applies the update must apply
 /// those bytes, from a copy only the updater writes, and not reopen a path
