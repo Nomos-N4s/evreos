@@ -1219,6 +1219,20 @@ fn reach_violations(source: &str, at_root: bool) -> Vec<String> {
             {
                 found.push(format!("calls `{word}`, which writes"));
             }
+            // `OpenOptionsExt` passes flags to the open as they are, and
+            // `O_CREAT` or `O_TRUNC` among them would create a file or empty
+            // it on a read-only open. The copy passes `O_NONBLOCK` alone, so
+            // that is the one argument allowed, and no mode is set at all.
+            "custom_flags"
+                if !(punct(i + 1, '(')
+                    && ident(i + 2) == Some("O_NONBLOCK")
+                    && punct(i + 3, ')')) =>
+            {
+                found.push("`custom_flags` with anything but `O_NONBLOCK`".to_string());
+            }
+            "mode" if punct(i.wrapping_sub(1), '.') => {
+                found.push("sets a file's mode".to_string());
+            }
             // A macro named without a path, from anywhere in the crate.
             // A raw identifier is never a keyword, so `r#match!` is a macro,
             // and none of the standard library's is invoked that way.
@@ -1335,6 +1349,18 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
             false,
         ),
         ("use std::io::*;", false),
+        (
+            "fn f(o: &mut std::fs::OpenOptions) { o.custom_flags(0o100 | 0o1000); }",
+            false,
+        ),
+        (
+            "fn f(o: &mut std::fs::OpenOptions) { o.custom_flags(O_NONBLOCK | 0o100); }",
+            false,
+        ),
+        (
+            "fn f(o: &mut std::fs::OpenOptions) { o.mode(0o755); }",
+            false,
+        ),
         ("use super::*;", false),
         (
             "#[cfg(test)]\nmod tests { #[test] fn t() {} }\nfn leak() { crate::tabs::g() }",
@@ -1352,6 +1378,10 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("pub(crate) fn f() {} pub(super) fn g() {}", false),
         ("pub(in crate) fn f() {}", false),
         ("fn f() { use std::os::unix::fs::OpenOptionsExt; }", false),
+        (
+            "fn f(o: &mut std::fs::OpenOptions) { o.custom_flags(O_NONBLOCK); }",
+            false,
+        ),
         ("fn f() -> u8 { super::g() }", false),
         (
             "fn g<T: super::snapshot::FileSource>(x: super::json::Json) -> u8 { 0 }",

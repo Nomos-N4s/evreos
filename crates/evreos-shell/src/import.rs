@@ -31,13 +31,13 @@
 //!   its folders, so not `evreos-net`, and no crate through `extern`;
 //! - it names neither `std::net` nor `std::process`, so opens no socket and
 //!   starts no process, and no part of `std::os` but the Unix
-//!   `OpenOptionsExt`;
+//!   `OpenOptionsExt`, whose `custom_flags` it may pass `O_NONBLOCK` alone;
 //! - it reaches no part of this crate but the stores, by `crate::store` or by
 //!   `super` no further up than the import itself;
 //! - it imports nothing by a glob, and groups nothing directly under `std`;
 //! - it writes no file but the member's stores, through them, and calls
 //!   nothing of the standard library's that writes, creates, removes or
-//!   renames a file, or changes one's permissions;
+//!   renames a file, or changes one's permissions or mode;
 //! - it loads no file but its own five modules, through no `#[path]` and no
 //!   `cfg_attr`, and invokes no macro by `name!` but a short list of the
 //!   standard library's, which no `macro_rules!` in the crate may shadow;
