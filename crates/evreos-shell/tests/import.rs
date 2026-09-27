@@ -561,6 +561,38 @@ fn scope_limits_what_is_read_and_written() {
 }
 
 #[test]
+fn a_job_run_again_counts_only_its_new_run() {
+    let (root, mut stores, mut job) = import(chrome(), Language::En);
+    assert_eq!(job.counts().history_imported, 1503);
+    let _ = job.start_reading();
+    assert_eq!(job.state(), ImportState::Reading);
+    assert_eq!(
+        job.counts().history_imported,
+        0,
+        "a new read counts from zero"
+    );
+    assert_eq!(job.counts().bookmarks_imported, 0);
+    let failed = job.finish(
+        Err(ImportError::ProfileMissing),
+        &mut stores,
+        Language::En,
+        SystemTime::now(),
+    );
+    assert!(matches!(failed, Err(ImportError::ProfileMissing)));
+    assert_eq!(
+        job.state(),
+        ImportState::Failed(ImportFailure::ProfileMissing)
+    );
+    assert_eq!(
+        job.counts().history_imported,
+        0,
+        "a failed run wrote nothing"
+    );
+    assert_eq!(job.counts().bookmarks_imported, 0);
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn a_missing_profile_fails_and_writes_nothing() {
     let root = temp_dir("missing");
     let mut stores = StoreRegistry::open(&root);

@@ -249,7 +249,8 @@ impl ImportScope {
     };
 }
 
-/// Rows written by one job.
+/// Rows written by one job, as it reports them once its write succeeds; a
+/// failed write reports none, even one whose rows could not be rolled back.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct ImportCounts {
     /// Bookmark rows written.
@@ -656,6 +657,8 @@ impl ImportJob {
     /// Mark the job reading and hand out the read, for the worker pool.
     pub fn start_reading(&mut self) -> ReadRequest {
         self.state = ImportState::Reading;
+        // A job run again counts the new run only.
+        self.counts = ImportCounts::default();
         ReadRequest {
             profile: self.profile.clone(),
             scope: self.scope,
@@ -681,7 +684,10 @@ impl ImportJob {
                 self.counts = *counts;
                 self.state = ImportState::Written;
             }
-            Err(error) => self.state = ImportState::Failed(error.failure()),
+            Err(error) => {
+                self.counts = ImportCounts::default();
+                self.state = ImportState::Failed(error.failure());
+            }
         }
         result
     }
