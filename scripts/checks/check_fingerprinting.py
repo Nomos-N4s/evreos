@@ -204,8 +204,8 @@ a fixed workload to fingerprint the processor.
 The locale is not read. Research section 4.3 lists it among the fields FR-036a
 rules out, but T061's enumeration leaves it out, so a read of the system locale
 rests on review under FR-036a. The member's interface language is a different
-value: FR-035 keeps it as a preference the member chooses, stored in the
-profile, and never read from the device.
+value: FR-035 keys it by the primary language subtag alone and keeps it apart
+from place wherever either appears.
 
 A device provisioning identifier a content-protection path would require --
 the last item research section 4.3 lists -- is not read. ADR-0001 risk 8
