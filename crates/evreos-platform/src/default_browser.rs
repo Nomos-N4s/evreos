@@ -66,8 +66,10 @@ pub enum InvalidApplication {
     NameTooLong,
     /// The description is empty, or holds a control character.
     Description,
-    /// The executable is not an absolute Windows path, or holds a quote or a
-    /// control character, either of which would break the command line.
+    /// The executable is not an absolute Windows path, or holds a quote, a
+    /// `%` or a control character. A quote or a control character would
+    /// break the command line, and a `%` could be read as the `%1` Windows
+    /// replaces with the address being opened.
     Executable,
 }
 
@@ -274,14 +276,18 @@ fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Resu
 /// Whether `path` is an absolute Windows path that can sit between quotes on
 /// a command line: on a drive (`C:\`), or on a share (`\\server\`) whose
 /// server name starts with a letter or digit, so never a `\\?\` or `\\.\`
-/// device path.
+/// device path; and holding no `%`, which Windows would read as the start of
+/// a placeholder such as `%1`.
 fn is_plain_absolute(path: &str) -> bool {
     let rooted = match path.as_bytes() {
         [drive, b':', b'\\', ..] => drive.is_ascii_alphabetic(),
         [b'\\', b'\\', server, ..] => server.is_ascii_alphanumeric(),
         _ => false,
     };
-    rooted && !path.chars().any(|ch| ch == '"' || ch.is_control())
+    rooted
+        && !path
+            .chars()
+            .any(|ch| ch == '"' || ch == '%' || ch.is_control())
 }
 
 /// How FR-013 is met on the platform this was built for.

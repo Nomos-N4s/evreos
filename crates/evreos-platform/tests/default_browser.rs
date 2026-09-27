@@ -350,6 +350,13 @@ fn an_application_that_cannot_be_registered_writes_nothing() {
         ),
         (
             Application {
+                executable: r"C:\x%1y\sample.exe",
+                ..APP
+            },
+            InvalidApplication::Executable,
+        ),
+        (
+            Application {
                 executable: r#"C:\a"b\sample.exe"#,
                 ..APP
             },
