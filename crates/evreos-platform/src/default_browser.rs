@@ -1,0 +1,244 @@
+//! FR-013: making Evreos the default browser from within it.
+//!
+//! No platform lets a third-party browser make itself the default. On tier 1
+//! (Windows) the most a browser can do is register itself so that it appears
+//! in the system's list of browsers at all, and then open the system's
+//! default-apps page, where the member makes the choice (research §10.2).
+//! This module does both.
+//!
+//! **Registration** is a fixed set of string values under the current user's
+//! hive: the browser's entry under `Software\Clients\StartMenuInternet`, its
+//! `Capabilities` naming a ProgID for `http`, `https`, `.htm` and `.html`,
+//! the two ProgIDs under `Software\Classes`, and one value under
+//! `Software\RegisteredApplications` pointing at those capabilities. It is
+//! written per user, so it needs no elevation. [`register`] writes it and
+//! [`unregister`] removes it: the three keys this module owns, whole, and
+//! its one value under `RegisteredApplications`, which other applications
+//! share. Neither touches anything else, so an uninstall leaves the
+//! member's own choice of default, and every other browser's registration,
+//! as it found them.
+//!
+//! Both go through [`Registry`], so the set of values is decided here, on
+//! every platform, and tested on every platform; a platform binding only
+//! stores strings.
+//!
+//! No brand name appears here (FR-042). The product name reaches this module
+//! as [`Application::name`], from the shell's brand configuration, and every
+//! key and ProgID is derived from it.
+
+use std::fmt;
+use std::io;
+
+/// The browser being registered.
+#[derive(Clone, Copy, Debug)]
+pub struct Application<'a> {
+    /// The product name, from the brand configuration. Shown in the system's
+    /// list of browsers, and the source of every key and ProgID.
+    pub name: &'a str,
+    /// One sentence the system may show beside the name, already in the
+    /// member's language.
+    pub description: &'a str,
+    /// The absolute path of the browser's executable.
+    pub executable: &'a str,
+}
+
+/// Why an [`Application`] cannot be registered.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InvalidApplication {
+    /// The name holds no ASCII letter or digit to derive a key from.
+    NameWithoutKey,
+    /// The key derived from the name is longer than a ProgID allows.
+    NameTooLong,
+    /// The description is empty, or holds a control character.
+    Description,
+    /// The executable is not an absolute Windows path, or holds a quote or a
+    /// control character, either of which would break the command line.
+    Executable,
+}
+
+impl fmt::Display for InvalidApplication {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Self::NameWithoutKey => "the name holds no ASCII letter or digit",
+            Self::NameTooLong => "the key derived from the name is too long",
+            Self::Description => "the description is empty or holds a control character",
+            Self::Executable => "the executable is not a plain absolute path",
+        })
+    }
+}
+
+impl std::error::Error for InvalidApplication {}
+
+impl From<InvalidApplication> for io::Error {
+    fn from(invalid: InvalidApplication) -> Self {
+        io::Error::new(io::ErrorKind::InvalidInput, invalid)
+    }
+}
+
+/// A store of string values under the current user's hive, addressed by a
+/// key path below it with `\` between its parts.
+///
+/// An empty value name is the key's default value.
+pub trait Registry {
+    /// Sets a string value, creating the key and every key above it.
+    fn set_string(&mut self, key: &str, name: &str, value: &str) -> io::Result<()>;
+    /// Removes a key with everything below it. A key that does not exist is
+    /// not an error.
+    fn remove_key(&mut self, key: &str) -> io::Result<()>;
+    /// Removes one value, leaving its key and the key's other values. A key
+    /// or value that does not exist is not an error.
+    fn remove_value(&mut self, key: &str, name: &str) -> io::Result<()>;
+}
+
+/// The key under which applications register their capabilities.
+pub const REGISTERED_APPLICATIONS: &str = r"Software\RegisteredApplications";
+
+/// The longest a ProgID may be, in characters.
+const PROGID_MAX: usize = 39;
+/// The suffixes this module appends to the key to name its two ProgIDs.
+const HTML_SUFFIX: &str = "HTML";
+const URL_SUFFIX: &str = "URL";
+
+/// One string value [`register`] writes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Value {
+    /// The key path below the current user's hive.
+    pub key: String,
+    /// The value name; empty for the key's default value.
+    pub name: String,
+    /// The string stored.
+    pub data: String,
+}
+
+/// Everything registration writes, and what removing it deletes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Registration {
+    /// The name the registration is filed under: the product name's ASCII
+    /// letters and digits, in order.
+    pub key: String,
+    /// Every value written, in the order [`register`] writes them.
+    pub values: Vec<Value>,
+    /// The keys this registration owns, which [`unregister`] removes whole.
+    pub owned_keys: Vec<String>,
+}
+
+impl Registration {
+    /// The registration for `app`, checked before anything is written.
+    pub fn of(app: &Application<'_>) -> Result<Self, InvalidApplication> {
+        let key: String = app
+            .name
+            .chars()
+            .filter(char::is_ascii_alphanumeric)
+            .collect();
+        if key.is_empty() {
+            return Err(InvalidApplication::NameWithoutKey);
+        }
+        if key.len() + HTML_SUFFIX.len().max(URL_SUFFIX.len()) > PROGID_MAX {
+            return Err(InvalidApplication::NameTooLong);
+        }
+        if app.description.is_empty() || app.description.chars().any(char::is_control) {
+            return Err(InvalidApplication::Description);
+        }
+        if !is_plain_absolute(app.executable) {
+            return Err(InvalidApplication::Executable);
+        }
+
+        let client = format!(r"Software\Clients\StartMenuInternet\{key}");
+        let capabilities = format!(r"{client}\Capabilities");
+        let html = format!("{key}{HTML_SUFFIX}");
+        let url = format!("{key}{URL_SUFFIX}");
+        let html_class = format!(r"Software\Classes\{html}");
+        let url_class = format!(r"Software\Classes\{url}");
+        let icon = format!("\"{}\",0", app.executable);
+        let launch = format!("\"{}\"", app.executable);
+        let open = format!("\"{}\" \"%1\"", app.executable);
+
+        let mut values = Vec::new();
+        let mut set = |key: &str, name: &str, data: &str| {
+            values.push(Value {
+                key: key.to_string(),
+                name: name.to_string(),
+                data: data.to_string(),
+            });
+        };
+        set(&client, "", app.name);
+        set(&capabilities, "ApplicationName", app.name);
+        set(&capabilities, "ApplicationDescription", app.description);
+        set(&capabilities, "ApplicationIcon", &icon);
+        let files = format!(r"{capabilities}\FileAssociations");
+        set(&files, ".htm", &html);
+        set(&files, ".html", &html);
+        let urls = format!(r"{capabilities}\URLAssociations");
+        set(&urls, "http", &url);
+        set(&urls, "https", &url);
+        set(
+            &format!(r"{capabilities}\StartMenu"),
+            "StartMenuInternet",
+            &key,
+        );
+        set(&format!(r"{client}\DefaultIcon"), "", &icon);
+        set(&format!(r"{client}\shell\open\command"), "", &launch);
+        for class in [&html_class, &url_class] {
+            set(class, "", app.name);
+            set(&format!(r"{class}\DefaultIcon"), "", &icon);
+            set(&format!(r"{class}\shell\open\command"), "", &open);
+        }
+        set(&url_class, "URL Protocol", "");
+        // Last, so the system never lists capabilities that are not yet all
+        // written.
+        set(REGISTERED_APPLICATIONS, &key, &capabilities);
+
+        Ok(Self {
+            key,
+            values,
+            owned_keys: vec![client, html_class, url_class],
+        })
+    }
+}
+
+/// Registers `app` so that the system lists it as a browser.
+///
+/// If a write fails, everything this registration owns is removed again, so
+/// a failed registration leaves nothing listed, and the write's error is
+/// returned.
+pub fn register(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
+    let registration = Registration::of(app)?;
+    for value in &registration.values {
+        if let Err(error) = registry.set_string(&value.key, &value.name, &value.data) {
+            let _ = remove(registry, &registration);
+            return Err(error);
+        }
+    }
+    Ok(())
+}
+
+/// Removes what [`register`] wrote for `app`, as an uninstall must.
+///
+/// Registering an application that was never registered, or removing it
+/// twice, is not an error.
+pub fn unregister(registry: &mut impl Registry, app: &Application<'_>) -> io::Result<()> {
+    remove(registry, &Registration::of(app)?)
+}
+
+fn remove(registry: &mut impl Registry, registration: &Registration) -> io::Result<()> {
+    // The pointer first, so the system never lists capabilities that are
+    // half removed.
+    registry.remove_value(REGISTERED_APPLICATIONS, &registration.key)?;
+    for key in &registration.owned_keys {
+        registry.remove_key(key)?;
+    }
+    Ok(())
+}
+
+/// Whether `path` is an absolute Windows path that can sit between quotes on
+/// a command line: on a drive (`C:\`), or on a share (`\\server\`) whose
+/// server name starts with a letter or digit, so never a `\\?\` or `\\.\`
+/// device path.
+fn is_plain_absolute(path: &str) -> bool {
+    let rooted = match path.as_bytes() {
+        [drive, b':', b'\\', ..] => drive.is_ascii_alphabetic(),
+        [b'\\', b'\\', server, ..] => server.is_ascii_alphanumeric(),
+        _ => false,
+    };
+    rooted && !path.chars().any(|ch| ch == '"' || ch.is_control())
+}

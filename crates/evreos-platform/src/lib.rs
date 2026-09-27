@@ -7,3 +7,5 @@
 //! platform that needs it by a target-specific dependency table, and the
 //! change that adds a binding states its byte cost against `budgets.toml`.
 #![forbid(unsafe_code)]
+
+pub mod default_browser;
