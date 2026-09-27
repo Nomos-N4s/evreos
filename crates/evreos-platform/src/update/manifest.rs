@@ -14,8 +14,10 @@ pub const ROLLOUT_WHOLE: u32 = 1_000_000;
 const SIGNATURE_LEN: usize = 64;
 const PLATFORM_MAX: usize = 64;
 
-/// The key update manifests are verified against, pinned in the shipped
-/// binary as a build constant.
+/// The key update manifests are verified against. The design pins it in
+/// the shipped binary as a build constant, which the shell passes to
+/// [`UpdateKey::from_bytes`]; no such constant exists yet, since its value
+/// belongs to the signing procedure T171 records.
 #[derive(Clone, Copy, Debug)]
 pub struct UpdateKey(VerifyingKey);
 

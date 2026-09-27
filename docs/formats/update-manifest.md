@@ -81,6 +81,8 @@ name it as it names the trust root and the receiving service's key. It cannot be
 fetched, replaced or extended at runtime. It is rotated only by a release that
 pins the new key, signed under the old one. Which key, who holds it and how it
 is kept belong to the signing procedure T171 records, not to this document.
+Until it records one, no key is pinned: the client takes the key as a
+parameter, which the shell will supply from that constant.
 
 ## What is not in the manifest
 
