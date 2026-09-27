@@ -53,9 +53,9 @@ It reads the tree and fails on:
                 whatever its suffix, and one it embeds through `include_str!`
                 is read whole, like script; one outside the tree is reported,
                 since nothing in it can be answered for. A literal's `\\x` and
-                `\\u{...}` escapes are decoded before matching, so a name
-                spelled with an escape -- `"/etc/machine\\x2did"` -- is the
-                same name.
+                `\\u{...}` escapes, and script's `\\uHHHH` too, are decoded
+                before matching, so a name spelled with an escape --
+                `"/etc/machine\\x2did"` -- is the same name.
                 Script and markup the shell could ship -- `.js`, `.mjs`,
                 `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
                 whole, comments included: there is no shared scanner for
@@ -517,10 +517,10 @@ SOURCES = {
     ),
 }
 
-# An escape inside a Rust literal that spells one character: `\x2d`,
-# `\u{69}`. An escaped backslash is matched first, so `\\x2d` stays the four
-# characters it is.
-ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\})")
+# An escape that spells one character: `\x2d` and `\u{69}` in a Rust literal,
+# and those and `\u0043` in script. An escaped backslash is matched first, so
+# `\\x2d` stays the four characters it is.
+ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\}|u[0-9A-Fa-f]{4})")
 
 # What a Rust file brings into the build under a name of its own choosing,
 # resolved against that file's directory, as Rust resolves both: a file
@@ -825,7 +825,7 @@ def check_tree(root, allowlist_path=ALLOWLIST):
         except Unreadable as error:
             problems.append(f"{where}: {error}, so it is not {what} this check can read")
             return
-        for number, category, name in sources_in(text):
+        for number, category, name in sources_in(decode_escapes(text)):
             found(where, number, category, name)
 
     def found(where, number, category, name):

@@ -529,6 +529,18 @@ report("...while destructuring a property no source names is not",
        not mentions(problems, "destructure.js:5"))
 
 problems = tree(passing_tree({
+    "crates/x/ui/escaped.js": (
+        "const a = navigator['hardware\\x43oncurrency'];\n"
+        "const b = navigator.hardware\\u0043oncurrency;\n"
+        "const c = navigator['device\\u{4d}emory'];\n"
+    ),
+}))[0]
+report("a source name spelled with script's escapes is the same name",
+       mentions(problems, "escaped.js:1", "'hardwareConcurrency'")
+       and mentions(problems, "escaped.js:2", "'hardwareConcurrency'")
+       and mentions(problems, "escaped.js:3", "'deviceMemory'"))
+
+problems = tree(passing_tree({
     "crates/x/ui/notes.js": "// performance.now would be a correlator here\n",
 }))[0]
 report("a source named in a script comment fails, the loud direction by design",
