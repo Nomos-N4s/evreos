@@ -21,7 +21,7 @@ A docstring or code comment states what the code does -- its inputs, outputs,
 effects and limits -- briefly. The reason for a rule lives in the document that
 makes it -- the constitution, the specification or its plan and research, a
 decision record, an ADR or `CLAUDE.md` -- and is cited by its identifier, never
-paraphrased or argued afresh. No docstring claims a guarantee
+paraphrased or argued afresh. No docstring or comment claims a guarantee
 beyond what the code it documents does.
 
 The rule binds a file when a change edits it. Existing docstrings are brought
