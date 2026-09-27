@@ -651,3 +651,39 @@ fn a_renamed_product_leaves_one_value_and_its_removal_leaves_none() {
     unregister(&mut registry, &APP).unwrap();
     assert_eq!(registry.keys, untouched.keys);
 }
+
+/// On a hive holding nothing, registration creates the keys above its own,
+/// `Software\Clients` among them, and neither a failed registration nor an
+/// uninstall removes those, since other applications may come to share
+/// them. What is left is empty keys: no value, and nothing listed.
+#[test]
+fn on_an_empty_hive_only_empty_parent_keys_are_left() {
+    let parents = [
+        "software",
+        r"software\clients",
+        r"software\clients\startmenuinternet",
+        r"software\classes",
+        r"software\registeredapplications",
+    ];
+    let left = |registry: &Memory| {
+        for (key, values) in &registry.keys {
+            assert!(values.is_empty(), "{key} kept {values:?}");
+            assert!(parents.contains(&key.as_str()), "{key} was left behind");
+        }
+    };
+
+    let count = Registration::of(&APP).unwrap().values.len();
+    for fail_at in 0..count {
+        let mut registry = Memory {
+            fail_at: Some(fail_at),
+            ..Memory::default()
+        };
+        register(&mut registry, &APP).unwrap_err();
+        left(&registry);
+    }
+
+    let mut registry = Memory::default();
+    register(&mut registry, &APP).unwrap();
+    unregister(&mut registry, &APP).unwrap();
+    left(&registry);
+}
