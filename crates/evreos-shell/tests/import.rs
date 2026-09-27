@@ -1004,6 +1004,14 @@ fn tokens(source: &str) -> Vec<Tok> {
     out
 }
 
+/// The attributes the import's shipped code may use, each the language's
+/// own and named bare. An attribute can be a macro, and one the stores
+/// re-exported, `#[crate::store::hook]` or a bare `#[hook]` brought in by
+/// `use`, could rewrite the item it sits on.
+const ATTRIBUTES: &[&str] = &[
+    "allow", "cfg", "deny", "derive", "forbid", "inline", "must_use", "warn",
+];
+
 /// The derives the import's shipped code may use, the standard library's. A
 /// derive is a macro too, and one the stores re-exported could run any code.
 const DERIVES: &[&str] = &[
@@ -1246,6 +1254,19 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
         if punct(i, '*') && ((i >= 2 && path_sep(i - 2)) || in_path_group(i)) {
             found.push("a glob import".to_string());
         }
+        // An attribute, outer or inner, names one of the language's own.
+        if punct(i, '#') {
+            let open = if punct(i + 1, '!') { i + 2 } else { i + 1 };
+            if punct(open, '[') {
+                let name = ident(open + 1);
+                if raw(open + 1)
+                    || path_sep(open + 2)
+                    || !name.is_some_and(|name| ATTRIBUTES.contains(&name))
+                {
+                    found.push(format!("the attribute {:?}", toks.get(open + 1)));
+                }
+            }
+        }
         let Some(word) = ident(i) else {
             continue;
         };
@@ -1372,12 +1393,14 @@ fn reach_violations_in(source: &str, at_root: bool, defines_flag: bool) -> Vec<S
             "mode" if punct(i.wrapping_sub(1), '.') || punct(i.wrapping_sub(1), ':') => {
                 found.push("sets a file's mode".to_string());
             }
-            // A name the import may invoke as a macro, or derive, is the
-            // standard library's only while nothing brings in another under
-            // it: a path that ends in it, `use crate::store::format;` or
-            // `crate::store::format!()`, or a rename to it, could reach a
-            // macro the stores re-export.
-            _ if (MACROS.contains(&word) || DERIVES.contains(&word))
+            // A name the import may invoke as a macro, derive or use as an
+            // attribute is the language's only while nothing brings in
+            // another under it: a path that ends in it,
+            // `use crate::store::format;` or `crate::store::format!()`, or a
+            // rename to it, could reach a macro the stores re-export.
+            _ if (MACROS.contains(&word)
+                || DERIVES.contains(&word)
+                || ATTRIBUTES.contains(&word))
                 && (path_sep(i.wrapping_sub(2))
                     || in_path_group(i)
                     || matches!(ident(i.wrapping_sub(1)), Some("use" | "as"))) =>
@@ -1489,6 +1512,18 @@ fn the_reach_check_sees_through_literals_spacing_and_renames() {
         ("fn f() { if !some_macro![] {} }", false),
         ("fn f() { r#match!() }", false),
         ("fn f() -> String { r#format!(\"x\") }", false),
+        ("use crate::store::hook; #[hook] fn f() {}", false),
+        ("#[crate::store::hook] fn f() {}", false),
+        ("#[r#inline] fn f() {}", false),
+        ("#![crate::store::hook]", false),
+        (
+            "use crate::store::Hook; #[core::prelude::v1::derive(Hook)] struct S;",
+            false,
+        ),
+        (
+            "use crate::store::hook as inline; #[inline] fn f() {}",
+            false,
+        ),
         ("use self::{std::fs::File};", false),
         ("use super::{std::fs::File};", true),
         ("use crate::store::{core::X};", false),
@@ -1676,9 +1711,10 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
                 _ => continue,
             };
             assert_ne!(word, "macro_use", "{}", file.display());
-            // A macro can take one of those names, or a derive's, by being
-            // defined under it, by `macro_rules!` or `macro`, or by being
-            // renamed to it with `as`, as a re-export would be.
+            // A macro can take one of those names, a derive's or an
+            // attribute's, by being defined under it, by `macro_rules!` or
+            // `macro`, or by being renamed to it with `as`, as a re-export
+            // would be.
             let named = if word == "macro_rules" && toks.get(i + 1) == Some(&Tok::Punct('!')) {
                 toks.get(i + 2)
             } else if word == "macro" || word == "as" {
@@ -1689,7 +1725,9 @@ fn no_macro_in_the_crate_takes_a_name_the_import_may_invoke() {
             if let Some(Tok::Ident(name)) = named {
                 let name = name.strip_prefix("r#").unwrap_or(name);
                 assert!(
-                    !MACROS.contains(&name) && !DERIVES.contains(&name),
+                    !MACROS.contains(&name)
+                        && !DERIVES.contains(&name)
+                        && !ATTRIBUTES.contains(&name),
                     "{} gives a macro the name `{name}`, which the import may invoke",
                     file.display()
                 );
