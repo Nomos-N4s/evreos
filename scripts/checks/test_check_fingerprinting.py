@@ -4,6 +4,8 @@ build over a read of a device, display, font, network or timing
 characteristic, so its own behaviour is checked rather than assumed -- above
 all that it FAILS: a clean tree passes, and a read of every category the check
 covers fails.
+The same read hashed under a rotating salt fails too, because FR-036a binds on
+the derivation and not on what it produces.
 
 The sources quoted in this file are Python string literals; the check reads
 Rust source, never Python, so quoting them here is not a breach and needs no
@@ -198,6 +200,27 @@ report("a failure names the line the read is on", mentions(problems, "probe.rs:3
 problems = tree(passing_tree({"crates/x/notes.md": "MachineGuid, /etc/machine-id\n",
                               "crates/x/tool.py": "GetVolumeInformationW()\n"}))[0]
 report("markdown and Python are not read", problems == [])
+
+# --- the rotating salt: the derivation is caught, not its lifetime -----------
+
+ROTATING_SALT = (
+    "/// A per-install key, re-derived every day under a fresh salt, so no\n"
+    "/// value it produces outlives the day it was made.\n"
+    "pub fn daily_install_key(day: u32) -> [u8; 32] {\n"
+    '    let guid = registry.get_string("MachineGuid");\n'
+    "    let salt = day.to_be_bytes();\n"
+    "    sha256(&[guid.as_bytes(), &salt].concat())\n"
+    "}\n"
+)
+problems = tree(with_rust(ROTATING_SALT))[0]
+report("a value re-derived under a daily-rotated salt is caught by the same rule",
+       mentions(problems, "probe.rs:4", "'MachineGuid'"))
+
+problems = tree(with_rust(
+    "fn bucket(salt: u64) -> u64 { hash(salt ^ mach_absolute_time()) % 100 }\n"
+))[0]
+report("a rollout bucket drawn from a timing counter and a salt fails",
+       mentions(problems, "high-resolution timing correlator", "'mach_absolute_time'"))
 
 # --- unreadable input and an unreached verdict -------------------------------
 
