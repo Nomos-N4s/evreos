@@ -145,6 +145,31 @@ jobs:
       - name: The complete fixture brand builds under the same gate
         run: cargo build --release -p evreos-shell --features fixture-brand
 
+  platform-windows:
+    name: Platform services on Windows
+    # crates/evreos-platform reaches the Windows registry through code built
+    # for Windows alone, so the build job above never compiles it, and its
+    # tests there run against an in-memory registry. This job lints and tests
+    # the crate where the binding is live: the default-browser test registers
+    # under a scratch key below the runner's own hive, reads every value
+    # back, and unregisters. Only this crate is tested here; the rest of the
+    # workspace's tests are the build job's.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the pinned toolchain
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+          rustc --version
+
+      - name: Lint
+        run: cargo clippy -p evreos-platform --all-targets -- -D warnings
+
+      - name: Test
+        run: cargo test -p evreos-platform
+
   release:
     name: Release
     # A commit on main is the only release candidate, so this job runs on the
