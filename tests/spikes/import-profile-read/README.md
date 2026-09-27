@@ -21,7 +21,8 @@ with the crate, so neither can drift from the code it measures.
 
 A run, per browser. The record's live table has two runs for Chrome and
 for Edge: one with history writes only, which is this run without
-`cdp_bookmarks.mjs` and on its own profile directory, and one with it:
+`cdp_bookmarks.mjs` and with `/tmp/ph` and `/tmp/eh` as the profile
+directories, and one with it, on `/tmp/p` and `/tmp/e`:
 
 ```
 python3 pages.py 8765 150 &
@@ -73,9 +74,12 @@ python3 synth_naive.py wal /tmp/w2 60
 ```
 
 The read, write and batch times, each run three times with the browsers
-stopped, over the profiles the runs above left and the synthetic one:
+stopped, over the five profiles the runs above left and the synthetic one.
+The row and bookmark counts they print are the record's cross-check:
 
 ```
+cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/ph/Default
+cargo run --release -p evreos-shell --example import_timing -- edge /tmp/eh/Default
 cargo run --release -p evreos-shell --example import_timing -- chrome /tmp/p/Default
 cargo run --release -p evreos-shell --example import_timing -- edge /tmp/e/Default
 cargo run --release -p evreos-shell --example import_timing -- firefox /tmp/f
