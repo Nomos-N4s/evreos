@@ -1,0 +1,15 @@
+# Uses of a fingerprinting source FR-036a permits, one per line as
+# `<path> <source>`: the repository-relative path of the file that reads it and
+# the source's name exactly as scripts/checks/check_fingerprinting.py reports
+# it. Read by that check on every run.
+#
+# An entry records a use taken, not one granted ahead of it: the check fails on
+# an entry that permits nothing in the tree, so the entry lands in the same
+# commit as the read it answers and never before it. An entry says the read
+# derives no identifier or correlator for a device or a member; it cannot
+# license a derivation, which FR-036a forbids with no consent exception and no
+# diagnostic exception. Empty in v1, by design, so the first entry is a visible
+# diff in this file, and the pull request that writes it says why that read is
+# not a derivation -- the reasoning it must meet is FR-036a in
+# specs/001-evreos-v1/spec.md and section 4.3 of
+# specs/001-evreos-v1/research.md.

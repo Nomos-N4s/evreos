@@ -1,0 +1,1262 @@
+#!/usr/bin/env python3
+"""Enforce FR-036a's fingerprinting prohibition, over the whole tree.
+
+WHAT THIS CHECKS, and why it reads for sources rather than for identifiers.
+
+FR-036a: neither the shell nor any app it hosts may derive, store or transmit
+any identifier or correlator for a device or a member from device, display,
+font, network or timing characteristics, or from any combination of them,
+however long it persists. "Stable" is not the test: a value re-derived from the
+same characteristics under a salt rotated daily identifies the member all the
+same, so the prohibition binds on the DERIVATION and not on the lifetime of what
+it produces. Research section 4.3 reads that against what a browser does by
+default -- the hardware-seeded install identifier an update client, a rollout
+bucket or a crash grouper reaches for, and the device fields every crash
+reporter ships -- and this check is the half of it a scanner can carry.
+
+A derivation needs an input, and the input is where the scanner can see it. So
+the rule is on the SOURCE: every read of a characteristic listed below fails
+the build wherever it appears, whatever is done with the value afterwards.
+Hashing it, salting it, rotating the salt, keeping it in memory only, or never
+sending it changes nothing here, which is exactly FR-036a's point: the check
+does not ask how long a value lives, so a rotating salt has nothing to argue
+with. What a pass shows is that no direct read of these sources appears
+anywhere the check reads -- the update client, the staged-rollout draw and the
+shell among them; the draw is a random number (`getrandom`), which is not a
+characteristic of the device and is not read here. That none of them holds a
+value derived from these sources is the check and review together: the routes
+a scanner cannot see are listed under WHAT THIS DOES NOT CATCH, and rest on
+review.
+
+A use that is not a derivation -- and there will be some: a history view that
+shows local time needs the timezone -- is not waved through by a pattern. It is
+listed, by file and by source, in scripts/checks/fingerprinting-allowlist.txt,
+which is empty in v1 so that the first entry lands as a visible diff and the
+pull request that writes it says why that read derives nothing. An entry is a
+use taken, not one granted ahead of it: an entry that permits nothing the tree
+does fails, so the list cannot outlive the code it excused.
+
+It reads the tree and fails on:
+
+  SOURCE        a read of one of the characteristics below, in Rust source,
+                with comments stripped and string literals kept through
+                rustlex: the paths and registry names these reads use live
+                inside strings, so blanking strings would blank the evidence,
+                and a script the shell injects is a string too. The
+                script-shaped sources -- `screen.`, `window.screen`,
+                `document.fonts`, `performance.now`, `performance.timeOrigin`
+                and `navigator.connection` -- are dotted paths an ordinary
+                Rust field access can spell, `self.screen.width` among them,
+                so in Rust they are matched inside string literals only,
+                where an injected script lives. A file a Rust file compiles
+                in through `include!` or `#[path = ...]`, `cfg_attr`'s
+                included and resolved as Rust resolves it inside an inline
+                module, is read as Rust whatever its suffix, and one it
+                embeds through `include_str!` or `include_bytes!` is read
+                whole, like script, bytes that are not UTF-8 decoded as
+                `String::from_utf8_lossy` decodes them; one outside the tree,
+                or not a file there, is reported, since nothing in it can be
+                answered for. A path built as
+                `concat!(env!("CARGO_MANIFEST_DIR"), "...")` is followed from
+                the package's directory; one built any other way, from
+                `OUT_DIR` among them, is not, and what it brings in rests on
+                review. A crate root or build script a `Cargo.toml` names by
+                `path` or `build` is read as Rust too, since Cargo compiles it
+                whatever its suffix.
+                A literal's `\\x` and `\\u{...}` escapes, and script's
+                `\\uHHHH` too, are decoded before matching and its line
+                continuations joined, so a name spelled with an escape --
+                `"/etc/machine\\x2did"` -- or split by a backslash at a line's
+                end is the same name.
+                Script and markup the shell could ship -- `.js`, `.mjs`,
+                `.cjs`, `.ts`, `.mts`, `.cts`, `.html`, `.htm` -- are read
+                whole, comments included: there is no shared scanner for
+                those languages, and a mention in a comment failing loudly is
+                the safer direction than a read hidden behind a string that
+                looks like a comment opener.
+                Every source is matched as a whole token with case folded,
+                because registry names and paths are case-insensitive on the
+                release platforms and a spelling nobody used is still the same
+                key -- except where a name's case is what tells it from
+                ordinary code: chrono's `Local`, macOS's `hostName` and the
+                `HOSTNAME` and `TZ` variables are matched in their own case. A
+                Windows environment variable, which Windows reads in any case,
+                is matched as a bare token in upper case, and in any case as a
+                whole quoted literal, a `%NAME%` expansion or an `env.NAME`
+                property.
+
+    machine and volume identifiers
+                the Windows MachineGuid and the Cryptography key that holds
+                it, `/etc/machine-id` and the D-Bus copy of it, the host id
+                (`gethostid`, `/etc/hostid`) and the per-boot `boot_id`, the
+                macOS platform UUID and serial number, the SMBIOS and DMI
+                tables and the serial fields read from them -- directly or
+                through `dmidecode`, `wmic`, `ioreg` and `system_profiler`
+                -- the WMI hardware classes, the WinRT hardware and system
+                identifiers and the advertising identifier, the device
+                model, also as script reads it through
+                `getHighEntropyValues`, the host name -- through the
+                platform APIs, POSIX `uname` and its `nodename`,
+                `/proc/sys/kernel/hostname`, the macOS host-name calls, the
+                Windows `COMPUTERNAME`, `USERDOMAIN` and `LOGONSERVER`
+                variables and the POSIX `HOSTNAME` one -- and volume serial
+                numbers and UUIDs.
+    MAC addresses and network characteristics
+                the adapter tables and ioctls that yield a MAC address or the
+                machine's own interface addresses, `/sys/class/net`, the ARP
+                table in `/proc/net/arp`, the `getmac`, `ifconfig`,
+                `ipconfig` and `networksetup` tools, Wi-Fi
+                network identity (BSSID and the WLAN and CoreWLAN
+                interfaces), the connection-type interfaces, and
+                `RTCPeerConnection`, vendor-prefixed or not, which is how
+                script learns local addresses.
+    screen geometry
+                enumerating monitors or screens and reading their size,
+                resolution, colour depth or arrangement, through the platform
+                APIs the release tiers carry and on the `screen` object in
+                script, whether a property is read off it -- dotted,
+                optionally chained or bracketed -- or the object is taken
+                whole, as destructuring, a spread or a call takes it. Every
+                dotted script source allows whitespace and a line break
+                between its parts, as a formatter writes a long chain.
+    installed fonts
+                enumerating the system's font collection, through the
+                platform APIs, fontconfig and `fc-list`, through a font
+                library's system-font loader, and by listing a system font
+                directory.
+    timezone
+                the system timezone and the local UTC offset, through the
+                platform APIs and libc's `localtime`, `tzname` and
+                `timezone`, `/etc/localtime`, the `TZ` variable, the `time`
+                crate's `now_local` and local offsets, chrono's `Local`
+                wherever a line names it -- by path, in an import list, as
+                `&Local`, `Local.`, `DateTime<Local>` or `::<Local>` -- and,
+                in a file that glob-imports chrono's prelude or offset
+                module, wherever `Local` stands in code, jiff's system zone,
+                WinRT's `TimeZoneSettings` and `Calendar::GetTimeZone`, and
+                `getTimezoneOffset` and `resolvedOptions` in script. `Local`
+                is matched in its own case only: the word opens ordinary
+                prose such as "Local State".
+    total memory
+                the physical memory the machine carries, through the
+                platform APIs, `/proc/meminfo`, `sysinfo` and
+                `navigator.deviceMemory`.
+    processor model and count
+                the processor's brand string, CPUID, the registry and sysctl
+                keys that name the processor, `/proc/cpuinfo`, and the
+                processor count -- `available_parallelism`, `num_cpus`,
+                `hardwareConcurrency` and their platform equivalents,
+                `GetActiveProcessorCount` and its family among them -- and
+                the Windows `PROCESSOR_IDENTIFIER`, `PROCESSOR_REVISION`,
+                `PROCESSOR_LEVEL` and `NUMBER_OF_PROCESSORS` variables. The
+                task names the model; the count is read here too because
+                FR-036a binds on the characteristic, not on the one field a
+                crash reporter happens to label it with, and the count is the
+                same kind of fact about the same part.
+    high-resolution timing correlators
+                the raw counters whose origin or rate is a fact about the
+                machine rather than an interval the shell measured: `rdtsc`,
+                `QueryPerformanceCounter` and `QueryPerformanceFrequency`,
+                `mach_absolute_time` and its continuous twin,
+                `CLOCK_MONOTONIC` and its raw and coarse forms,
+                `CLOCK_BOOTTIME`, `CLOCK_UPTIME_RAW`, `clock_gettime_nsec_np`,
+                `GetTickCount`, `timeGetTime`, the Windows interrupt-time
+                counters, the boot time and uptime -- `systemUptime` on macOS
+                and the `btime` line of `/proc/stat` among them -- and
+                `performance.now` and `performance.timeOrigin` in script --
+                the class research section 4.3 names.
+
+  DEPENDENCY    a direct dependency, in any table of any `Cargo.toml` --
+                ordinary, dev, build, target-specific or the workspace's own
+                -- on a crate that exists to read those characteristics:
+                `machine-uid`, `sysinfo`, `iana-time-zone`, `font-kit`,
+                `mac_address` and the rest of DEPENDENCY_SOURCES below. A
+                crate renamed with `package = ...` is read under its real
+                name, and so is one a member inherits with `workspace =
+                true` from a rename its workspace makes. Such a crate reads
+                the source inside code this check never sees, so the
+                manifest line is the one place the use is visible. Names
+                compare with `-` and `_` folded, as crates.io folds them.
+
+  ALLOWLIST     an entry in scripts/checks/fingerprinting-allowlist.txt that
+                is not `<path> <source>`, names a source this check does not
+                know, is listed twice, or permits nothing: no use of that
+                source in that file. A missing allowlist is a failure too; a
+                missing file is not an empty one.
+
+WHAT THIS DOES NOT CATCH, stated so nothing is assumed of it.
+
+A window's own scale factor -- winit's `scale_factor()`, script's
+`devicePixelRatio` -- is not read. It is a display characteristic, and leaving
+it unread is a scope choice, not a claim that it is harmless. The shell's
+design reads no system scale: crates/evreos-shell/src/scaling.rs drives
+rasterisation from the member's own interface scale and states that no crate
+reads a system DPI value. The one reader in the tree is the accessibility
+spike under tests/spikes/, which lays out its tree by it, and a rule on it
+would fail that spike while T061 has the allowlist empty in v1. A read of it,
+and any derivation from it, rests on review.
+
+`std::time::Instant` is not read. The shell uses it for intervals -- the tab
+model's load timeouts -- and an interval between two readings in one process
+is not a fact about the machine. An `Instant` is not opaque, though: its
+`Debug` form prints the platform counter it wraps -- the monotonic clock on
+Linux, the performance counter on Windows, the mach clock on macOS -- which
+are facts this check refuses by name. Formatting or serialising an `Instant`
+rests on review, and so does a correlator built from intervals, such as timing
+a fixed workload to fingerprint the processor.
+
+The locale is not read. Research section 4.3 lists it among the fields FR-036a
+rules out, but T061's enumeration leaves it out, so a read of the system locale
+rests on review under FR-036a. The member's interface language is a different
+value: FR-035 keys it by the primary language subtag alone and keeps it apart
+from place wherever either appears.
+
+A device provisioning identifier a content-protection path would require --
+the last item research section 4.3 lists -- is not read. ADR-0001 risk 8
+routes it to a founder decision, T061's enumeration leaves it out, and such a
+path is answered for under that decision rather than passed by this check.
+
+The graphics adapter's identity -- the WebGL renderer and vendor strings, a
+DXGI or wgpu adapter's description -- is not read either. It is a device
+characteristic FR-036a covers, but neither T061's enumeration nor research
+section 4.3 names it and no category here carries it, so a read of it rests on
+review until one does.
+
+A crate that reads a characteristic and is reached only transitively is not
+read: the lockfile holds crates other crates use for their own purposes, and
+what this check answers for is what Evreos itself holds.
+
+Every category is the spellings SOURCES and DEPENDENCY_SOURCES list: the
+platform names, the binding crates, paths and tools known when each was
+written. A crate, binding or tool that spells a source some other way is not
+read, and rests on review; one found is added to the table.
+
+A derivation spread across files, or behind a wrapper whose name says nothing,
+rests on review. So does a source name assembled from pieces -- `concat!`,
+`format!`, a path joined from segments that each name nothing, a name built at
+run time: it is a whole token nowhere the check can see. A literal's escapes
+are decoded and a /proc file joined by its own name is caught, but assembly in
+general is not. And none of this touches what a SITE does to fingerprint the
+member, which research section 4.3 sets out of FR-036a's scope and out of this
+architecture's reach.
+
+Files other than Rust source, the script and markup suffixes above and
+`Cargo.toml` are not read, unless a Rust file or a manifest brings one into
+the build as SOURCE describes: Python is the tooling that runs this check and
+ships in nothing, and markdown is where the forbidden sources are quoted.
+In a git work tree the files read are the ones git lists, tracked or
+untracked but not ignored, so Cargo's build output, which `.gitignore` leaves
+out, is not read, while anything committed is, a module, crate or workspace
+member named `target` included. Outside one, every file under the root is read
+but `.git/`. Directories are matched with case folded where they must be, the
+release platforms' filesystems folding case. A directory whose name starts
+with a dot is read: Cargo builds a workspace member wherever its manifest
+names it.
+"""
+import argparse
+import os
+import re
+import subprocess
+import sys
+import tomllib
+from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+REPO = HERE.parent.parent
+ALLOWLIST = HERE / "fingerprinting-allowlist.txt"
+
+sys.path.insert(0, str(HERE))
+from casefs import folded_in, is_rust_source, suffix_of  # noqa: E402
+from rustlex import strip_non_code  # noqa: E402
+
+# Script and markup the shell could ship, read whole.
+SCRIPT_SUFFIXES = (".js", ".mjs", ".cjs", ".ts", ".mts", ".cts", ".html", ".htm")
+
+# The manifest this check reads dependencies from.
+MANIFEST = "Cargo.toml"
+
+def member(name):
+    """A pattern for reading property `name` off an object in script: dotted,
+    optionally chained, or bracketed with a quoted key of any quote kind."""
+    return (
+        r"(?:\??\.\s*" + name
+        + r"|(?:\?\.)?\s*\[\s*[\"'`]" + name + r"[\"'`]\s*\])"
+    )
+
+
+def destructured(name, obj):
+    """A pattern for destructuring property `name` out of the global `obj` in
+    script, `const { name } = obj`, directly or through window, self or
+    globalThis. The brace span is bounded, so a crafted file cannot make the
+    match backtrack without end."""
+    return (
+        r"\{[^{}]{0,200}\b" + name + r"\b[^{}]{0,200}\}\s*=\s*"
+        r"(?:(?:window|self|globalThis)\s*\??\.\s*)?" + obj
+    )
+
+
+def windows_env(name):
+    """The pattern for a Windows environment variable: `name` as a bare token
+    in upper case, or in any case as a whole quoted literal (a C string's
+    `\\0` included), a `%name%` expansion or an `env.name` property."""
+    return (
+        r"(?-i:" + name + r")"
+        r"|[\"'`]" + name + r"(?:\\0)?[\"'`]|%" + name + r"%"
+        r"|\benv\s*\??\.\s*" + name
+    )
+
+
+# Every source, by category. A source is (name, pattern): the name is what a
+# failure reports and what an allowlist entry spells, the pattern is matched as
+# a whole token, with case folded where it does not say `(?-i:...)`. A name
+# holds no whitespace, because an allowlist entry is `<path> <name>` and a
+# path may.
+SOURCES = {
+    "machine and volume identifier": (
+        ("MachineGuid", r"MachineGuid"),
+        ("Microsoft\\Cryptography", r"Microsoft[\\/]+Cryptography"),
+        ("machine-id", r"machine-id"),
+        ("machine_uid", r"machine_uid"),
+        ("IOPlatformUUID", r"k?IOPlatformUUID(?:Key)?"),
+        ("IOPlatformSerialNumber", r"k?IOPlatformSerialNumber(?:Key)?"),
+        ("IOPlatformExpertDevice", r"IOPlatformExpertDevice"),
+        ("gethostuuid", r"gethostuuid"),
+        ("kern.uuid", r"kern\.uuid"),
+        ("/sys/class/dmi", r"/sys/(?:class|devices/virtual|firmware)/dmi"),
+        ("product_uuid", r"product_uuid"),
+        ("product_serial", r"product_serial"),
+        ("board_serial", r"board_serial"),
+        ("chassis_serial", r"chassis_serial"),
+        ("SMBIOS", r"SMBIOS"),
+        ("GetSystemFirmwareTable", r"GetSystemFirmwareTable"),
+        ("Win32_ComputerSystem", r"Win32_ComputerSystem(?:Product)?"),
+        ("Win32_BIOS", r"Win32_BIOS"),
+        ("Win32_BaseBoard", r"Win32_BaseBoard"),
+        ("Win32_DiskDrive", r"Win32_DiskDrive"),
+        ("Win32_PhysicalMedia", r"Win32_PhysicalMedia"),
+        ("Win32_LogicalDisk", r"Win32_LogicalDisk"),
+        ("Win32_Volume", r"Win32_Volume"),
+        ("HardwareIdentification", r"HardwareIdentification"),
+        ("GetPackageSpecificToken", r"GetPackageSpecificToken"),
+        ("SystemIdentification", r"SystemIdentification"),
+        ("GetSystemIdForPublisher", r"GetSystemIdForPublisher"),
+        ("GetSystemIdForUser", r"GetSystemIdForUser"),
+        ("EasClientDeviceInformation", r"EasClientDeviceInformation"),
+        ("AdvertisingManager", r"AdvertisingManager"),
+        ("AdvertisingId", r"AdvertisingId"),
+        ("SystemProductName", r"SystemProductName"),
+        ("SystemManufacturer", r"SystemManufacturer"),
+        ("hw.model", r"hw\.model"),
+        ("HW_MODEL", r"HW_MODEL"),
+        ("HW_MACHINE", r"HW_MACHINE"),
+        ("KERN_HOSTNAME", r"KERN_HOSTNAME"),
+        ("KERN_HOSTID", r"KERN_HOSTID"),
+        ("gethostname", r"gethostname"),
+        ("GetComputerName", r"GetComputerName(?:Ex)?[AW]?"),
+        ("hostname::get", r"hostname::get"),
+        ("/etc/hostname", r"/etc/hostname"),
+        ("/proc/sys/kernel/hostname", r'/proc/sys/kernel/hostname|"hostname"'),
+        ("uname", r"uname"),
+        ("utsname", r"utsname"),
+        ("nodename", r"nodename"),
+        ("gethostid", r"gethostid"),
+        ("/etc/hostid", r"/etc/hostid"),
+        ("boot_id", r"boot_id"),
+        ("hostName", r"(?-i:hostName)"),
+        ("SCDynamicStoreCopyComputerName", r"SCDynamicStoreCopyComputerName"),
+        ("SCDynamicStoreCopyLocalHostName", r"SCDynamicStoreCopyLocalHostName"),
+        ("NSHost", r"NSHost"),
+        ("dmidecode", r"dmidecode"),
+        ("wmic", r"wmic"),
+        ("ioreg", r"ioreg"),
+        ("system_profiler", r"system_profiler"),
+        ("getHighEntropyValues", r"getHighEntropyValues"),
+        # Environment variables: a host name is read as often from the
+        # environment as from an API.
+        ("COMPUTERNAME", windows_env("COMPUTERNAME")),
+        ("USERDOMAIN", windows_env("USERDOMAIN")),
+        ("LOGONSERVER", windows_env("LOGONSERVER")),
+        ("HOSTNAME", r"(?-i:HOSTNAME)"),
+        ("GetVolumeInformation", r"GetVolumeInformation(?:ByHandle)?[AW]?"),
+        ("VolumeSerialNumber", r"VolumeSerialNumber"),
+        ("/dev/disk/by-", r"/dev/disk/by-(?:uuid|id|partuuid|label)"),
+        ("blkid", r"blkid"),
+        ("DADiskCopyDescription", r"DADiskCopyDescription"),
+        ("kDADiskDescriptionVolumeUUIDKey", r"kDADiskDescriptionVolumeUUIDKey"),
+    ),
+    "MAC address or network characteristic": (
+        ("GetAdaptersAddresses", r"GetAdaptersAddresses"),
+        ("GetAdaptersInfo", r"GetAdaptersInfo"),
+        ("GetIfTable", r"GetIfTable2?"),
+        ("SIOCGIFHWADDR", r"SIOCGIFHWADDR"),
+        ("/sys/class/net", r"/sys/class/net"),
+        ("/proc/net/arp", r"/proc/net/arp"),
+        ("datalink::interfaces", r"datalink::interfaces"),
+        ("getmac", r"getmac"),
+        ("ifconfig", r"ifconfig"),
+        ("ipconfig", r"ipconfig"),
+        ("networksetup", r"networksetup"),
+        ("getifaddrs", r"getifaddrs"),
+        ("mac_address", r"mac_address"),
+        ("MacAddress", r"MacAddress"),
+        ("PhysicalAddress", r"PhysicalAddress"),
+        ("GetHostNames", r"GetHostNames"),
+        ("NetworkInformation", r"NetworkInformation"),
+        ("navigator.connection", (
+            r"navigator\s*" + member("connection") + "|" + destructured("connection", "navigator")
+        )),
+        ("RTCPeerConnection", r"(?:webkit|moz)?RTCPeerConnection"),
+        ("WlanQueryInterface", r"WlanQueryInterface"),
+        ("WlanGetNetworkBssList", r"WlanGetNetworkBssList"),
+        ("CWWiFiClient", r"CWWiFiClient"),
+        ("bssid", r"bssid"),
+    ),
+    "screen geometry": (
+        ("available_monitors", r"available_monitors"),
+        ("primary_monitor", r"primary_monitor"),
+        ("current_monitor", r"current_monitor"),
+        ("MonitorHandle", r"MonitorHandle"),
+        ("EnumDisplayMonitors", r"EnumDisplayMonitors"),
+        ("GetMonitorInfo", r"GetMonitorInfo[AW]?"),
+        ("EnumDisplayDevices", r"EnumDisplayDevices[AW]?"),
+        ("EnumDisplaySettings", r"EnumDisplaySettings(?:Ex)?[AW]?"),
+        ("GetSystemMetrics", r"GetSystemMetrics(?:ForDpi)?"),
+        ("GetDeviceCaps", r"GetDeviceCaps"),
+        ("NSScreen", r"NSScreen"),
+        # The bare type too: the core-graphics crate spells these calls
+        # `CGDisplay::main().pixels_wide()`.
+        ("CGDisplay", r"CGDisplay(?:Bounds|PixelsWide|PixelsHigh|CopyDisplayMode|ScreenSize)?"),
+        ("CGDirectDisplayID", r"CGDirectDisplayID"),
+        ("CGMainDisplayID", r"CGMainDisplayID"),
+        ("CGGetActiveDisplayList", r"CGGetActiveDisplayList"),
+        ("gdk_screen", r"gdk_screen_\w+"),
+        ("gdk_monitor", r"gdk_monitor_\w+"),
+        ("gdk::Screen", r"gdk::Screen"),
+        ("gdk::Monitor", r"gdk::Monitor"),
+        ("XDisplayWidth", r"XDisplayWidth"),
+        ("XDisplayHeight", r"XDisplayHeight"),
+        ("XRRGetScreenResources", r"XRRGetScreenResources(?:Current)?"),
+        ("screen.", (
+            r"screen\s*(?:\??\.\s*(?:{0})|(?:\?\.)?\s*\[)".format(
+                "width|height|availWidth|availHeight|availLeft|availTop"
+                "|colorDepth|pixelDepth|orientation"
+            )
+        )),
+        # The screen object taken whole, as destructuring, a spread or a call
+        # takes it: `const { width } = window.screen`, `= screen;`,
+        # `{ ...screen }`, `JSON.stringify(screen)`.
+        ("window.screen", (
+            r"(?:window|self|globalThis|top|parent)\s*(?:\??\.\s*screen(?!\s*\??\.\s*\w)"
+            r"|(?:\?\.)?\s*\[\s*[\"'`]screen[\"'`]\s*\])"
+            r"|=\s*screen(?=[ \t]*(?:[;,)}\r\n]|\Z))"
+            r"|(?:[(,\[]|\.\.\.)\s*screen(?=\s*[,)\]}])"
+        )),
+        ("getScreenDetails", r"getScreenDetails"),
+        ("DisplayInformation", r"DisplayInformation"),
+    ),
+    "installed fonts": (
+        ("EnumFontFamilies", r"EnumFontFamilies(?:Ex)?[AW]?"),
+        ("EnumFonts", r"EnumFonts[AW]?"),
+        ("GetSystemFontCollection", r"GetSystemFontCollection"),
+        ("IDWriteFontCollection", r"IDWriteFontCollection\d?"),
+        ("CTFontManagerCopyAvailable", r"CTFontManagerCopyAvailable\w+"),
+        ("CTFontCollectionCreateFromAvailableFonts", r"CTFontCollectionCreateFromAvailableFonts"),
+        ("create_for_all_families", r"create_for_all_families"),
+        ("FontCollection::system", r"FontCollection::(?:get_)?system"),
+        ("NSFontManager", r"NSFontManager"),
+        ("availableFonts", r"availableFonts"),
+        ("availableFontFamilies", r"availableFontFamilies"),
+        ("FcFontList", r"FcFontList"),
+        ("FcConfigGetFonts", r"FcConfigGetFonts"),
+        ("FcFontSetList", r"FcFontSetList"),
+        ("fc-list", r"fc-list"),
+        ("load_system_fonts", r"load_system_fonts"),
+        ("font_kit", r"font_kit"),
+        ("queryLocalFonts", r"queryLocalFonts"),
+        ("document.fonts", r"document\s*" + member("fonts") + "|" + destructured("fonts", "document")),
+        ("/usr/share/fonts", r"/share/fonts"),
+        ("~/.fonts", r"/\.fonts"),
+        ("/Library/Fonts", r"/Library/Fonts"),
+        ("Windows\\Fonts", r"Windows[\\/]+Fonts"),
+    ),
+    "timezone": (
+        ("iana_time_zone", r"iana_time_zone"),
+        ("get_timezone", r"get_timezone"),
+        ("GetTimeZoneInformation", r"GetTimeZoneInformation(?:ForYear)?"),
+        ("GetDynamicTimeZoneInformation", r"GetDynamicTimeZoneInformation"),
+        ("/etc/localtime", r"/etc/localtime"),
+        ("/etc/timezone", r"/etc/timezone"),
+        ("NSTimeZone", r"NSTimeZone"),
+        ("CFTimeZoneCopy", r"CFTimeZoneCopy(?:System|Default)"),
+        ("localtime", r"localtime(?:_[rs])?"),
+        ("tzname", r"tzname"),
+        ("libc::timezone", r"libc::timezone"),
+        ("tm_gmtoff", r"tm_gmtoff"),
+        ("tzset", r"tzset"),
+        ("current_local_offset", r"current_local_offset"),
+        ("local_offset_at", r"local_offset_at"),
+        ("now_local", r"now_local"),
+        ("chrono::Local", (
+            r"chrono::(?:offset::)?(?-i:Local)|(?-i:Local)::(?:now|today)"
+            r"|chrono::(?:offset::|prelude::)?\{[^{}]{0,400}(?-i:\bLocal\b)[^{}]{0,400}\}"
+            r"|DateTime\s*(?:::\s*)?<\s*(?-i:Local)\s*>|::\s*<\s*(?-i:Local)\s*>"
+            r"|&\s*(?-i:Local)|(?-i:Local)\s*\.\s*\w+"
+        )),
+        ("TimeZone::system", r"TimeZone::(?:try_)?system"),
+        ("TimeZoneSettings", r"TimeZoneSettings"),
+        ("GetTimeZone", r"GetTimeZone"),
+        ("Zoned::now", r"Zoned::now"),
+        # `TZ` alone is too short to match bare; a literal holding nothing
+        # else, or a script's `env.TZ`, names the variable.
+        ("TZ", r"(?-i:[\"'`]TZ(?:\\0)?[\"'`]|\benv\s*\??\.\s*TZ)"),
+        ("getTimezoneOffset", r"getTimezoneOffset"),
+        # The whole options object carries the zone, so the call is the read
+        # whether `.timeZone` follows it or a destructuring takes it.
+        ("resolvedOptions", r"resolvedOptions"),
+    ),
+    "total memory": (
+        ("GlobalMemoryStatus", r"GlobalMemoryStatus(?:Ex)?"),
+        ("GetPhysicallyInstalledSystemMemory", r"GetPhysicallyInstalledSystemMemory"),
+        ("ullTotalPhys", r"ullTotalPhys"),
+        ("_SC_PHYS_PAGES", r"_SC_PHYS_PAGES"),
+        ("hw.memsize", r"hw\.memsize"),
+        ("HW_MEMSIZE", r"HW_MEMSIZE"),
+        ("HW_PHYSMEM", r"HW_PHYSMEM"),
+        ("/proc/meminfo", r"(?:/proc/)?meminfo"),
+        ("sysinfo", r"sysinfo"),
+        ("totalram", r"totalram"),
+        ("total_memory", r"total_memory"),
+        ("physicalMemory", r"physicalMemory"),
+        ("deviceMemory", r"deviceMemory"),
+    ),
+    "processor model or count": (
+        # By path, or by the file's name joined onto /proc: `cpuinfo` and
+        # `meminfo` name nothing else, while `uptime` is matched only as a whole
+        # literal, since a field of that name is ordinary code.
+        ("/proc/cpuinfo", r"(?:/proc/)?cpuinfo"),
+        ("cpuid", r"_*cpuid(?:_count)?"),
+        ("raw_cpuid", r"raw_cpuid"),
+        ("brand_string", r"brand_string"),
+        ("machdep.cpu", r"machdep\.cpu(?:\.\w+)*"),
+        ("ProcessorNameString", r"ProcessorNameString"),
+        ("CentralProcessor", r"CentralProcessor"),
+        ("Win32_Processor", r"Win32_Processor"),
+        ("GetLogicalProcessorInformation", r"GetLogicalProcessorInformation(?:Ex)?"),
+        ("GetSystemInfo", r"Get(?:Native)?SystemInfo"),
+        ("dwNumberOfProcessors", r"dwNumberOfProcessors"),
+        ("num_cpus", r"num_cpus"),
+        ("available_parallelism", r"available_parallelism"),
+        ("_SC_NPROCESSORS", r"_SC_NPROCESSORS_(?:ONLN|CONF)"),
+        ("hw.ncpu", r"hw\.ncpu"),
+        ("HW_NCPU", r"HW_(?:NCPU|AVAILCPU)"),
+        ("hw.physicalcpu", r"hw\.physicalcpu"),
+        ("hw.logicalcpu", r"hw\.logicalcpu"),
+        ("/sys/devices/system/cpu", r"/sys/devices/system/cpu"),
+        ("hardwareConcurrency", r"hardwareConcurrency"),
+        ("PROCESSOR_IDENTIFIER", windows_env("PROCESSOR_IDENTIFIER")),
+        ("PROCESSOR_REVISION", windows_env("PROCESSOR_REVISION")),
+        ("PROCESSOR_LEVEL", windows_env("PROCESSOR_LEVEL")),
+        ("NUMBER_OF_PROCESSORS", windows_env("NUMBER_OF_PROCESSORS")),
+        ("processorCount", r"(?:Get|KeQuery)?(?:Active|Maximum)?ProcessorCount"),
+    ),
+    "high-resolution timing correlator": (
+        ("rdtsc", r"_*rdtscp?"),
+        ("QueryPerformanceCounter", r"QueryPerformanceCounter"),
+        ("QueryPerformanceFrequency", r"QueryPerformanceFrequency"),
+        ("mach_absolute_time", r"mach_absolute_time"),
+        ("mach_continuous_time", r"mach_continuous_time"),
+        ("CLOCK_MONOTONIC", r"CLOCK_MONOTONIC(?:_COARSE)?"),
+        ("CLOCK_MONOTONIC_RAW", r"CLOCK_MONOTONIC_RAW"),
+        ("CLOCK_BOOTTIME", r"CLOCK_BOOTTIME"),
+        ("CLOCK_UPTIME_RAW", r"CLOCK_UPTIME_RAW"),
+        ("clock_gettime_nsec_np", r"clock_gettime_nsec_np"),
+        ("QueryInterruptTime", r"Query(?:Unbiased)?InterruptTime(?:Precise)?"),
+        ("systemUptime", r"systemUptime"),
+        ("GetTickCount", r"GetTickCount(?:64)?"),
+        ("timeGetTime", r"timeGetTime"),
+        ("/proc/uptime", r'/proc/uptime|"uptime"'),
+        ("/proc/stat", r'/proc/stat|"btime"'),
+        ("kern.boottime", r"kern\.boottime"),
+        ("KERN_BOOTTIME", r"KERN_BOOTTIME"),
+        ("performance.now", r"performance\s*" + member("now") + "|" + destructured("now", "performance")),
+        ("performance.timeOrigin", (
+            r"performance\s*" + member("timeOrigin") + "|" + destructured("timeOrigin", "performance")
+        )),
+    ),
+}
+
+# A backslash ending a line inside a literal, which joins the next line to it
+# less its leading whitespace, with the rest of the literal it continues; or
+# an escaped backslash, which is not one.
+CONTINUATION = re.compile(r'\\\\|\\(\r?\n[ \t\r\n]*(?:[^"\\\r\n]|\\[^\r\n]|\\\r?\n[ \t\r\n]*)*)')
+CONTINUED_LINE = re.compile(r"\\\r?\n[ \t\r\n]*")
+
+# An escape that spells one character: `\x2d` and `\u{69}` in a Rust literal,
+# and those and `\u0043` in script. An escaped backslash is matched first, so
+# `\\x2d` stays the four characters it is.
+ESCAPE = re.compile(r"\\(\\|x[0-9A-Fa-f]{2}|u\{[0-9A-Fa-f_]{1,8}\}|u[0-9A-Fa-f]{4})")
+
+# A glob import of chrono's prelude or offset module. In a file that has one,
+# any bare `Local` in code is chrono's, and a read of the system timezone.
+CHRONO_GLOB = re.compile(r"chrono::(?:prelude::|offset::)?\*")
+BARE_LOCAL = re.compile(r"(?<![A-Za-z0-9_])Local(?![A-Za-z0-9_])")
+
+# What a Rust file brings into the build under a name of its own choosing,
+# resolved against that file's directory, as Rust resolves both: a file
+# compiled in as Rust whatever its suffix, and a file embedded as text, which
+# may be a script the shell injects. Each pattern is matched in code with
+# literals blanked, so a literal that quotes one brings nothing, and ends
+# where BROUGHT_PATH, read from the code with literals kept, begins.
+BRINGS = (
+    ("rust", re.compile(r"\binclude!\s*[(\[{]")),
+    ("module", re.compile(r"#\s*\[\s*(?:cfg_attr\s*\([^\]]*?)?\bpath\s*=")),
+    ("text", re.compile(r"\binclude_str!\s*[(\[{]")),
+    ("bytes", re.compile(r"\binclude_bytes!\s*[(\[{]")),
+)
+BROUGHT_PATH = re.compile(r'\s*(?:r#*)?"([^"]+)"')
+# The same path built from the package's directory, as `include_str!` is
+# usually given one: `concat!(env!("CARGO_MANIFEST_DIR"), "/src/x.js")`.
+BROUGHT_FROM_MANIFEST = re.compile(
+    r'\s*concat!\s*[(\[{]\s*env!\s*[(\[{]\s*"CARGO_MANIFEST_DIR"\s*[)\]}]\s*,'
+    r'\s*(?:r#*)?"([^"]+)"'
+)
+
+# An inline module's opening brace, or any other brace, in code with literals
+# blanked.
+BRACE = re.compile(r"\bmod\s+(?:r#)?(\w+)\s*\{|[{}]")
+
+# The files Rust reads a `#[path]` inside an inline module against as it
+# reads `mod.rs`: the directory the file is in. A crate root is one too, but
+# not every crate root is named here, so any other file is tried both ways.
+MOD_RS = {"mod.rs", "lib.rs", "main.rs"}
+
+# The sources shaped as script's dotted paths, which a Rust field access can
+# also spell: in Rust they are matched inside string literals only.
+SCRIPT_SHAPED = {
+    "screen.",
+    "window.screen",
+    "document.fonts",
+    "performance.now",
+    "performance.timeOrigin",
+    "navigator.connection",
+}
+
+# A whole token: nothing that could continue an identifier on either side, so
+# `sysinfo` is not found inside `mysysinfo_cache` and `bssid` not inside a
+# longer word. The edge applies only where the match itself begins or ends
+# with a word character: a match that opens with `/`, `"` or `=` is delimited
+# already, and `/System/Library/Fonts` or `r"uptime"` must not hide it.
+EDGE_BEFORE = r"(?:(?<![A-Za-z0-9_])|(?![A-Za-z0-9_]))"
+EDGE_AFTER = r"(?:(?![A-Za-z0-9_])|(?<![A-Za-z0-9_]))"
+
+# Each source's pattern twice: bare, which the regex engine can search for by
+# its literal prefix, and with its edges, which it cannot. A match with edges
+# is a bare match at the same place, so the edges are tried only where a bare
+# match starts.
+COMPILED = [
+    (
+        category,
+        name,
+        re.compile(pattern, re.IGNORECASE),
+        re.compile(EDGE_BEFORE + "(?:" + pattern + ")" + EDGE_AFTER, re.IGNORECASE),
+    )
+    for category, sources in SOURCES.items()
+    for name, pattern in sources
+]
+
+# Crates that exist to read one of the characteristics above, by the category
+# they read. Keyed by the name crates.io publishes, compared with `-` and `_`
+# folded.
+DEPENDENCY_SOURCES = {
+    "machine-uid": "machine and volume identifier",
+    "machineid-rs": "machine and volume identifier",
+    "wmi": "machine and volume identifier",
+    "smbios-lib": "machine and volume identifier",
+    "hostname": "machine and volume identifier",
+    "gethostname": "machine and volume identifier",
+    "whoami": "machine and volume identifier",
+    "mac_address": "MAC address or network characteristic",
+    "get_if_addrs": "MAC address or network characteristic",
+    "if-addrs": "MAC address or network characteristic",
+    "local-ip-address": "MAC address or network characteristic",
+    "network-interface": "MAC address or network characteristic",
+    "pnet_datalink": "MAC address or network characteristic",
+    "pnet": "MAC address or network characteristic",
+    "netdev": "MAC address or network characteristic",
+    "default-net": "MAC address or network characteristic",
+    "display-info": "screen geometry",
+    "font-kit": "installed fonts",
+    "fontdb": "installed fonts",
+    "iana-time-zone": "timezone",
+    "sysinfo": "total memory",
+    "sys-info": "total memory",
+    "systemstat": "total memory",
+    "heim": "total memory",
+    "raw-cpuid": "processor model or count",
+    "num_cpus": "processor model or count",
+}
+
+# Every table name Cargo reads dependencies from.
+DEPENDENCY_TABLES = (
+    "dependencies",
+    "dev-dependencies",
+    "dev_dependencies",
+    "build-dependencies",
+    "build_dependencies",
+)
+
+
+def fold_crate(name):
+    """A crate name as crates.io compares it: case and `-`/`_` folded."""
+    return name.lower().replace("_", "-")
+
+
+FOLDED_DEPENDENCY_SOURCES = {fold_crate(name): name for name in DEPENDENCY_SOURCES}
+
+# Every name an allowlist entry may spell: a source's, or a dependency's.
+KNOWN_NAMES = {name for _, name, _, _ in COMPILED} | set(DEPENDENCY_SOURCES)
+
+
+class CheckError(Exception):
+    """The check could not reach a verdict: the tree it was pointed at is
+    missing, or holds nothing it reads. main() reports this and exits 2 --
+    the code scripts/checks/README.md reserves for an unreached verdict,
+    which fails the workflow exactly as a breach does but reads differently
+    in the log -- as the sibling checks exit for the same class."""
+
+
+class Unreadable(Exception):
+    """A file this check reads could not be read as text: it is not UTF-8,
+    or the operating system refused it. The caller reports it naming the file,
+    as a breach is reported, rather than ending the run in a traceback."""
+
+
+def read_text(path, lossy=False):
+    """The file's text; raises Unreadable, saying why, when it has none.
+    `lossy` replaces bytes that are not UTF-8 rather than raising.
+
+    The BOM is stripped for the reason the other checks strip it: an editor
+    that writes one is not a way past a check.
+    """
+    try:
+        errors = "replace" if lossy else "strict"
+        return path.read_text(encoding="utf-8", errors=errors).lstrip("﻿")
+    except UnicodeDecodeError:
+        raise Unreadable("not valid UTF-8") from None
+    except OSError as error:
+        raise Unreadable(f"not readable ({error.strerror or error})") from None
+
+
+def decode_escapes(text):
+    """`text` with each string continuation joined and each `\\x` and
+    `\\u{...}` escape replaced by the character it spells.
+
+    A continuation's line breaks move to the end of the literal it continues,
+    so a read later on that literal's last line is reported on its first. An
+    escape that spells a line break is left as written, and so is one that
+    spells no character, so the line a read is reported on is the line it is
+    written on.
+    """
+    def joined(match):
+        if match.group(1) is None:
+            return match.group(0)
+        run = match.group(0)
+        return CONTINUED_LINE.sub("", run) + "\n" * run.count("\n")
+
+    def one(match):
+        body = match.group(1)
+        if body == "\\":
+            return match.group(0)
+        digits = body[1:].strip("{}").replace("_", "")
+        try:
+            character = chr(int(digits, 16))
+        except (ValueError, OverflowError):
+            return match.group(0)
+        return match.group(0) if character in "\r\n" else character
+
+    return ESCAPE.sub(one, CONTINUATION.sub(joined, text))
+
+
+def inline_modules(bare, end):
+    """The names of the inline modules whose blocks enclose offset `end` of
+    `bare`, Rust code with comments and literals blanked, outermost first."""
+    blocks = []
+    for match in BRACE.finditer(bare, 0, end):
+        if match.group(0) == "}":
+            if blocks:
+                blocks.pop()
+        else:
+            blocks.append(match.group(1))
+    return [name for name in blocks if name]
+
+
+def manifest_dir(path):
+    """The directory of the nearest `Cargo.toml` above `path`, which is
+    `CARGO_MANIFEST_DIR` when Cargo compiles it; `path`'s own when none is."""
+    for directory in path.parents:
+        if (directory / MANIFEST).is_file():
+            return directory
+    return path.parent
+
+
+def module_paths(path, modules, named):
+    """Where Rust looks for the file a `#[path = named]` names, written in
+    the Rust file `path` inside the inline `modules`: the Rust reference's
+    path-attribute rules."""
+    if not modules:
+        return (path.parent / named,)
+    nested = Path(*modules) / named
+    if path.name in MOD_RS:
+        return (path.parent / nested,)
+    return (path.parent / path.stem / nested, path.parent / nested)
+
+
+def sources_in(text, only=None, skip=()):
+    """Every (line number, category, name) of a source read in `text`, in
+    line order and then table order, each source once per line: of every
+    source, or of those named in `only`, less those named in `skip`.
+
+    Matched over the whole text rather than line by line, so a chain a
+    formatter breaks across lines -- `screen` on one, `.width` on the next --
+    is still one read, reported on the line it starts.
+    """
+    found = []
+    for category, name, bare, edged in COMPILED:
+        if (only is not None and name not in only) or name in skip:
+            continue
+        start = 0
+        while (candidate := bare.search(text, start)) is not None:
+            match = edged.match(text, candidate.start())
+            if match is None:
+                start = candidate.start() + 1
+                continue
+            number = text.count("\n", 0, match.start()) + 1
+            if (number, category, name) not in found:
+                found.append((number, category, name))
+            start = max(match.end(), match.start() + 1)
+    return sorted(found, key=lambda item: item[0])
+
+
+def crate_roots(manifest):
+    """The files `manifest` names for Cargo to compile: `[lib]`'s `path`,
+    each `[[bin]]`, `[[test]]`, `[[bench]]` and `[[example]]` `path`, and the
+    package's `build` script, as written."""
+    named = []
+    lib = manifest.get("lib")
+    if isinstance(lib, dict):
+        named.append(lib.get("path"))
+    for key in ("bin", "test", "bench", "example"):
+        targets = manifest.get(key)
+        for target in targets if isinstance(targets, list) else ():
+            if isinstance(target, dict):
+                named.append(target.get("path"))
+    package = manifest.get("package")
+    if isinstance(package, dict):
+        named.append(package.get("build"))
+    return [path for path in named if isinstance(path, str)]
+
+
+def dependencies_in(manifest, inherited=None):
+    """Every crate a parsed manifest depends on directly, by its real name.
+
+    Every dependency table Cargo reads: top-level, `target.<cfg>.`, and the
+    workspace's own `[workspace.dependencies]`. A renamed dependency --
+    `alias = { package = "sysinfo" }` -- is returned under the crate it
+    names, since that is the code that runs. So is one a member inherits
+    with `workspace = true`: `inherited` is its workspace's
+    `[workspace.dependencies]`, where the rename is written, and the member
+    cannot restate it.
+    """
+    inherited = inherited if isinstance(inherited, dict) else {}
+    tables = []
+    for key in DEPENDENCY_TABLES:
+        tables.append(manifest.get(key))
+    # Every key is checked for a table before it is read as one: a well-formed
+    # file with `target = "x"` is valid TOML that Cargo rejects, and must not
+    # end the run in a traceback.
+    targets = manifest.get("target")
+    for target in targets.values() if isinstance(targets, dict) else ():
+        if isinstance(target, dict):
+            for key in DEPENDENCY_TABLES:
+                tables.append(target.get(key))
+    workspace = manifest.get("workspace")
+    if isinstance(workspace, dict):
+        tables.append(workspace.get("dependencies"))
+
+    names = []
+    for table in tables:
+        if not isinstance(table, dict):
+            continue
+        for alias, spec in table.items():
+            real = alias
+            if isinstance(spec, dict) and spec.get("workspace") is True:
+                spec = inherited.get(alias)
+            if isinstance(spec, dict) and isinstance(spec.get("package"), str):
+                real = spec["package"]
+            if real not in names:
+                names.append(real)
+    return names
+
+
+def read_allowlist(path, problems):
+    """The allowlist's entries, as {(path, source): line number}.
+
+    One entry per line, `<path> <source>`: a repository-relative POSIX path
+    and a source name as a failure reports it. `#` starts a comment and blank
+    lines are ignored. The path is everything before the last run of
+    whitespace, so a path holding a space is still one path.
+    """
+    where = path.name
+    if not path.is_file():
+        problems.append(
+            f"{where}: missing; the allowlist is a committed file read on every "
+            "run, and a missing file is not an empty one"
+        )
+        return {}
+    try:
+        text = read_text(path)
+    except Unreadable as error:
+        problems.append(f"{where}: {error}, so its entries cannot be read")
+        return {}
+    entries = {}
+    for number, line in enumerate(text.splitlines(), 1):
+        entry = line.split("#", 1)[0].strip()
+        if not entry:
+            continue
+        parts = entry.rsplit(None, 1)
+        if len(parts) != 2:
+            problems.append(
+                f"{where}:{number}: {entry!r} is not `<path> <source>`; an entry "
+                "names the file and the source it permits there"
+            )
+            continue
+        key = (parts[0], parts[1])
+        if key[1] not in KNOWN_NAMES:
+            problems.append(
+                f"{where}:{number}: {key[1]!r} names no source this check knows; "
+                "copy the name from the failure the entry answers"
+            )
+            continue
+        if key in entries:
+            problems.append(f"{where}:{number}: {key[0]} {key[1]} is listed twice")
+            continue
+        entries[key] = number
+    return entries
+
+
+def check_tree(root, allowlist_path=ALLOWLIST):
+    """Every clause over the tree at `root`.
+
+    Returns (problems, files read, allowlisted uses): the second a sorted
+    list of the repository-relative POSIX paths the SOURCE and DEPENDENCY
+    clauses read, the third how many allowlist entries answered a use. An
+    empty `problems` is a pass. Nothing read raises CheckError instead,
+    whatever else was found: a check over nothing is not a pass, and it is
+    not a breach of FR-036a either, so it must not exit 1 as one -- not even
+    when every allowlist entry, naming files this tree does not hold, has gone
+    stale in it. A root that is not a directory raises the same.
+    """
+    root = Path(root).resolve()
+    if not root.is_dir():
+        raise CheckError(f"{root}: not a directory this check can read")
+
+    problems = []
+    allowlist_path = Path(allowlist_path)
+    allowed = read_allowlist(allowlist_path, problems)
+    used = set()
+    read = []
+    # Each (how, path) read, how being "rust" or "whole": a file the walk read
+    # as Rust and a Rust file embeds as text is read both ways.
+    scanned = set()
+    # Each workspace's [workspace.dependencies], by the directory of its
+    # manifest. The walk reaches a workspace root before its members, which
+    # sit beneath it.
+    workspaces = {}
+
+    # Files a Rust file brings into the build under a name of its own
+    # choosing, as (kind, the paths Rust looks for it at, the file and line
+    # that name it): compiled in through `include!` or `#[path = ...]`, or
+    # embedded through `include_str!` or `include_bytes!`. Each is read after
+    # the walk, whatever its suffix, once as Rust or whole as it is brought.
+    brought = []
+
+    def scan_rust(path, where):
+        if ("rust", where) in scanned:
+            return
+        scanned.add(("rust", where))
+        if where not in read:
+            read.append(where)
+        try:
+            text = read_text(path)
+        except Unreadable as error:
+            problems.append(f"{where}: {error}, so it is not Rust this check can read")
+            return
+        code = strip_non_code(text, keep_literals=True)
+        bare = strip_non_code(text)
+        literals = "".join(
+            kept if kept != blank else ("\n" if kept == "\n" else " ")
+            for kept, blank in zip(code, bare)
+        )
+        reads = sources_in(decode_escapes(code), skip=SCRIPT_SHAPED)
+        reads += sources_in(decode_escapes(literals), only=SCRIPT_SHAPED)
+        if CHRONO_GLOB.search(bare):
+            for match in BARE_LOCAL.finditer(bare):
+                number = bare.count("\n", 0, match.start()) + 1
+                reads.append((number, "timezone", "chrono::Local"))
+        for number, category, name in sorted(dict.fromkeys(reads), key=lambda item: item[0]):
+            found(where, number, category, name)
+        for kind, pattern in BRINGS:
+            for match in pattern.finditer(bare):
+                named = BROUGHT_PATH.match(code, match.end())
+                built = None if named else BROUGHT_FROM_MANIFEST.match(code, match.end())
+                if not (named or built):
+                    continue
+                number = bare.count("\n", 0, match.start()) + 1
+                if built:
+                    candidates = (manifest_dir(path) / built.group(1).lstrip("/\\"),)
+                elif kind == "module":
+                    modules = inline_modules(bare, match.start())
+                    candidates = module_paths(path, modules, named.group(1))
+                else:
+                    candidates = (path.parent / named.group(1),)
+                brought.append((kind, candidates, f"{where}:{number}"))
+
+    def scan_whole(path, where, what, lossy=False):
+        if ("whole", where) in scanned:
+            return
+        scanned.add(("whole", where))
+        if where not in read:
+            read.append(where)
+        try:
+            text = read_text(path, lossy)
+        except Unreadable as error:
+            problems.append(f"{where}: {error}, so it is not {what} this check can read")
+            return
+        for number, category, name in sources_in(decode_escapes(text)):
+            found(where, number, category, name)
+
+    def found(where, number, category, name):
+        if (where, name) in allowed:
+            used.add((where, name))
+            return
+        at = f"{where}:{number}" if number else where
+        problems.append(
+            f"{at}: reads {category} source {name!r}; FR-036a forbids deriving "
+            "an identifier or correlator from it, however the value is hashed, "
+            f"salted or kept, and {allowlist_path.name} lists no use of it here"
+        )
+
+    for path in files_in(root, problems):
+        where = path.relative_to(root).as_posix()
+        if is_rust_source(path):
+            scan_rust(path, where)
+        elif suffix_of(path) in SCRIPT_SUFFIXES:
+            scan_whole(path, where, "script")
+        elif folded_in(path.name, [MANIFEST]):
+            read.append(where)
+            try:
+                text = read_text(path)
+            except Unreadable as error:
+                problems.append(f"{where}: {error}, so it is not a manifest this check can read")
+                continue
+            try:
+                manifest = tomllib.loads(text)
+            except tomllib.TOMLDecodeError as error:
+                problems.append(f"{where}: not TOML this check can read ({error})")
+                continue
+            workspace = manifest.get("workspace")
+            if isinstance(workspace, dict):
+                workspaces[path.parent] = workspace.get("dependencies")
+            inherited = next(
+                (workspaces[d] for d in (path.parent, *path.parent.parents) if d in workspaces),
+                None,
+            )
+            for named in crate_roots(manifest):
+                brought.append(("rust", (path.parent / named,), where))
+            for crate in dependencies_in(manifest, inherited):
+                name = FOLDED_DEPENDENCY_SOURCES.get(fold_crate(crate))
+                if name is not None:
+                    found(where, 0, DEPENDENCY_SOURCES[name], name)
+
+    while brought:
+        kind, candidates, by = brought.pop(0)
+        settled = False
+        for target in candidates:
+            try:
+                resolved = target.resolve()
+                is_file = resolved.is_file()
+            except (OSError, RuntimeError, ValueError) as error:
+                reason = getattr(error, "strerror", None) or error
+                problems.append(
+                    f"{by}: brings {target.name!r} into the build, but it cannot be "
+                    f"resolved ({reason}), so no read in it can be answered for"
+                )
+                settled = True
+                continue
+            if not resolved.is_relative_to(root):
+                problems.append(
+                    f"{by}: brings {target.name} into the build from outside the tree "
+                    "this check reads, so no read in it can be answered for"
+                )
+                settled = True
+                continue
+            if not is_file:
+                continue
+            settled = True
+            where = resolved.relative_to(root).as_posix()
+            if kind in ("rust", "module"):
+                scan_rust(resolved, where)
+            else:
+                scan_whole(resolved, where, "text", lossy=kind == "bytes")
+        if not settled:
+            problems.append(
+                f"{by}: brings {candidates[0].name} into the build, but no file "
+                "this check can read is there, so no read in it can be answered for"
+            )
+
+    if not read:
+        raise CheckError(
+            f"{root}: no Rust source, script or manifest; a check over nothing "
+            "is not a pass"
+        )
+
+    for (where, name), number in sorted(allowed.items(), key=lambda item: item[1]):
+        if (where, name) not in used:
+            problems.append(
+                f"{allowlist_path.name}:{number}: {where} {name} permits nothing; "
+                "no use of that source is in that file, and an entry records a "
+                "use taken, never one granted ahead of it"
+            )
+    return problems, sorted(read), len(used)
+
+
+def files_in(root, problems):
+    """Every file under `root` this check reads, shallowest first.
+
+    In a git work tree, the files git lists, tracked or untracked but not
+    ignored; a directory it lists, a submodule or a nested repository, is
+    walked. Elsewhere, or when git cannot list the tree, the walk's files. A
+    link to a directory is not followed: git lists the files it links to
+    where they are. A link that leads outside the tree is reported.
+    """
+    try:
+        listed = subprocess.run(
+            ["git", "-C", str(root), "ls-files", "-z", "--cached", "--others",
+             "--exclude-standard"],
+            capture_output=True,
+            check=False,
+        )
+    except OSError:
+        listed = None
+    if listed is None or listed.returncode != 0:
+        files = walk(root, problems)
+    else:
+        files = []
+        for name in sorted(set(os.fsdecode(listed.stdout).split("\0")) - {""}):
+            path = root / name
+            where = path.relative_to(root).as_posix()
+            if path.is_symlink():
+                try:
+                    real = path.resolve()
+                except (OSError, RuntimeError) as error:
+                    problems.append(
+                        f"{where}: a link this check cannot resolve ({error}), so it is not read"
+                    )
+                    continue
+                if not real.is_relative_to(root):
+                    problems.append(
+                        f"{where}: links outside the tree this check reads, so it is not read"
+                    )
+                    continue
+                if real.is_dir():
+                    continue
+            if path.is_dir():
+                files.extend(walk(root, problems, path))
+            elif path.is_file():
+                files.append(path)
+    return sorted(files, key=lambda path: (len(path.relative_to(root).parts), path))
+
+
+def walk(root, problems, start=None):
+    """Every file in the directories under `start`, `root` by default, this
+    check reads, `start` included, directory by directory.
+
+    `.git/` is pruned. The fold on it is casefs's rule -- `.GIT/` is the same
+    directory on the platforms that build the release.
+
+    A directory that cannot be listed is reported and not read. A directory
+    reached a second time through a symbolic link is not read again, so a
+    link that loops ends the walk rather than extending it, and a link to a
+    directory or a file outside the tree is reported: nothing there can be
+    answered for.
+    """
+    kept, seen, files = [start or root], set(), []
+    for directory in kept:
+        where = directory.relative_to(root).as_posix()
+        real = directory.resolve()
+        if not real.is_relative_to(root):
+            problems.append(f"{where}: links outside the tree this check reads, so it is not read")
+            continue
+        if real in seen:
+            continue
+        seen.add(real)
+        try:
+            entries = sorted(directory.iterdir())
+        except OSError as error:
+            problems.append(f"{where}: not a directory this check can list ({error.strerror or error})")
+            continue
+        for path in entries:
+            if not path.is_file():
+                continue
+            if path.is_symlink() and not path.resolve().is_relative_to(root):
+                problems.append(
+                    f"{path.relative_to(root).as_posix()}: links outside the tree "
+                    "this check reads, so it is not read"
+                )
+                continue
+            files.append(path)
+        for path in entries:
+            if not path.is_dir():
+                continue
+            if folded_in(path.name, [".git"]):
+                continue
+            kept.append(path)
+    return files
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--root", default=str(REPO), help="tree to check; the repository by default"
+    )
+    parser.add_argument(
+        "--allowlist", default=str(ALLOWLIST), help="the fingerprinting allowlist to read"
+    )
+    args = parser.parse_args()
+
+    try:
+        problems, read, allowlisted = check_tree(args.root, args.allowlist)
+    except CheckError as error:
+        print(f"Fingerprinting check could not run: {error}", file=sys.stderr)
+        return 2
+
+    if problems:
+        print("Fingerprinting check FAILED:\n", file=sys.stderr)
+        for problem in problems:
+            print(f"  - {problem}", file=sys.stderr)
+        print(
+            "\nSee the docstring of scripts/checks/check_fingerprinting.py for "
+            "the sources read and what satisfies each.",
+            file=sys.stderr,
+        )
+        return 1
+
+    print(
+        f"Fingerprinting check passed: {len(read)} files read, "
+        f"{allowlisted} allowlisted uses."
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
