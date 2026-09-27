@@ -549,6 +549,15 @@ with tempfile.TemporaryDirectory() as tmp:
     except (OSError, RuntimeError, ValueError) as error:
         report(f"a brought file whose link loops is reported, not {error!r}", False)
 
+problems, read = tree(passing_tree({
+    "crates/x/src/probe.rs": 'pub const S: &str = include_str!("payload.rs");\n',
+    "crates/x/src/payload.rs": "const t = performance.now();\n",
+}))[:2]
+report("a Rust file embedded as text is read whole too, not only as Rust",
+       mentions(problems, "crates/x/src/payload.rs:1", "'performance.now'"))
+report("...and listed once among the files read",
+       read.count("crates/x/src/payload.rs") == 1)
+
 problems = tree(with_rust('fn f() {}\ninclude!("missing.in");\n#[path = "gone.txt"]\nmod gone;\n'))[0]
 report("a brought file that is not there is reported, not skipped",
        mentions(problems, "probe.rs:2", "missing.in", "no file")

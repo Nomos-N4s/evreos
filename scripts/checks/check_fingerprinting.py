@@ -873,6 +873,9 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     allowed = read_allowlist(allowlist_path, problems)
     used = set()
     read = []
+    # Each (how, path) read, how being "rust" or "whole": a file the walk read
+    # as Rust and a Rust file embeds as text is read both ways.
+    scanned = set()
     # Each workspace's [workspace.dependencies], by the directory of its
     # manifest. The walk reaches a workspace root before its members, which
     # sit beneath it.
@@ -882,11 +885,15 @@ def check_tree(root, allowlist_path=ALLOWLIST):
     # choosing, as (kind, the paths Rust looks for it at, the file and line
     # that name it): compiled in through `include!` or `#[path = ...]`, or
     # embedded through `include_str!` or `include_bytes!`. Each is read after
-    # the walk, once, whatever its suffix.
+    # the walk, whatever its suffix, once as Rust or whole as it is brought.
     brought = []
 
     def scan_rust(path, where):
-        read.append(where)
+        if ("rust", where) in scanned:
+            return
+        scanned.add(("rust", where))
+        if where not in read:
+            read.append(where)
         try:
             text = read_text(path)
         except Unreadable as error:
@@ -920,7 +927,11 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 brought.append((kind, candidates, f"{where}:{number}"))
 
     def scan_whole(path, where, what, lossy=False):
-        read.append(where)
+        if ("whole", where) in scanned:
+            return
+        scanned.add(("whole", where))
+        if where not in read:
+            read.append(where)
         try:
             text = read_text(path, lossy)
         except Unreadable as error:
@@ -996,8 +1007,6 @@ def check_tree(root, allowlist_path=ALLOWLIST):
                 continue
             settled = True
             where = resolved.relative_to(root).as_posix()
-            if where in read:
-                continue
             if kind in ("rust", "module"):
                 scan_rust(resolved, where)
             else:
