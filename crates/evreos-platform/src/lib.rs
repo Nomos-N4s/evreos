@@ -11,3 +11,4 @@
 #![forbid(unsafe_code)]
 
 pub mod default_browser;
+pub mod update;
