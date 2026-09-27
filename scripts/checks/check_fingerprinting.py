@@ -53,15 +53,20 @@ It reads the tree and fails on:
 
     machine and volume identifiers
                 the Windows MachineGuid and the Cryptography key that holds
-                it, `/etc/machine-id` and the D-Bus copy of it, the macOS
-                platform UUID and serial number, the SMBIOS and DMI tables
-                and the serial fields read from them, the WMI hardware
-                classes, the WinRT hardware and system identifiers and the
-                advertising identifier, the device model, the host name --
-                through the platform APIs and through the Windows
-                `COMPUTERNAME`, `USERDOMAIN` and `LOGONSERVER` variables and
-                the POSIX `HOSTNAME` one -- and volume serial numbers and
-                UUIDs.
+                it, `/etc/machine-id` and the D-Bus copy of it, the host id
+                (`gethostid`, `/etc/hostid`) and the per-boot `boot_id`, the
+                macOS platform UUID and serial number, the SMBIOS and DMI
+                tables and the serial fields read from them -- directly or
+                through `dmidecode`, `wmic`, `ioreg` and `system_profiler`
+                -- the WMI hardware classes, the WinRT hardware and system
+                identifiers and the advertising identifier, the device
+                model, also as script reads it through
+                `getHighEntropyValues`, the host name -- through the
+                platform APIs, POSIX `uname` and its `nodename`,
+                `/proc/sys/kernel/hostname`, the macOS host-name calls, the
+                Windows `COMPUTERNAME`, `USERDOMAIN` and `LOGONSERVER`
+                variables and the POSIX `HOSTNAME` one -- and volume serial
+                numbers and UUIDs.
     MAC addresses and network characteristics
                 the adapter tables and ioctls that yield a MAC address or the
                 machine's own interface addresses, `/sys/class/net`, Wi-Fi
@@ -235,6 +240,22 @@ SOURCES = {
         ("GetComputerName", r"GetComputerName(?:Ex)?[AW]?"),
         ("hostname::get", r"hostname::get"),
         ("/etc/hostname", r"/etc/hostname"),
+        ("/proc/sys/kernel/hostname", r"/proc/sys/kernel/hostname"),
+        ("uname", r"uname"),
+        ("utsname", r"utsname"),
+        ("nodename", r"nodename"),
+        ("gethostid", r"gethostid"),
+        ("/etc/hostid", r"/etc/hostid"),
+        ("boot_id", r"boot_id"),
+        ("hostName", r"(?-i:hostName)"),
+        ("SCDynamicStoreCopyComputerName", r"SCDynamicStoreCopyComputerName"),
+        ("SCDynamicStoreCopyLocalHostName", r"SCDynamicStoreCopyLocalHostName"),
+        ("NSHost", r"NSHost"),
+        ("dmidecode", r"dmidecode"),
+        ("wmic", r"wmic"),
+        ("ioreg", r"ioreg"),
+        ("system_profiler", r"system_profiler"),
+        ("getHighEntropyValues", r"getHighEntropyValues"),
         # Environment variables, in the case Windows and POSIX spell them: a
         # host name is read as often from the environment as from an API.
         ("COMPUTERNAME", r"(?-i:COMPUTERNAME)"),
